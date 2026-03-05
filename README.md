@@ -3,6 +3,6 @@
 This repository is for CSE 416.
 
 Team Members:
-Ahn Minsoo
-Choo Sungmin
-Kwon Dahyun
+- Ahn Minsoo
+- Choo Sungmin
+- Kwon Dahyun
