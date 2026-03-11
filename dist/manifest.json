@@ -1,0 +1,15 @@
+{
+  "manifest_version": 3,
+  "name": "MorningBrief.AI",
+  "version": "1.0.0",
+  "description": "나만을 위한 AI 모닝 대시보드 — Chrome 새 탭",
+  "chrome_url_overrides": {
+    "newtab": "index.html"
+  },
+  "permissions": [],
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}
