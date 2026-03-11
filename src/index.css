@@ -1,3 +1,6 @@
+@import "react-grid-layout/css/styles.css";
+@import "react-resizable/css/styles.css";
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -10,4 +13,33 @@
 
 body {
 	font-family: "Noto Sans KR", sans-serif;
+}
+
+/* react-grid-layout: hide resize handle when not in edit mode */
+.layout:not(.edit-mode) .react-resizable-handle {
+	display: none !important;
+}
+
+/* edit mode: visible resize handle */
+.layout.edit-mode .react-resizable-handle {
+	background: none;
+	width: 20px;
+	height: 20px;
+}
+.layout.edit-mode .react-resizable-handle::after {
+	content: "";
+	position: absolute;
+	right: 5px;
+	bottom: 5px;
+	width: 8px;
+	height: 8px;
+	border-right: 2px solid rgba(96, 165, 250, 0.6);
+	border-bottom: 2px solid rgba(96, 165, 250, 0.6);
+}
+
+/* edit mode: widget outline */
+.layout.edit-mode > .react-grid-item {
+	outline: 2px dashed rgba(96, 165, 250, 0.3);
+	outline-offset: -2px;
+	border-radius: 16px;
 }

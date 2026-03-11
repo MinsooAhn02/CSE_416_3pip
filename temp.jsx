@@ -72,7 +72,7 @@ const App = () => {
               { name: 'Naver', icon: 'N', url: 'https://naver.com' },
               { name: 'Insta', icon: Instagram, url: 'https://instagram.com' },
               { name: 'FB', icon: Facebook, url: 'https://facebook.com' }
-            ].map((link, i) => (
+            ].map((link, i) => (``
               <a 
                 key={i}
                 href={link.url}
