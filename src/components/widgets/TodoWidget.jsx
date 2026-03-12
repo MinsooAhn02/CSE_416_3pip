@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { CheckCircle2, X, Plus } from "lucide-react";
 import { useTheme } from "../../hooks/useTheme";
 import { useTodoStore } from "../../store/useTodoStore";
@@ -12,9 +13,14 @@ const TodoWidget = () => {
 		toggleTodo,
 		addTodo,
 		deleteTodo,
+		ensureDailyReset,
 		setNewTodoText,
 		setShowAddTodo,
 	} = useTodoStore();
+
+	useEffect(() => {
+		ensureDailyReset?.();
+	}, [ensureDailyReset]);
 
 	return (
 		<WidgetCard title="오늘의 할 일" icon={CheckCircle2} widgetId="todo">
@@ -38,6 +44,13 @@ const TodoWidget = () => {
 						>
 							{t.text}
 						</span>
+						{t.isFixed && (
+							<span
+								className={`text-[10px] px-1.5 py-0.5 rounded ${isDark ? "bg-emerald-500/20 text-emerald-300" : "bg-emerald-100 text-emerald-700"}`}
+							>
+								루틴
+							</span>
+						)}
 						<button
 							onClick={() => deleteTodo(t.id)}
 							className="opacity-0 group-hover:opacity-60 hover:!opacity-100 transition-opacity"

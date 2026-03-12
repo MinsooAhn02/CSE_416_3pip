@@ -17,8 +17,8 @@ import { useTheme } from "../../hooks/useTheme";
 import { useSettingsStore } from "../../store/useSettingsStore";
 import { useWidgetStore } from "../../store/useWidgetStore";
 import { useAuthStore } from "../../store/useAuthStore";
+import { useTodoStore } from "../../store/useTodoStore";
 import { WIDGET_LIST } from "../../constants";
-import { mockSmartWidgets } from "../../mock/data";
 import { save } from "../../utils/storage";
 import Toggle from "../common/Toggle";
 
@@ -40,6 +40,7 @@ const SettingsModal = () => {
 	const {
 		vis,
 		smartKeywords,
+		smartWidgetData,
 		newKeyword,
 		toggleVis,
 		resetLayout,
@@ -48,10 +49,16 @@ const SettingsModal = () => {
 		removeSmartWidget,
 	} = useWidgetStore();
 	const { logout, setShowOnboarding, setObStep } = useAuthStore();
+	const todos = useTodoStore((s) => s.todos);
+	const newRoutineText = useTodoStore((s) => s.newRoutineText);
+	const setNewRoutineText = useTodoStore((s) => s.setNewRoutineText);
+	const addRecurringTodo = useTodoStore((s) => s.addRecurringTodo);
+	const deleteTodo = useTodoStore((s) => s.deleteTodo);
 	const setOnboarded = (v) => {
 		useAuthStore.setState({ onboarded: v });
 		save("mb_onboarded", v);
 	};
+	const recurringTodos = todos.filter((t) => t.isFixed);
 
 	const bgRef = useRef(null);
 
@@ -89,6 +96,7 @@ const SettingsModal = () => {
 						{[
 							{ id: "widgets", label: "위젯 관리" },
 							{ id: "smart", label: "스마트 위젯" },
+							{ id: "routine", label: "고정 TODO" },
 							{ id: "clock", label: "시계 스타일" },
 							{ id: "layout", label: "레이아웃" },
 							{ id: "theme", label: "테마" },
@@ -195,13 +203,13 @@ const SettingsModal = () => {
 												}
 											/>
 											<span className="text-sm font-medium">
-												{mockSmartWidgets[kw]?.emoji || "🔍"} {kw}
+												{smartWidgetData[kw]?.emoji || "🔍"} {kw}
 											</span>
-											{mockSmartWidgets[kw] ? (
+											{smartWidgetData[kw] ? (
 												<span
 													className={`text-[10px] px-1.5 py-0.5 rounded ${isDark ? "bg-green-500/20 text-green-300" : "bg-green-100 text-green-700"}`}
 												>
-													데이터 있음
+													AI 준비됨
 												</span>
 											) : (
 												<span
@@ -234,6 +242,60 @@ const SettingsModal = () => {
 									>
 										추가
 									</button>
+								</div>
+							</div>
+						)}
+						{settingsTab === "routine" && (
+							<div className="space-y-4">
+								<p className={`text-xs mb-2 ${muted}`}>
+									매일 반복할 루틴 TODO를 등록합니다. 일반 TODO는 일일 리셋 시
+									초기화되고, 루틴 TODO는 자동으로 다시 나타납니다.
+								</p>
+
+								<div className="flex gap-2">
+									<input
+										type="text"
+										value={newRoutineText}
+										onChange={(e) => setNewRoutineText(e.target.value)}
+										onKeyDown={(e) => e.key === "Enter" && addRecurringTodo()}
+										placeholder="예: 아침 스트레칭 10분"
+										className={`flex-grow rounded-xl px-4 py-2.5 text-sm outline-none border focus:border-blue-400 ${inputCls}`}
+									/>
+									<button
+										onClick={addRecurringTodo}
+										className="bg-emerald-500 hover:bg-emerald-400 text-white px-4 py-2.5 rounded-xl text-sm font-bold"
+									>
+										루틴 추가
+									</button>
+								</div>
+
+								<div className="space-y-2">
+									{recurringTodos.length === 0 && (
+										<p className={`text-xs ${muted}`}>
+											등록된 루틴이 없습니다.
+										</p>
+									)}
+									{recurringTodos.map((todo) => (
+										<div
+											key={todo.id}
+											className={`flex items-center justify-between p-3 rounded-xl ${isDark ? "bg-white/5" : "bg-gray-50"}`}
+										>
+											<div className="flex items-center gap-2">
+												<span
+													className={`text-[10px] px-1.5 py-0.5 rounded ${isDark ? "bg-emerald-500/20 text-emerald-300" : "bg-emerald-100 text-emerald-700"}`}
+												>
+													루틴
+												</span>
+												<span className="text-sm">{todo.text}</span>
+											</div>
+											<button
+												onClick={() => deleteTodo(todo.id)}
+												className="text-red-400 hover:text-red-300 text-xs"
+											>
+												삭제
+											</button>
+										</div>
+									))}
 								</div>
 							</div>
 						)}

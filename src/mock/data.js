@@ -323,6 +323,12 @@ export function fetchTrends() {
 	return new Promise((resolve) => setTimeout(() => resolve(mockTrends), 300));
 }
 
+export function fetchRestaurants() {
+	return new Promise((resolve) =>
+		setTimeout(() => resolve(mockRestaurants), 300),
+	);
+}
+
 export function fetchBriefing() {
 	return new Promise((resolve) => setTimeout(() => resolve(mockBriefing), 500));
 }

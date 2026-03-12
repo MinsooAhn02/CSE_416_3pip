@@ -1,0 +1,250 @@
+================================================================================
+Morning Brief - 운영 점검/복구 HOWTO (SQL 변경 이후 장애 대응 포함)
+================================================================================
+
+이 문서는 아래 4가지를 한 번에 해결하기 위한 실행 가이드입니다.
+1) 지금 당장 무엇부터 해야 하는지 (우선순위)
+2) SQL 문제인지 API 문제인지 빠르게 분리하는 방법
+3) API 키/함수 재등록(재설정) 절차
+4) 각 API 사용처와 필요성 (특히 Tavily 필요 여부)
+
+
+================================================================================
+0. 지금 해야 할 일 (우선순위)
+================================================================================
+
+Step 1. API 자체 헬스체크 (SQL 영향 배제)
+- stocks / tavily / groq를 직접 호출해서 응답 확인
+- 여기서 실패하면 SQL이 아니라 API/시크릿/외부 연동 문제
+
+Step 2. SQL 스키마/정책 체크
+- user_settings, widget_layouts, api_cache 테이블/정책 확인
+- RLS 정책이 깨졌는지 확인
+
+Step 3. API 키 재등록 + 함수 재배포
+- groq, tavily, stocks, smart-widget부터 우선 복구
+
+Step 4. 앱 확인
+- 위젯에서 원본 데이터 패널(raw) 확인
+- 로딩/에러/표시값이 맞는지 검증
+
+
+================================================================================
+1. API 문제 vs SQL 문제를 5분 안에 분리하는 방법
+================================================================================
+
+1-1) API 직접 호출 (DB, 프론트와 분리)
+아래 PowerShell 템플릿으로 함수 응답부터 확인합니다.
+
+$envMap = @{}
+Get-Content .env |
+  Where-Object { $_ -match '^[A-Za-z_][A-Za-z0-9_]*=' } |
+  ForEach-Object { $k,$v = $_.Split('=',2); $envMap[$k]=$v }
+
+$base = "$($envMap.VITE_SUPABASE_URL)/functions/v1"
+$key = $envMap.VITE_SUPABASE_ANON_KEY
+$headers = @{ apikey=$key; Authorization="Bearer $key"; 'Content-Type'='application/json' }
+
+Invoke-RestMethod -Method Post -Uri "$base/stocks" -Headers $headers -Body '{"symbols":["KOSPI","NASDAQ","SP500","USDKRW"]}'
+Invoke-RestMethod -Method Post -Uri "$base/tavily" -Headers $headers -Body '{"query":"대한민국 실시간 이슈 트렌드"}'
+Invoke-RestMethod -Method Post -Uri "$base/groq" -Headers $headers -Body '{"prompt":"JSON only: {\"temp\":18,\"city\":\"서울\",\"condition\":\"맑음\",\"precipitation\":10,\"airQuality\":\"보통\",\"humidity\":45}"}'
+
+판정 기준:
+- 호출 자체가 실패(400/401/403/timeout): API/시크릿/권한 문제
+- 호출은 성공인데 값이 이상(전부 0, 노이즈 과다): 함수 로직/외부 공급자 문제
+- 호출은 정상인데 앱에서만 이상: 프론트 매핑/캐시/표시 로직 문제
+
+
+1-2) SQL 영향 확인 (테이블/정책)
+SQL Editor에서 아래를 실행:
+
+select table_name
+from information_schema.tables
+where table_schema = 'public'
+  and table_name in ('user_settings','widget_layouts','api_cache','todos','smart_keywords')
+order by table_name;
+
+select schemaname, tablename, policyname, cmd
+from pg_policies
+where schemaname = 'public'
+  and tablename in ('user_settings','widget_layouts','api_cache','todos','smart_keywords')
+order by tablename, policyname;
+
+판정 기준:
+- 테이블/정책이 없으면 schema.sql 재실행 필요
+- 테이블/정책이 정상인데 API 직접 호출이 실패하면 SQL 원인 아님
+
+
+================================================================================
+2. SQL Editor 코드 수정 후 안전 복구 절차
+================================================================================
+
+2-1) schema.sql 재실행
+- 프로젝트의 supabase/schema.sql 전체를 SQL Editor에서 실행
+- 현재 스키마는 idempotent(drop if exists + create) 형태라 재실행 가능
+
+2-2) 캐시 오염 의심 시 api_cache 정리
+- 주식 데이터가 0으로 누적 저장된 경우 정리
+
+delete from public.api_cache
+where id like 'u:%:stocks_default';
+
+- 필요하면 특정 사용자만 삭제
+
+delete from public.api_cache
+where user_id = 'YOUR_USER_UUID'
+  and id like 'u:%:stocks_default';
+
+주의:
+- 캐시 삭제는 실제 소스 재호출을 유도하므로 첫 로딩이 잠깐 느려질 수 있음
+
+
+================================================================================
+3. API 키 재등록 + 함수 재배포 (한 번에)
+================================================================================
+
+3-1) 현재 프로젝트 연결
+npx supabase login
+npx supabase link --project-ref YOUR_PROJECT_REF
+
+3-2) 시크릿 등록/갱신
+필수(현재 구조 기준):
+- GROQ_API_KEY
+- TWELVEDATA_API_KEY
+
+권장:
+- TAVILY_API_KEY
+- KAKAO_REST_KEY
+
+명령:
+npx supabase secrets set GROQ_API_KEY=xxx
+npx supabase secrets set TWELVEDATA_API_KEY=xxx
+npx supabase secrets set TAVILY_API_KEY=xxx
+npx supabase secrets set KAKAO_REST_KEY=xxx
+
+확인:
+npx supabase secrets list
+
+3-3) 함수 재배포
+우선순위 함수:
+npx supabase functions deploy stocks
+npx supabase functions deploy tavily
+npx supabase functions deploy smart-widget
+npx supabase functions deploy groq
+
+나머지:
+npx supabase functions deploy kakao-places
+npx supabase functions deploy calendar
+npx supabase functions deploy fitness
+npx supabase functions deploy groq
+
+전체 한 번에:
+npx supabase functions deploy
+
+
+================================================================================
+4. 각 API 실제 사용처와 정확한 사용법
+================================================================================
+
+4-1) Stocks (TWELVEDATA_API_KEY)
+- 사용처: 주식/환율 위젯
+- 호출 함수: /functions/v1/stocks
+- 요청 예시:
+  {"symbols":["KOSPI","NASDAQ","SP500","USDKRW"]}
+- 응답 핵심:
+  [{"symbol":"KOSPI","price":123.5,"change":-9.35,"changePercent":"-7.0%"}, ...]
+
+운영 포인트:
+- 무료 한도/외부 소스 상태에 따라 일부 심볼이 0으로 떨어질 수 있음
+- 앱은 전부 0 응답을 유효 데이터로 캐시하지 않도록 보강되어 있음
+
+
+4-2) Weather (GROQ_API_KEY)
+- 사용처: 날씨 위젯
+- 호출 함수: /functions/v1/groq
+- 요청 예시:
+  {"prompt":"JSON only weather..."}
+- 응답 핵심:
+  {"text":"{\"temp\":18,\"city\":\"서울\",\"condition\":\"맑음\",...}"}
+
+운영 포인트:
+- 날씨 위젯은 groq text를 JSON으로 파싱해 사용
+- JSON 파싱 실패 시 mock fallback으로 표시
+
+
+4-3) Tavily (TAVILY_API_KEY)
+- 사용처 A: 실시간 트렌드 위젯
+- 사용처 B: smart-widget 검색 증강(RAG 단계)
+- 호출 함수: /functions/v1/tavily
+- 요청 예시:
+  {"query":"대한민국 실시간 이슈 트렌드"}
+- 응답 핵심:
+  {"trends":[...],"answer":"...","results":[...]}
+
+운영 포인트:
+- 현재 소스에 따라 노이즈 태그가 포함될 수 있음(표현 정제 대상)
+
+
+4-4) Groq (GROQ_API_KEY)
+- 사용처: 브리핑 생성, smart-widget 요약/정리
+- Tavily와 함께 쓰면 품질 상승
+
+
+================================================================================
+5. Tavily가 정말 필요한가?
+================================================================================
+
+결론:
+- 필수 아님 (서비스는 동작 가능)
+- 하지만 추천 (특히 smart-widget 품질에 크게 영향)
+
+상세:
+- Tavily 없음:
+  - 트렌드 위젯: mock 또는 단순 fallback으로 운영 가능
+  - smart-widget: Groq 단독 요약은 가능하지만 최신성/근거 품질 저하
+- Tavily 있음:
+  - 트렌드 근거(results) 확보
+  - smart-widget의 검색 기반 요약 품질 향상
+
+권장 운영 정책:
+- MVP/개발 초기: Tavily optional
+- 실제 사용자 운영: Tavily ON 권장
+
+
+================================================================================
+6. 최종 점검 체크리스트 (복구 완료 판정)
+================================================================================
+
+1) API 직접 호출
+- stocks: 200 + price가 일부라도 0 초과
+- tavily: 200 + trends 배열 존재
+- groq(날씨용): 200 + text 안에 JSON weather 키 존재
+
+2) SQL 상태
+- user_settings/widget_layouts/api_cache 존재
+- RLS 정책 존재
+
+3) 앱 상태
+- 위젯에서 로딩 무한 고정 없음
+- 위젯 raw 데이터 패널에서 payload 확인 가능
+- 에러 발생 시 빨간 문구로 원인 확인 가능
+
+4) 배포/빌드
+- npx supabase functions deploy 성공
+- npm run build 성공
+
+
+================================================================================
+7. 자주 발생하는 실제 원인 요약
+================================================================================
+
+- weather만 실패: GROQ_API_KEY 누락 또는 groq 응답 JSON 파싱 실패
+- stocks 값이 0: TwelveData quota/응답 제한 또는 fallback 소스 실패
+- trends 이상한 태그: Tavily 결과 정제 규칙 미흡
+- 앱에서만 안 보임: 캐시 오염 또는 표시/매핑 문제
+
+
+================================================================================
+끝.
+이 파일 순서대로 실행하면 "SQL 변경 이후 장애"를 API/DB/프론트로 분리해 복구할 수 있습니다.
+================================================================================

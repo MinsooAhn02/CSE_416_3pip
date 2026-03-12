@@ -2,10 +2,12 @@ import { useState, useEffect, useRef, useMemo } from "react";
 import { ResponsiveGridLayout, useContainerWidth } from "react-grid-layout";
 import { Search } from "lucide-react";
 
+import { supabase } from "./lib/supabase";
 import { useAuthStore } from "./store/useAuthStore";
 import { useSettingsStore } from "./store/useSettingsStore";
 import { useWidgetStore } from "./store/useWidgetStore";
 import { useDataStore } from "./store/useDataStore";
+import { useTodoStore } from "./store/useTodoStore";
 import { useTheme } from "./hooks/useTheme";
 import { WIDGET_LIST } from "./constants";
 
@@ -35,27 +37,27 @@ import BriefSettingsModal from "./components/modals/BriefSettingsModal";
 
 const ROW_H = 30;
 const MARGIN_Y = 16;
+const DEBUG_FLOW = import.meta.env.VITE_DEBUG_FLOW === "1";
 
 const AutoHeight = ({ widgetKey, children }) => {
-	const ref = useRef(null);
+	const innerRef = useRef(null);
 	const updateWidgetHeight = useWidgetStore((s) => s.updateWidgetHeight);
 
 	useEffect(() => {
-		const el = ref.current;
-		if (!el) return;
+		const inner = innerRef.current;
+		if (!inner) return;
 		let timer;
 		const ro = new ResizeObserver(() => {
 			clearTimeout(timer);
 			timer = setTimeout(() => {
-				// Temporarily unset height to measure natural content size
-				el.style.height = "auto";
-				const px = el.scrollHeight;
-				el.style.height = "";
+				// Observe the inner (content-sized) div, not the h-full wrapper.
+				// This fires whenever widget content grows (data loads, items added, etc.)
+				const px = inner.scrollHeight;
 				const h = Math.max(2, Math.ceil((px + MARGIN_Y) / (ROW_H + MARGIN_Y)));
 				updateWidgetHeight(widgetKey, h);
 			}, 50);
 		});
-		ro.observe(el);
+		ro.observe(inner);
 		return () => {
 			clearTimeout(timer);
 			ro.disconnect();
@@ -63,8 +65,8 @@ const AutoHeight = ({ widgetKey, children }) => {
 	}, [widgetKey, updateWidgetHeight]);
 
 	return (
-		<div ref={ref} className="h-full">
-			{children}
+		<div className="h-full">
+			<div ref={innerRef}>{children}</div>
 		</div>
 	);
 };
@@ -88,6 +90,20 @@ const App = () => {
 	const setCurrentBreakpoint = useWidgetStore((s) => s.setCurrentBreakpoint);
 
 	const fetchAll = useDataStore((s) => s.fetchAll);
+	const setActiveWidgetIds = useDataStore((s) => s.setActiveWidgetIds);
+	const fetchWeather = useDataStore((s) => s.fetchWeather);
+	const fetchStocks = useDataStore((s) => s.fetchStocks);
+	const fetchTrends = useDataStore((s) => s.fetchTrends);
+	const fetchRestaurants = useDataStore((s) => s.fetchRestaurants);
+	const fetchCalendar = useDataStore((s) => s.fetchCalendar);
+	const fetchHealth = useDataStore((s) => s.fetchHealth);
+	const weather = useDataStore((s) => s.weather);
+	const stocks = useDataStore((s) => s.stocks);
+	const trends = useDataStore((s) => s.trends);
+	const restaurants = useDataStore((s) => s.restaurants);
+	const calEvents = useDataStore((s) => s.calEvents);
+	const healthData = useDataStore((s) => s.healthData);
+	const loading = useDataStore((s) => s.loading);
 
 	/* ── Local state ── */
 	const [currentTime, setCurrentTime] = useState(new Date());
@@ -97,18 +113,118 @@ const App = () => {
 	const { containerRef, width: containerWidth } = useContainerWidth();
 
 	/* ═══════════ Effects ═══════════ */
+
+	/* ── Supabase Auth listener ── */
+	useEffect(() => {
+		if (!supabase) return;
+		const {
+			data: { subscription },
+		} = supabase.auth.onAuthStateChange(async (_event, session) => {
+			if (DEBUG_FLOW) {
+				console.log("[flow] onAuthStateChange", {
+					event: _event,
+					hasSession: !!session,
+				});
+			}
+			const handleAuthChange = useAuthStore.getState().handleAuthChange;
+			await handleAuthChange(session);
+
+			if (session) {
+				// hydrate all stores from DB in parallel
+				if (DEBUG_FLOW) console.log("[flow] hydrate start");
+				await Promise.all(
+					[
+						useSettingsStore.getState().hydrateFromDB?.(),
+						useTodoStore.getState().hydrateFromDB?.(),
+						useWidgetStore.getState().hydrateFromDB?.(),
+					].filter(Boolean),
+				);
+				if (DEBUG_FLOW) console.log("[flow] hydrate done");
+			}
+		});
+		return () => subscription.unsubscribe();
+	}, []);
+
 	useEffect(() => {
 		const t = setInterval(() => setCurrentTime(new Date()), 1000);
 		return () => clearInterval(t);
 	}, []);
 
 	useEffect(() => {
-		if (isLoggedIn) fetchAll();
+		if (!isLoggedIn) return;
+		let cancelled = false;
+		const run = async () => {
+			if (DEBUG_FLOW) console.log("[flow] fetchAll start");
+			try {
+				await fetchAll();
+				if (!cancelled && DEBUG_FLOW) console.log("[flow] fetchAll done");
+			} catch (e) {
+				if (!cancelled) {
+					console.error("[flow] fetchAll failed", e?.message || e);
+				}
+			}
+		};
+		run();
+		return () => {
+			cancelled = true;
+		};
 	}, [isLoggedIn, fetchAll]);
 
 	useEffect(() => {
 		if (isLoggedIn && !onboarded) setShowOnboarding(true);
 	}, [isLoggedIn, onboarded, setShowOnboarding]);
+
+	useEffect(() => {
+		if (!isLoggedIn) return;
+
+		const activeIds = [
+			...Object.keys(vis).filter((key) => vis[key]),
+			...smartKeywords.map((kw) => `smart_${kw}`),
+		];
+		setActiveWidgetIds(activeIds);
+
+		if (vis.weather && !weather && !loading.weather) {
+			void fetchWeather();
+		}
+		if (vis.stocks && stocks.length === 0 && !loading.stocks) {
+			void fetchStocks();
+		}
+		if (vis.trends && trends.length === 0 && !loading.trends) {
+			void fetchTrends();
+		}
+		if (vis.restaurants && restaurants.length === 0 && !loading.restaurants) {
+			void fetchRestaurants();
+		}
+		if (vis.calendar && calEvents.length === 0 && !loading.calendar) {
+			void fetchCalendar();
+		}
+		if (vis.health && !healthData && !loading.health) {
+			void fetchHealth();
+		}
+	}, [
+		isLoggedIn,
+		vis,
+		smartKeywords,
+		weather,
+		stocks.length,
+		trends.length,
+		restaurants.length,
+		calEvents.length,
+		healthData,
+		loading.weather,
+		loading.stocks,
+		loading.trends,
+		loading.restaurants,
+		loading.calendar,
+		loading.health,
+		setActiveWidgetIds,
+		fetchWeather,
+		fetchStocks,
+		fetchTrends,
+		fetchRestaurants,
+		fetchCalendar,
+		fetchHealth,
+	]);
 
 	/* ═══════════ Derived ═══════════ */
 	const hours = currentTime.getHours();

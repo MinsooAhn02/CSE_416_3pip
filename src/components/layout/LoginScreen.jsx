@@ -1,7 +1,17 @@
+import { useState } from "react";
 import { useAuthStore } from "../../store/useAuthStore";
+import { supabase } from "../../lib/supabase";
 
 const LoginScreen = () => {
 	const login = useAuthStore((s) => s.login);
+	const [loading, setLoading] = useState(false);
+
+	const handleLogin = async () => {
+		setLoading(true);
+		await login();
+		// Supabase는 redirect 방식이므로 setLoading(false)는 redirect 전에는 도달하지 않음
+		if (!supabase) setLoading(false);
+	};
 
 	return (
 		<div className="min-h-screen w-full bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900 flex flex-col items-center justify-center text-white font-sans">
@@ -16,14 +26,17 @@ const LoginScreen = () => {
 					<p className="text-white/60 text-lg">나만을 위한 AI 모닝 대시보드</p>
 				</div>
 				<button
-					onClick={login}
-					className="flex items-center gap-3 bg-white text-slate-800 px-8 py-4 rounded-2xl font-bold text-base hover:bg-blue-50 transition-all shadow-2xl hover:shadow-blue-500/20 hover:scale-105"
+					onClick={handleLogin}
+					disabled={loading}
+					className="flex items-center gap-3 bg-white text-slate-800 px-8 py-4 rounded-2xl font-bold text-base hover:bg-blue-50 transition-all shadow-2xl hover:shadow-blue-500/20 hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
 				>
 					<span className="text-2xl">G</span>
-					구글 계정으로 시작하기
+					{loading ? "로그인 중..." : "구글 계정으로 시작하기"}
 				</button>
 				<p className="text-white/30 text-xs">
-					Chrome Extension · 광고 없는 순수 개인화 경험
+					{supabase
+						? "Google OAuth · 광고 없는 순수 개인화 경험"
+						: "데모 모드 · .env에 Supabase 키를 설정하면 실제 로그인 가능"}
 				</p>
 			</div>
 		</div>

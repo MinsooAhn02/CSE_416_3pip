@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { Sparkles, X, RefreshCw } from "lucide-react";
 import { useTheme } from "../../hooks/useTheme";
 import { useWidgetStore } from "../../store/useWidgetStore";
@@ -8,9 +9,18 @@ const SmartWidgetContent = ({ keyword }) => {
 	const { isDark, cardCls, muted } = useTheme();
 	const removeSmartWidget = useWidgetStore((s) => s.removeSmartWidget);
 	const refreshSmartWidget = useWidgetStore((s) => s.refreshSmartWidget);
+	const loadSmartWidget = useWidgetStore((s) => s.loadSmartWidget);
 	const isRefreshing = useWidgetStore((s) => s.refreshing[keyword]);
+	const error = useWidgetStore((s) => s.smartWidgetErrors[keyword]);
+	const generatedData = useWidgetStore((s) => s.smartWidgetData[keyword]);
 
-	const data = mockSmartWidgets[keyword];
+	const data = generatedData || mockSmartWidgets[keyword];
+
+	useEffect(() => {
+		if (!generatedData && !isRefreshing) {
+			loadSmartWidget(keyword);
+		}
+	}, [generatedData, isRefreshing, keyword, loadSmartWidget]);
 
 	if (!data) {
 		return (
@@ -43,11 +53,12 @@ const SmartWidgetContent = ({ keyword }) => {
 				>
 					<div className="text-3xl mb-3 animate-pulse">🤖</div>
 					<p className="text-sm font-medium mb-1">
-						AI가 &apos;{keyword}&apos; 데이터를 수집 중입니다...
+						AI가 &apos;{keyword}&apos;의 핵심 포인트를 분석 중입니다...
 					</p>
 					<p className={`text-xs ${muted}`}>
-						백엔드 연동 시 실시간 데이터가 표시됩니다
+						Groq가 포인트 3개를 뽑고 Tavily로 검색한 뒤 다시 정리합니다
 					</p>
+					{error && <p className="text-xs text-red-400 mt-2">{error}</p>}
 				</div>
 			</div>
 		);
@@ -105,6 +116,27 @@ const SmartWidgetContent = ({ keyword }) => {
 					</div>
 				) : (
 					<>
+						{data.sections
+							.filter((s) => s.type === "summary")
+							.map((section, i) => (
+								<div key={i} className="mb-3">
+									<p
+										className={`text-[10px] font-bold uppercase tracking-wider mb-2 ${muted}`}
+									>
+										{section.title}
+									</p>
+									<div className="space-y-1.5">
+										{section.bullets?.map((bullet, j) => (
+											<div
+												key={j}
+												className={`p-2.5 rounded-xl text-xs leading-relaxed ${isDark ? "bg-white/5" : "bg-gray-50"}`}
+											>
+												{bullet}
+											</div>
+										))}
+									</div>
+								</div>
+							))}
 						{data.sections
 							.filter((s) => s.type === "price")
 							.map((section, i) => (
@@ -174,6 +206,10 @@ const SmartWidgetContent = ({ keyword }) => {
 											<div
 												key={j}
 												className={`p-2 rounded-lg cursor-pointer transition-colors ${isDark ? "hover:bg-white/5" : "hover:bg-gray-50"}`}
+												onClick={() =>
+													item.url &&
+													window.open(item.url, "_blank", "noopener,noreferrer")
+												}
 											>
 												<p className="text-xs">{item.title}</p>
 												<p className={`text-[10px] ${muted}`}>
@@ -185,8 +221,13 @@ const SmartWidgetContent = ({ keyword }) => {
 								</div>
 							))}
 						<p className={`text-[10px] text-center mt-3 ${muted}`}>
-							⚠️ 백엔드 연동 시 AI가 실시간 데이터를 자동 수집합니다
+							⚠️ Groq와 Tavily 연동 시 키워드별 실시간 분석이 반영됩니다
 						</p>
+						{error && (
+							<p className="text-[10px] text-center mt-2 text-red-400">
+								{error}
+							</p>
+						)}
 					</>
 				)}
 			</div>
