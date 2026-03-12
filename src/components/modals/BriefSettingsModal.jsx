@@ -1,7 +1,6 @@
 import { X } from "lucide-react";
 import { useTheme } from "../../hooks/useTheme";
 import { useSettingsStore } from "../../store/useSettingsStore";
-import Toggle from "../common/Toggle";
 
 const BriefSettingsModal = () => {
 	const { isDark, muted } = useTheme();
@@ -9,11 +8,9 @@ const BriefSettingsModal = () => {
 		showBriefSettings,
 		tone,
 		bLen,
-		voiceOn,
 		setShowBriefSettings,
 		setTone,
 		setBLen,
-		setVoiceOn,
 	} = useSettingsStore();
 
 	if (!showBriefSettings) return null;
@@ -81,13 +78,6 @@ const BriefSettingsModal = () => {
 								</button>
 							))}
 						</div>
-					</div>
-					<div className="flex items-center justify-between">
-						<div>
-							<p className="text-sm font-medium">음성 출력</p>
-							<p className={`text-xs ${muted}`}>브라우저 TTS로 브리핑 읽기</p>
-						</div>
-						<Toggle on={voiceOn} onToggle={() => setVoiceOn(!voiceOn)} />
 					</div>
 				</div>
 				<button

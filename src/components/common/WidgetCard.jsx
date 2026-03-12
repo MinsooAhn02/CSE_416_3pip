@@ -9,7 +9,7 @@ const WidgetCard = ({ title, icon: Icon, widgetId, children, noPad }) => {
 
 	return (
 		<div
-			className={`backdrop-blur-md border rounded-2xl ${noPad ? "" : "p-5"} shadow-xl h-full overflow-auto transition-all ${cardCls}`}
+			className={`backdrop-blur-md border rounded-2xl ${noPad ? "" : "p-5"} shadow-xl overflow-hidden transition-all ${cardCls} h-full`}
 		>
 			<div
 				className={`flex items-center justify-between ${noPad ? "p-5 pb-0" : "mb-4"}`}

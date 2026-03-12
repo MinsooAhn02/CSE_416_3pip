@@ -4,6 +4,7 @@ import { load, save } from "../utils/storage";
 export const useSettingsStore = create((set) => ({
 	theme: load("mb_theme", "dark"),
 	bgImage: load("mb_bg", null),
+	clockStyle: load("mb_clock", "digital"),
 	showSettings: false,
 	settingsTab: "widgets",
 	showBriefSettings: false,
@@ -37,5 +38,9 @@ export const useSettingsStore = create((set) => ({
 	setVoiceOn: (v) => {
 		set({ voiceOn: v });
 		save("mb_voice", v);
+	},
+	setClockStyle: (s) => {
+		set({ clockStyle: s });
+		save("mb_clock", s);
 	},
 }));

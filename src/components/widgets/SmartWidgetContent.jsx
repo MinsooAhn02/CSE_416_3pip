@@ -15,41 +15,39 @@ const SmartWidgetContent = ({ keyword }) => {
 	if (!data) {
 		return (
 			<div
-				className={`backdrop-blur-md border rounded-2xl p-5 shadow-xl h-full overflow-auto ${cardCls}`}
+				className={`backdrop-blur-md border rounded-2xl p-5 shadow-xl overflow-hidden ${cardCls} h-full`}
 			>
-				<div className="h-full flex flex-col">
-					<div className="flex items-center justify-between mb-3">
-						<div className="flex items-center gap-2">
-							<DragHandle />
-							<Sparkles
-								size={18}
-								className={isDark ? "text-yellow-300" : "text-yellow-600"}
-							/>
-							<h3 className="font-semibold text-sm">🔍 {keyword}</h3>
-							<span
-								className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${isDark ? "bg-yellow-500/20 text-yellow-300" : "bg-yellow-100 text-yellow-700"}`}
-							>
-								Smart
-							</span>
-						</div>
-						<button
-							onClick={() => removeSmartWidget(keyword)}
-							className={`${muted} hover:opacity-100 transition-opacity p-1 rounded-lg ${isDark ? "hover:bg-white/10" : "hover:bg-gray-200"}`}
+				<div className="flex items-center justify-between mb-3">
+					<div className="flex items-center gap-2">
+						<DragHandle />
+						<Sparkles
+							size={18}
+							className={isDark ? "text-yellow-300" : "text-yellow-600"}
+						/>
+						<h3 className="font-semibold text-sm">🔍 {keyword}</h3>
+						<span
+							className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${isDark ? "bg-yellow-500/20 text-yellow-300" : "bg-yellow-100 text-yellow-700"}`}
 						>
-							<X size={14} />
-						</button>
+							Smart
+						</span>
 					</div>
-					<div
-						className={`text-center py-8 rounded-xl flex-grow flex flex-col items-center justify-center ${isDark ? "bg-white/5" : "bg-gray-50"}`}
+					<button
+						onClick={() => removeSmartWidget(keyword)}
+						className={`${muted} hover:opacity-100 transition-opacity p-1 rounded-lg ${isDark ? "hover:bg-white/10" : "hover:bg-gray-200"}`}
 					>
-						<div className="text-3xl mb-3 animate-pulse">🤖</div>
-						<p className="text-sm font-medium mb-1">
-							AI가 &apos;{keyword}&apos; 데이터를 수집 중입니다...
-						</p>
-						<p className={`text-xs ${muted}`}>
-							백엔드 연동 시 실시간 데이터가 표시됩니다
-						</p>
-					</div>
+						<X size={14} />
+					</button>
+				</div>
+				<div
+					className={`text-center py-8 rounded-xl flex flex-col items-center justify-center ${isDark ? "bg-white/5" : "bg-gray-50"}`}
+				>
+					<div className="text-3xl mb-3 animate-pulse">🤖</div>
+					<p className="text-sm font-medium mb-1">
+						AI가 &apos;{keyword}&apos; 데이터를 수집 중입니다...
+					</p>
+					<p className={`text-xs ${muted}`}>
+						백엔드 연동 시 실시간 데이터가 표시됩니다
+					</p>
 				</div>
 			</div>
 		);
@@ -57,44 +55,44 @@ const SmartWidgetContent = ({ keyword }) => {
 
 	return (
 		<div
-			className={`backdrop-blur-md border rounded-2xl p-5 shadow-xl h-full overflow-auto ${cardCls}`}
+			className={`backdrop-blur-md border rounded-2xl p-5 shadow-xl overflow-hidden ${cardCls} h-full`}
 		>
-			<div className="h-full flex flex-col overflow-auto">
-				<div className="flex items-center justify-between mb-4">
-					<div className="flex items-center gap-2">
-						<DragHandle />
-						<Sparkles
-							size={18}
-							className={isDark ? "text-yellow-300" : "text-yellow-600"}
-						/>
-						<h3 className="font-semibold text-sm">
-							{data.emoji} {keyword}
-						</h3>
-						<span
-							className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${isDark ? "bg-yellow-500/20 text-yellow-300" : "bg-yellow-100 text-yellow-700"}`}
-						>
-							Smart
-						</span>
-					</div>
-					<div className="flex items-center gap-1.5">
-						<span className={`text-[10px] ${muted}`}>{data.lastUpdated}</span>
-						<button
-							onClick={() => refreshSmartWidget(keyword)}
-							className={`p-1 rounded-lg transition-all ${isDark ? "hover:bg-white/10" : "hover:bg-gray-200"} ${isRefreshing ? "animate-spin" : ""}`}
-							title="새로고침"
-						>
-							<RefreshCw size={12} className={muted} />
-						</button>
-						<button
-							onClick={() => removeSmartWidget(keyword)}
-							className={`p-1 rounded-lg ${isDark ? "hover:bg-white/10" : "hover:bg-gray-200"} ${muted} hover:opacity-100`}
-							title="위젯 삭제"
-						>
-							<X size={14} />
-						</button>
-					</div>
+			<div className="flex items-center justify-between mb-4">
+				<div className="flex items-center gap-2">
+					<DragHandle />
+					<Sparkles
+						size={18}
+						className={isDark ? "text-yellow-300" : "text-yellow-600"}
+					/>
+					<h3 className="font-semibold text-sm">
+						{data.emoji} {keyword}
+					</h3>
+					<span
+						className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${isDark ? "bg-yellow-500/20 text-yellow-300" : "bg-yellow-100 text-yellow-700"}`}
+					>
+						Smart
+					</span>
 				</div>
+				<div className="flex items-center gap-1.5">
+					<span className={`text-[10px] ${muted}`}>{data.lastUpdated}</span>
+					<button
+						onClick={() => refreshSmartWidget(keyword)}
+						className={`p-1 rounded-lg transition-all ${isDark ? "hover:bg-white/10" : "hover:bg-gray-200"} ${isRefreshing ? "animate-spin" : ""}`}
+						title="새로고침"
+					>
+						<RefreshCw size={12} className={muted} />
+					</button>
+					<button
+						onClick={() => removeSmartWidget(keyword)}
+						className={`p-1 rounded-lg ${isDark ? "hover:bg-white/10" : "hover:bg-gray-200"} ${muted} hover:opacity-100`}
+						title="위젯 삭제"
+					>
+						<X size={14} />
+					</button>
+				</div>
+			</div>
 
+			<div>
 				{isRefreshing ? (
 					<div
 						className={`text-center py-6 rounded-xl ${isDark ? "bg-white/5" : "bg-gray-50"}`}

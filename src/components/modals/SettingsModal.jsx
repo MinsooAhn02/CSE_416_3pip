@@ -9,6 +9,9 @@ import {
 	GripVertical,
 	RefreshCw,
 	Sparkles,
+	Clock,
+	Calendar,
+	Timer,
 } from "lucide-react";
 import { useTheme } from "../../hooks/useTheme";
 import { useSettingsStore } from "../../store/useSettingsStore";
@@ -26,11 +29,13 @@ const SettingsModal = () => {
 		settingsTab,
 		theme,
 		bgImage,
+		clockStyle,
 		setShowSettings,
 		setSettingsTab,
 		setTheme,
 		setBgImage,
 		removeBg,
+		setClockStyle,
 	} = useSettingsStore();
 	const {
 		vis,
@@ -84,6 +89,7 @@ const SettingsModal = () => {
 						{[
 							{ id: "widgets", label: "위젯 관리" },
 							{ id: "smart", label: "스마트 위젯" },
+							{ id: "clock", label: "시계 스타일" },
 							{ id: "layout", label: "레이아웃" },
 							{ id: "theme", label: "테마" },
 							{ id: "profile", label: "프로필" },
@@ -112,20 +118,13 @@ const SettingsModal = () => {
 									기본 위젯을 켜고 끌 수 있습니다. 꺼진 위젯은 여기서 다시
 									활성화하세요.
 								</p>
-								{WIDGET_LIST.map((w) => (
+								{WIDGET_LIST.filter((w) => w.category === "core").map((w) => (
 									<div
 										key={w.id}
 										className={`flex items-center justify-between p-3 rounded-xl ${isDark ? "bg-white/5" : "bg-gray-50"}`}
 									>
 										<div className="flex items-center gap-2">
 											<span className="text-sm">{w.label}</span>
-											{w.category === "smart" && (
-												<span
-													className={`text-[10px] px-1.5 py-0.5 rounded ${isDark ? "bg-yellow-500/20 text-yellow-300" : "bg-yellow-100 text-yellow-700"}`}
-												>
-													Smart
-												</span>
-											)}
 											{!vis[w.id] && (
 												<span
 													className={`text-[10px] px-1.5 py-0.5 rounded ${isDark ? "bg-red-500/20 text-red-300" : "bg-red-100 text-red-600"}`}
@@ -142,52 +141,84 @@ const SettingsModal = () => {
 						{settingsTab === "smart" && (
 							<div className="space-y-4">
 								<p className={`text-xs mb-2 ${muted}`}>
-									AI 키워드 위젯을 관리합니다. 키워드를 추가하면 AI가 관련
-									데이터를 자동 수집합니다.
+									스마트 위젯을 관리합니다. 키워드를 추가하면 AI가 관련 데이터를
+									자동 수집합니다.
 								</p>
-								{smartKeywords.length === 0 ? (
-									<p className={`text-sm text-center py-6 ${muted}`}>
-										등록된 스마트 위젯이 없습니다
-									</p>
-								) : (
-									smartKeywords.map((kw) => (
-										<div
-											key={kw}
-											className={`flex items-center justify-between p-3 rounded-xl ${isDark ? "bg-white/5" : "bg-gray-50"}`}
-										>
-											<div className="flex items-center gap-2">
-												<Sparkles
-													size={14}
-													className={
-														isDark ? "text-yellow-300" : "text-yellow-600"
-													}
-												/>
-												<span className="text-sm font-medium">
-													{mockSmartWidgets[kw]?.emoji || "🔍"} {kw}
-												</span>
-												{mockSmartWidgets[kw] ? (
-													<span
-														className={`text-[10px] px-1.5 py-0.5 rounded ${isDark ? "bg-green-500/20 text-green-300" : "bg-green-100 text-green-700"}`}
-													>
-														데이터 있음
-													</span>
-												) : (
-													<span
-														className={`text-[10px] px-1.5 py-0.5 rounded ${isDark ? "bg-orange-500/20 text-orange-300" : "bg-orange-100 text-orange-700"}`}
-													>
-														대기 중
-													</span>
-												)}
-											</div>
-											<button
-												onClick={() => removeSmartWidget(kw)}
-												className="text-red-400 hover:text-red-300 text-xs"
+								{WIDGET_LIST.filter((w) => w.category === "smart").map((w) => (
+									<div
+										key={w.id}
+										className={`flex items-center justify-between p-3 rounded-xl ${isDark ? "bg-white/5" : "bg-gray-50"}`}
+									>
+										<div className="flex items-center gap-2">
+											<Sparkles
+												size={14}
+												className={
+													isDark ? "text-yellow-300" : "text-yellow-600"
+												}
+											/>
+											<span className="text-sm font-medium">{w.label}</span>
+											<span
+												className={`text-[10px] px-1.5 py-0.5 rounded ${isDark ? "bg-yellow-500/20 text-yellow-300" : "bg-yellow-100 text-yellow-700"}`}
 											>
-												삭제
-											</button>
+												Smart
+											</span>
+											{!vis[w.id] && (
+												<span
+													className={`text-[10px] px-1.5 py-0.5 rounded ${isDark ? "bg-red-500/20 text-red-300" : "bg-red-100 text-red-600"}`}
+												>
+													꺼짐
+												</span>
+											)}
 										</div>
-									))
+										<Toggle on={vis[w.id]} onToggle={() => toggleVis(w.id)} />
+									</div>
+								))}
+								{smartKeywords.length > 0 && (
+									<div
+										className={`border-t pt-4 mt-4 ${isDark ? "border-white/10" : "border-gray-200"}`}
+									>
+										<p className={`text-xs font-medium mb-3 ${muted}`}>
+											AI 키워드 위젯
+										</p>
+									</div>
 								)}
+								{smartKeywords.map((kw) => (
+									<div
+										key={kw}
+										className={`flex items-center justify-between p-3 rounded-xl ${isDark ? "bg-white/5" : "bg-gray-50"}`}
+									>
+										<div className="flex items-center gap-2">
+											<Sparkles
+												size={14}
+												className={
+													isDark ? "text-yellow-300" : "text-yellow-600"
+												}
+											/>
+											<span className="text-sm font-medium">
+												{mockSmartWidgets[kw]?.emoji || "🔍"} {kw}
+											</span>
+											{mockSmartWidgets[kw] ? (
+												<span
+													className={`text-[10px] px-1.5 py-0.5 rounded ${isDark ? "bg-green-500/20 text-green-300" : "bg-green-100 text-green-700"}`}
+												>
+													데이터 있음
+												</span>
+											) : (
+												<span
+													className={`text-[10px] px-1.5 py-0.5 rounded ${isDark ? "bg-orange-500/20 text-orange-300" : "bg-orange-100 text-orange-700"}`}
+												>
+													대기 중
+												</span>
+											)}
+										</div>
+										<button
+											onClick={() => removeSmartWidget(kw)}
+											className="text-red-400 hover:text-red-300 text-xs"
+										>
+											삭제
+										</button>
+									</div>
+								))}
 								<div className="flex gap-2 mt-3">
 									<input
 										type="text"
@@ -206,11 +237,61 @@ const SettingsModal = () => {
 								</div>
 							</div>
 						)}
+						{settingsTab === "clock" && (
+							<div className="space-y-4">
+								<p className={`text-xs mb-2 ${muted}`}>
+									대시보드 상단의 시계 표시 형태를 선택하세요.
+								</p>
+								<div className="grid grid-cols-3 gap-3">
+									{[
+										{
+											id: "digital",
+											label: "디지털",
+											desc: "기본 숫자 시계",
+											icon: Timer,
+										},
+										{
+											id: "dateInfo",
+											label: "날짜 상세",
+											desc: "연도·초 포함",
+											icon: Calendar,
+										},
+										{
+											id: "analog",
+											label: "아날로그",
+											desc: "원형 시계",
+											icon: Clock,
+										},
+									].map((s) => (
+										<button
+											key={s.id}
+											onClick={() => setClockStyle(s.id)}
+											className={`flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-all ${
+												clockStyle === s.id
+													? "border-blue-500 bg-blue-500/20"
+													: isDark
+														? "border-white/10 bg-white/5 hover:bg-white/10"
+														: "border-gray-200 bg-gray-50 hover:bg-gray-100"
+											}`}
+										>
+											<s.icon
+												size={24}
+												className={
+													clockStyle === s.id ? "text-blue-400" : muted
+												}
+											/>
+											<span className="text-sm font-medium">{s.label}</span>
+											<span className={`text-[10px] ${muted}`}>{s.desc}</span>
+										</button>
+									))}
+								</div>
+							</div>
+						)}
 						{settingsTab === "layout" && (
 							<div className="space-y-4">
 								<p className={`text-xs mb-2 ${muted}`}>
 									위젯을 드래그하여 원하는 위치로 이동할 수 있습니다. 위젯
-									모서리를 잡아 크기를 조절할 수 있습니다.
+									크기는 내용에 맞게 자동 조절됩니다.
 								</p>
 								<div
 									className={`p-4 rounded-xl ${isDark ? "bg-white/5" : "bg-gray-50"}`}
@@ -233,9 +314,9 @@ const SettingsModal = () => {
 											className={isDark ? "text-blue-300" : "text-blue-600"}
 										/>
 										<div>
-											<p className="text-sm font-medium">크기 조절</p>
+											<p className="text-sm font-medium">자동 크기 조절</p>
 											<p className={`text-xs ${muted}`}>
-												위젯 오른쪽 하단 모서리를 잡아 크기를 변경하세요
+												위젯 높이가 내용에 맞게 자동으로 조절됩니다
 											</p>
 										</div>
 									</div>
