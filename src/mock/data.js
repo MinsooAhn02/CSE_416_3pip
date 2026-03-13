@@ -89,38 +89,7 @@ export const mockHealthData = {
 };
 
 // 브랜드 발매 Mock 데이터
-export const mockBrandDrops = [
-	{
-		brand: "Nike",
-		product: "Air Max DN 'Volt'",
-		date: "2026-03-20",
-		emoji: "🟢",
-	},
-	{
-		brand: "Supreme",
-		product: "SS26 Week 4 Drop",
-		date: "2026-03-14",
-		emoji: "🔴",
-	},
-	{
-		brand: "Adidas",
-		product: "Yeezy Boost 380",
-		date: "2026-03-25",
-		emoji: "⚪",
-	},
-	{
-		brand: "New Balance",
-		product: "993 Made in USA",
-		date: "2026-04-01",
-		emoji: "🔵",
-	},
-	{
-		brand: "Jordan",
-		product: "AJ1 Retro 'Chicago'",
-		date: "2026-04-10",
-		emoji: "🏀",
-	},
-];
+export const mockBrandDrops = [];
 
 // 음식 룰렛 데이터
 export const mockFoods = [

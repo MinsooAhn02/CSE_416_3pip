@@ -48,3 +48,19 @@ Step 4. Structure Doc Refresh [x]
 
 Current Step
 - All planned steps completed.
+
+
+────────────────────────────────────────
+후속 해결 필요 사항
+────────────────────────────────────────
+
+[ ] 카카오(Kakao Places) 연동 문제
+    - KAKAO_REST_KEY 시크릿 확인 필요
+    - kakao-places Edge Function 응답 검증 필요
+    - 맛집(RestaurantsWidget) 데이터 연동 후 테스트
+
+[ ] 구글(Google) 연동 문제
+    - Google Calendar: provider_token 만료/갱신 이슈
+    - Google Fit (Fitness): provider_token 동일 이슈
+    - OAuth scope 재확인 필요 (calendar, fitness)
+    - CalendarWidget, HealthWidget 실제 데이터 연동 후 테스트

@@ -110,9 +110,24 @@ export const useTodoStore = create((set, get) => ({
 		if (!txt) return;
 		const isFixed = !!safeOpts.isFixed;
 
-		let newId = Date.now();
+		const tempId = Date.now();
 
-		// Supabase DB에 먼저 삽입하여 실제 UUID 획득
+		// Optimistic update: 로컬 상태를 먼저 반영
+		set((s) => {
+			const todos = [
+				...s.todos,
+				{ id: tempId, text: txt, completed: false, isFixed },
+			];
+			save("mb_todos", todos);
+			return {
+				todos,
+				newTodoText: safeOpts.text ? s.newTodoText : "",
+				newRoutineText: safeOpts.isFixed ? "" : s.newRoutineText,
+				showAddTodo: safeOpts.text ? s.showAddTodo : false,
+			};
+		});
+
+		// Supabase DB 동기화 (백그라운드)
 		if (supabase) {
 			try {
 				const {
@@ -130,36 +145,23 @@ export const useTodoStore = create((set, get) => ({
 						})
 						.select("id")
 						.single();
-					if (error) {
-						console.warn(
-							"Todo insert failed, using local fallback:",
-							error.message,
-						);
-					} else if (data) {
-						newId = data.id;
+					if (!error && data) {
+						// 임시 ID를 실제 UUID로 교체
+						set((s) => {
+							const todos = s.todos.map((t) =>
+								t.id === tempId ? { ...t, id: data.id } : t,
+							);
+							save("mb_todos", todos);
+							return { todos };
+						});
+					} else if (error) {
+						console.warn("Todo insert failed:", error.message);
 					}
 				}
 			} catch (e) {
-				console.warn(
-					"Todo insert failed, using local fallback:",
-					e?.message || e,
-				);
+				console.warn("Todo insert failed:", e?.message || e);
 			}
 		}
-
-		set((s) => {
-			const todos = [
-				...s.todos,
-				{ id: newId, text: txt, completed: false, isFixed },
-			];
-			save("mb_todos", todos);
-			return {
-				todos,
-				newTodoText: safeOpts.text ? s.newTodoText : "",
-				newRoutineText: safeOpts.isFixed ? "" : s.newRoutineText,
-				showAddTodo: safeOpts.text ? s.showAddTodo : false,
-			};
-		});
 	},
 
 	addRecurringTodo: async () => {

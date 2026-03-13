@@ -151,16 +151,22 @@ const App = () => {
 		return () => clearInterval(t);
 	}, []);
 
+	/* ── fetchAll 완료 여부 추적 (중복 호출 방지) ── */
+	const fetchAllDone = useRef(false);
+
 	useEffect(() => {
 		if (!isLoggedIn) return;
+		fetchAllDone.current = false;
 		let cancelled = false;
 		const run = async () => {
 			if (DEBUG_FLOW) console.log("[flow] fetchAll start");
 			try {
 				await fetchAll();
+				if (!cancelled) fetchAllDone.current = true;
 				if (!cancelled && DEBUG_FLOW) console.log("[flow] fetchAll done");
 			} catch (e) {
 				if (!cancelled) {
+					fetchAllDone.current = true;
 					console.error("[flow] fetchAll failed", e?.message || e);
 				}
 			}
@@ -177,6 +183,8 @@ const App = () => {
 
 	useEffect(() => {
 		if (!isLoggedIn) return;
+		// fetchAll이 아직 안 끝났으면 중복 호출 방지
+		if (!fetchAllDone.current) return;
 
 		const activeIds = [
 			...Object.keys(vis).filter((key) => vis[key]),
@@ -275,7 +283,10 @@ const App = () => {
 		for (const bp of Object.keys(layouts)) {
 			out[bp] = layouts[bp]
 				.filter((l) => visibleKeys.has(l.i))
-				.map(({ static: _s, ...rest }) => ({ ...rest, static: !editMode }));
+				.map(({ static: _s, isDraggable: _d, ...rest }) => ({
+					...rest,
+					isDraggable: editMode,
+				}));
 		}
 		return out;
 	}, [layouts, visibleKeys, editMode]);

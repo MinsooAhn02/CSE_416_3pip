@@ -74,7 +74,7 @@ const CalendarWidget = () => {
 			icon={Calendar}
 			widgetId="calendar"
 			headerMeta={lastUpdatedText}
-			onRefresh={() => fetchCalendar()}
+			onRefresh={() => fetchCalendar(undefined, true)}
 			refreshing={!!loading}
 			refreshIcon={RefreshCw}
 		>

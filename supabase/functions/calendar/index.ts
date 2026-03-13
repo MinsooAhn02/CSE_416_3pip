@@ -11,22 +11,27 @@ serve(async (req) => {
 		return new Response("ok", { headers: corsHeaders });
 
 	try {
-		const { token } = await req.json();
+		const { token, todayOnly = false } = await req.json();
 		if (!token) throw new Error("Google OAuth token required");
 
 		const now = new Date();
 		const timeMin = now.toISOString();
 		const endOfDay = new Date(now);
 		endOfDay.setHours(23, 59, 59, 999);
-		const timeMax = endOfDay.toISOString();
 
-		// 오늘 + 다음 7일까지 이벤트
-		const futureMax = new Date(now);
-		futureMax.setDate(futureMax.getDate() + 7);
+		let timeMax: Date;
+		if (todayOnly) {
+			// 오늘 일정만
+			timeMax = endOfDay;
+		} else {
+			// 오늘 + 다음 7일까지 이벤트
+			timeMax = new Date(now);
+			timeMax.setDate(timeMax.getDate() + 7);
+		}
 
 		const params = new URLSearchParams({
 			timeMin,
-			timeMax: futureMax.toISOString(),
+			timeMax: timeMax.toISOString(),
 			singleEvents: "true",
 			orderBy: "startTime",
 			maxResults: "20",

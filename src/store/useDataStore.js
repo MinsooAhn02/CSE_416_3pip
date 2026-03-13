@@ -2,32 +2,91 @@ import { create } from "zustand";
 import { supabase } from "../lib/supabase";
 import { load, save } from "../utils/storage";
 import { DEFAULT_VIS } from "../constants";
+import { useSettingsStore } from "./useSettingsStore";
+import { useAuthStore } from "./useAuthStore";
 import {
-	fetchWeather,
-	fetchStocks,
-	fetchTrends,
-	fetchRestaurants,
-	fetchCalendarEvents,
-	fetchHealthData,
+	fetchWeather as mockFetchWeather,
+	fetchStocks as mockFetchStocks,
+	fetchTrends as mockFetchTrends,
+	fetchRestaurants as mockFetchRestaurants,
+	fetchCalendarEvents as mockFetchCalendarEvents,
+	fetchHealthData as mockFetchHealthData,
 } from "../mock/data";
 
 const DEBUG_FLOW = import.meta.env.VITE_DEBUG_FLOW === "1";
-const EDGE_TIMEOUT_MS = 5000;
+const EDGE_TIMEOUT_MS = 25000;
 
-/* ── Edge Function 호출 헬퍼 ── */
+/* ────────────────────────────────────────────
+   30-minute Access-Time-based Caching
+   ──────────────────────────────────────────── */
+const CACHE_THRESHOLD_MS = 30 * 60 * 1000; // 30분
+
+const ACCESS_TIME_KEY = "mb_last_access_time";
+
+const getLastAccessTime = () => load(ACCESS_TIME_KEY, 0);
+const setLastAccessTime = () => save(ACCESS_TIME_KEY, Date.now());
+
+/**
+ * 접속 시간 기준으로 캐시가 유효한지 판단.
+ * Δt = (현재 시간 - 마지막 접속 시간)
+ * Δt > 30분이면 stale → 전체 API 재호출
+ * Δt ≤ 30분이면 fresh → 캐시 사용
+ */
+const isCacheStale = () => {
+	const lastAccess = getLastAccessTime();
+	if (!lastAccess) return true;
+	const delta = Date.now() - lastAccess;
+	return delta > CACHE_THRESHOLD_MS;
+};
+
+/* ── Edge Function 호출 헬퍼 (직접 fetch - supabase.functions.invoke 대체) ── */
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
 const invokeEdgeDetailed = async (fnName, body = {}) => {
-	if (!supabase) return null;
+	if (!SUPABASE_URL || !SUPABASE_ANON_KEY) return null;
+	const url = `${SUPABASE_URL}/functions/v1/${fnName}`;
 	const startedAt = Date.now();
-	const timeoutPromise = new Promise((resolve) => {
-		setTimeout(() => resolve({ __timeout: true }), EDGE_TIMEOUT_MS);
-	});
-	try {
-		const result = await Promise.race([
-			supabase.functions.invoke(fnName, { body }),
-			timeoutPromise,
-		]);
+	const controller = new AbortController();
+	const timer = setTimeout(() => controller.abort(), EDGE_TIMEOUT_MS);
 
-		if (result?.__timeout) {
+	try {
+		const res = await fetch(url, {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+				apikey: SUPABASE_ANON_KEY,
+				Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+			},
+			body: JSON.stringify(body),
+			signal: controller.signal,
+		});
+		clearTimeout(timer);
+
+		if (!res.ok) {
+			const text = await res.text().catch(() => "");
+			console.warn(`[edge] ${fnName} HTTP ${res.status}:`, text);
+			return {
+				ok: false,
+				data: null,
+				error: `HTTP ${res.status}: ${text}`,
+				timedOut: false,
+				elapsedMs: Date.now() - startedAt,
+			};
+		}
+
+		const data = await res.json();
+
+		return {
+			ok: true,
+			data,
+			error: null,
+			timedOut: false,
+			elapsedMs: Date.now() - startedAt,
+		};
+	} catch (e) {
+		clearTimeout(timer);
+		if (e.name === "AbortError") {
 			console.warn(`[edge] ${fnName} timed out after ${EDGE_TIMEOUT_MS}ms`);
 			return {
 				ok: false,
@@ -37,32 +96,7 @@ const invokeEdgeDetailed = async (fnName, body = {}) => {
 				elapsedMs: Date.now() - startedAt,
 			};
 		}
-
-		const { data, error } = result;
-		if (error) {
-			return {
-				ok: false,
-				data,
-				error: error.message || "Edge invoke failed",
-				timedOut: false,
-				elapsedMs: Date.now() - startedAt,
-			};
-		}
-		if (DEBUG_FLOW) {
-			console.log(`[edge] ${fnName} ok in ${Date.now() - startedAt}ms`);
-		}
-		return {
-			ok: true,
-			data,
-			error: null,
-			timedOut: false,
-			elapsedMs: Date.now() - startedAt,
-		};
-	} catch (e) {
-		console.warn(`Edge Function [${fnName}] failed:`, e.message);
-		if (DEBUG_FLOW) {
-			console.warn(`[edge] ${fnName} failed in ${Date.now() - startedAt}ms`);
-		}
+		console.warn(`[edge] ${fnName} failed:`, e.message);
 		return {
 			ok: false,
 			data: null,
@@ -78,33 +112,27 @@ const invokeEdge = async (fnName, body = {}) => {
 	return result?.ok ? result.data : null;
 };
 
-/* ── 캐시 헬퍼 (Graceful Degradation) ── */
+/* ── 로컬 캐시 헬퍼 (localStorage graceful fallback) ── */
 const cached = (key, fallback) => load(`mb_cache_${key}`, fallback);
 const cacheIt = (key, data) => {
 	save(`mb_cache_${key}`, data);
 	save(`mb_cache_${key}_at`, Date.now());
 };
 
-const CACHE_TTL_MS = {
-	weather: 10 * 60 * 1000,
-	stocks: 5 * 60 * 1000,
-	trends: 20 * 60 * 1000,
-	restaurants: 20 * 60 * 1000,
-	calendar: 5 * 60 * 1000,
-	health: 15 * 60 * 1000,
-};
-
-const getUserId = async () => {
-	if (!supabase) return null;
-	const {
-		data: { user },
-	} = await supabase.auth.getUser();
-	return user?.id ?? null;
+/* ── DB 캐시 헬퍼 (api_cache 테이블) ── */
+/** Auth store에서 동기적으로 userId를 읽는다. 네트워크 요청 없음. */
+const getUserId = () => {
+	return useAuthStore.getState()?.user?.id ?? null;
 };
 
 const toCacheRowId = (userId, cacheKey) => `u:${userId}:${cacheKey}`;
 
-const readApiCache = async (cacheKey, ttlMs, userIdArg) => {
+/**
+ * DB 캐시 읽기 - 30분 접속시간 기반.
+ * forceRefresh=true이면 캐시 무시 (수동 새로고침).
+ */
+const readApiCache = async (cacheKey, userIdArg, forceRefresh = false) => {
+	if (forceRefresh) return null;
 	if (!supabase) return null;
 	const userId = userIdArg ?? (await getUserId());
 	if (!userId) return null;
@@ -125,7 +153,7 @@ const readApiCache = async (cacheKey, ttlMs, userIdArg) => {
 
 	if (!data?.fetched_at) return null;
 	const age = Date.now() - new Date(data.fetched_at).getTime();
-	if (!Number.isFinite(age) || age > ttlMs) return null;
+	if (!Number.isFinite(age) || age > CACHE_THRESHOLD_MS) return null;
 
 	return data.data ?? null;
 };
@@ -148,6 +176,7 @@ const writeApiCache = async (cacheKey, payload, userIdArg) => {
 	}
 };
 
+/* ── 유틸리티 ── */
 const extractLayoutWidgetIds = (layouts) => {
 	if (!layouts || typeof layouts !== "object") return new Set();
 	const ids = new Set();
@@ -201,6 +230,7 @@ const extractJsonObject = (text) => {
 	}
 };
 
+/* ── 날씨: Groq LLM 추정 (유일한 소스) ── */
 const normalizeGroqWeather = (payload) => {
 	if (!payload || typeof payload !== "object") return null;
 	const temp = Number(payload.temp);
@@ -216,6 +246,7 @@ const normalizeGroqWeather = (payload) => {
 	};
 };
 
+/* ── 주식 정규화 ── */
 const normalizeStockItem = (item) => {
 	if (!item) return null;
 	if ("name" in item && "value" in item) return item;
@@ -239,6 +270,7 @@ const hasMeaningfulStockValues = (rows) => {
 	return rows.some((row) => Number(row?.price ?? 0) > 0);
 };
 
+/* ── 맛집 정규화 ── */
 const normalizeRestaurantItem = (item) => {
 	if (!item) return null;
 	if ("price" in item || "rating" in item) return item;
@@ -252,10 +284,31 @@ const normalizeRestaurantItem = (item) => {
 	};
 };
 
+/* ── 건강 데이터 정규화: Steps + Sleep 유효 필터링 ── */
+const normalizeHealthData = (raw) => {
+	if (!raw || typeof raw !== "object") return null;
+	return {
+		steps: Number(raw.steps) || 0,
+		stepsGoal: 10000,
+		sleep: Number(raw.sleep) || 0,
+		sleepGoal: 8,
+		calories: Number(raw.calories) || 0,
+		caloriesGoal: 2200,
+		heartRate: Number(raw.heartRate) || 0,
+		water: 0,
+		waterGoal: 8,
+	};
+};
+
+/* ══════════════════════════════════════════════
+   Store
+   ══════════════════════════════════════════════ */
 export const useDataStore = create((set, get) => ({
 	weather: null,
 	stocks: [],
 	trends: [],
+	trendsAnswer: null,
+	trendsResults: [],
 	restaurants: [],
 	calEvents: [],
 	healthData: null,
@@ -283,25 +336,34 @@ export const useDataStore = create((set, get) => ({
 		return Number.isFinite(mins) ? mins : null;
 	},
 
-	/* ── 개별 fetch (Edge Function 또는 mock fallback) ── */
-	fetchWeather: async (lat = 37.5665, lon = 126.978, userId) => {
-		set((s) => ({ loading: { ...s.loading, weather: true } }));
-		set((s) => ({ errors: { ...s.errors, weather: null } }));
+	/* ══════════════════════════════════════════
+	   날씨 (Weather)
+	   - Groq LLM 추정 (유일한 소스)
+	   - 실패 시 mock fallback
+	   ══════════════════════════════════════════ */
+	fetchWeather: async (lat = 37.5665, lon = 126.978, userId, force = false) => {
+		set((s) => ({
+			loading: { ...s.loading, weather: true },
+			errors: { ...s.errors, weather: null },
+		}));
 		try {
 			const cacheKey = `weather_${lat}_${lon}`;
-			const dbCached = await readApiCache(
-				cacheKey,
-				CACHE_TTL_MS.weather,
-				userId,
-			);
-			if (dbCached) {
-				set({ weather: dbCached });
-				cacheIt("weather", dbCached);
-				get().markFetched("weather");
-				return;
+
+			// 캐시 확인 (force=true면 수동 새로고침 → 캐시 무시)
+			if (!force) {
+				const dbCached = await readApiCache(cacheKey, userId, false);
+				if (dbCached) {
+
+					set({ weather: dbCached });
+					cacheIt("weather", dbCached);
+					get().markFetched("weather");
+					return;
+				}
 			}
 
-			const edge = await invokeEdgeDetailed("groq", {
+
+			// Groq LLM 날씨 추정
+			const groqEdge = await invokeEdgeDetailed("groq", {
 				system:
 					"너는 날씨 정보 생성기다. 반드시 JSON 객체만 반환하고 다른 텍스트를 포함하지 마라.",
 				prompt: [
@@ -313,14 +375,17 @@ export const useDataStore = create((set, get) => ({
 				].join("\n"),
 				temperature: 0.2,
 			});
-			const parsed = normalizeGroqWeather(extractJsonObject(edge?.data?.text));
-			if (edge?.ok && parsed) {
+			const parsed = normalizeGroqWeather(
+				extractJsonObject(groqEdge?.data?.text),
+			);
+
+			if (groqEdge?.ok && parsed) {
 				set((s) => ({
 					rawData: {
 						...s.rawData,
 						weather: {
 							source: "groq",
-							text: edge.data?.text ?? null,
+							text: groqEdge.data?.text ?? null,
 							parsed,
 						},
 					},
@@ -332,22 +397,21 @@ export const useDataStore = create((set, get) => ({
 				return;
 			}
 
+			// 에러 기록 후 mock fallback
 			set((s) => ({
 				errors: {
 					...s.errors,
-					weather: edge?.error || "Groq 날씨 응답 파싱에 실패했습니다.",
+					weather: groqEdge?.error || "날씨 API 호출에 실패했습니다.",
 				},
 				rawData: {
 					...s.rawData,
 					weather: {
-						source: "groq",
-						text: edge?.data?.text ?? null,
-						parsed: null,
+						source: "fallback",
+						groqEdge: groqEdge?.data,
 					},
 				},
 			}));
-
-			const mock = await fetchWeather(lat, lon);
+			const mock = await mockFetchWeather(lat, lon);
 			set({ weather: cached("weather", mock) });
 			get().markFetched("weather");
 		} catch (e) {
@@ -358,35 +422,47 @@ export const useDataStore = create((set, get) => ({
 					weather: e?.message || "날씨 데이터를 불러오지 못했습니다.",
 				},
 			}));
-			const mock = await fetchWeather(lat, lon);
-			set({ weather: cached("weather", mock) });
+			try {
+				const mock = await mockFetchWeather();
+				set({ weather: cached("weather", mock) });
+			} catch {
+				/* mock도 실패하면 무시 */
+			}
 			get().markFetched("weather");
 		} finally {
 			set((s) => ({ loading: { ...s.loading, weather: false } }));
 		}
 	},
 
-	fetchStocks: async (symbols = defaultStockSymbols, userId) => {
-		set((s) => ({ loading: { ...s.loading, stocks: true } }));
-		set((s) => ({ errors: { ...s.errors, stocks: null } }));
+	/* ══════════════════════════════════════════
+	   주식/환율 (Stocks - Twelve Data)
+	   사용자 선택 심볼을 파라미터로 전달
+	   ══════════════════════════════════════════ */
+	fetchStocks: async (symbols = defaultStockSymbols, userId, force = false) => {
+		set((s) => ({
+			loading: { ...s.loading, stocks: true },
+			errors: { ...s.errors, stocks: null },
+		}));
 		try {
 			const normalizedSymbols = normalizeStockSymbols(symbols);
 			const cacheKey = `stocks_${normalizedSymbols.join("_")}`;
-			const dbCached = await readApiCache(
-				cacheKey,
-				CACHE_TTL_MS.stocks,
-				userId,
-			);
-			if (dbCached && hasMeaningfulStockValues(dbCached)) {
-				set({ stocks: dbCached });
-				cacheIt("stocks", dbCached);
-				get().markFetched("stocks");
-				return;
+
+			if (!force) {
+				const dbCached = await readApiCache(cacheKey, userId, false);
+				if (dbCached && hasMeaningfulStockValues(dbCached)) {
+
+					set({ stocks: dbCached });
+					cacheIt("stocks", dbCached);
+					get().markFetched("stocks");
+					return;
+				}
 			}
+
 
 			const edge = await invokeEdgeDetailed("stocks", {
 				symbols: normalizedSymbols,
 			});
+
 			if (
 				edge?.ok &&
 				Array.isArray(edge.data) &&
@@ -406,14 +482,11 @@ export const useDataStore = create((set, get) => ({
 			set((s) => ({
 				errors: {
 					...s.errors,
-					stocks:
-						edge?.error ||
-						"주식 API가 유효하지 않은 값(전부 0)을 반환했습니다.",
+					stocks: edge?.error || "주식 API가 유효하지 않은 값을 반환했습니다.",
 				},
 				rawData: { ...s.rawData, stocks: edge?.data ?? null },
 			}));
-
-			const mock = await fetchStocks();
+			const mock = await mockFetchStocks();
 			set({ stocks: cached("stocks", mock) });
 			get().markFetched("stocks");
 		} catch (e) {
@@ -424,30 +497,47 @@ export const useDataStore = create((set, get) => ({
 					stocks: e?.message || "주식 데이터를 불러오지 못했습니다.",
 				},
 			}));
-			const mock = await fetchStocks();
-			set({ stocks: cached("stocks", mock) });
+			try {
+				const mock = await mockFetchStocks();
+				set({ stocks: cached("stocks", mock) });
+			} catch {
+				/* mock 실패 무시 */
+			}
 			get().markFetched("stocks");
 		} finally {
 			set((s) => ({ loading: { ...s.loading, stocks: false } }));
 		}
 	},
 
-	fetchTrends: async (userId) => {
-		set((s) => ({ loading: { ...s.loading, trends: true } }));
-		set((s) => ({ errors: { ...s.errors, trends: null } }));
+	/* ══════════════════════════════════════════
+	   실시간 트렌드 (Tavily API)
+	   trends: 해시태그 배열
+	   trendsAnswer: AI 요약 문자열
+	   trendsResults: 출처 배열 [{title, url, content}, ...]
+	   ══════════════════════════════════════════ */
+	fetchTrends: async (userId, force = false) => {
+		set((s) => ({
+			loading: { ...s.loading, trends: true },
+			errors: { ...s.errors, trends: null },
+		}));
 		try {
-			const cacheKey = "trends_default";
-			const dbCached = await readApiCache(
-				cacheKey,
-				CACHE_TTL_MS.trends,
-				userId,
-			);
-			if (dbCached) {
-				set({ trends: dbCached });
-				cacheIt("trends", dbCached);
-				get().markFetched("trends");
-				return;
+			const cacheKey = "trends_full";
+
+			if (!force) {
+				const dbCached = await readApiCache(cacheKey, userId, false);
+				if (dbCached && dbCached.trends) {
+
+					set({
+						trends: dbCached.trends,
+						trendsAnswer: dbCached.answer ?? null,
+						trendsResults: dbCached.results ?? [],
+					});
+					cacheIt("trends", dbCached);
+					get().markFetched("trends");
+					return;
+				}
 			}
+
 
 			const edge = await invokeEdgeDetailed("tavily", {
 				query:
@@ -456,10 +546,24 @@ export const useDataStore = create((set, get) => ({
 			if (edge?.data) {
 				set((s) => ({ rawData: { ...s.rawData, trends: edge.data } }));
 			}
+
 			if (edge?.ok && edge.data?.trends) {
-				set({ trends: edge.data.trends });
-				cacheIt("trends", edge.data.trends);
-				await writeApiCache(cacheKey, edge.data.trends, userId);
+				const full = {
+					trends: edge.data.trends,
+					answer: edge.data.answer ?? null,
+					results: (edge.data.results ?? []).slice(0, 7).map((r) => ({
+						title: r.title ?? "",
+						url: r.url ?? "",
+						content: r.content ?? "",
+					})),
+				};
+				set({
+					trends: full.trends,
+					trendsAnswer: full.answer,
+					trendsResults: full.results,
+				});
+				cacheIt("trends", full);
+				await writeApiCache(cacheKey, full, userId);
 				get().markFetched("trends");
 				return;
 			}
@@ -470,8 +574,7 @@ export const useDataStore = create((set, get) => ({
 					trends: edge?.error || "트렌드 API 응답이 비어 있습니다.",
 				},
 			}));
-
-			const mock = await fetchTrends();
+			const mock = await mockFetchTrends();
 			set({ trends: cached("trends", mock) });
 			get().markFetched("trends");
 		} catch (e) {
@@ -482,32 +585,39 @@ export const useDataStore = create((set, get) => ({
 					trends: e?.message || "트렌드를 불러오지 못했습니다.",
 				},
 			}));
-			const mock = await fetchTrends();
-			set({ trends: cached("trends", mock) });
+			try {
+				const mock = await mockFetchTrends();
+				set({ trends: cached("trends", mock) });
+			} catch {
+				/* mock 실패 무시 */
+			}
 			get().markFetched("trends");
 		} finally {
 			set((s) => ({ loading: { ...s.loading, trends: false } }));
 		}
 	},
 
+	/* ══════════════════════════════════════════
+	   주변 맛집 (Kakao Places)
+	   ══════════════════════════════════════════ */
 	fetchRestaurants: async (
 		query = "맛집",
 		lat = 37.5665,
 		lon = 126.978,
 		userId,
+		force = false,
 	) => {
 		set((s) => ({ loading: { ...s.loading, restaurants: true } }));
 		try {
 			const cacheKey = `restaurants_${query}_${lat}_${lon}`;
-			const dbCached = await readApiCache(
-				cacheKey,
-				CACHE_TTL_MS.restaurants,
-				userId,
-			);
-			if (dbCached) {
-				set({ restaurants: dbCached });
-				cacheIt("restaurants", dbCached);
-				return;
+
+			if (!force) {
+				const dbCached = await readApiCache(cacheKey, userId, false);
+				if (dbCached) {
+					set({ restaurants: dbCached });
+					cacheIt("restaurants", dbCached);
+					return;
+				}
 			}
 
 			const data = await invokeEdge("kakao-places", {
@@ -524,99 +634,152 @@ export const useDataStore = create((set, get) => ({
 				return;
 			}
 
-			const mock = await fetchRestaurants();
+			const mock = await mockFetchRestaurants();
 			set({ restaurants: cached("restaurants", mock) });
 		} catch (e) {
 			console.warn("fetchRestaurants failed:", e?.message || e);
-			const mock = await fetchRestaurants();
-			set({ restaurants: cached("restaurants", mock) });
+			try {
+				const mock = await mockFetchRestaurants();
+				set({ restaurants: cached("restaurants", mock) });
+			} catch {
+				/* mock 실패 무시 */
+			}
 		} finally {
 			set((s) => ({ loading: { ...s.loading, restaurants: false } }));
 		}
 	},
 
-	fetchCalendar: async (userId) => {
+	/* ══════════════════════════════════════════
+	   캘린더 (Google Calendar)
+	   오늘 일정(Today's Schedule)만 가져오기
+	   ══════════════════════════════════════════ */
+	fetchCalendar: async (userId, force = false) => {
 		if (!supabase) {
-			const mock = await fetchCalendarEvents();
+			const mock = await mockFetchCalendarEvents();
 			set({ calEvents: mock });
 			get().markFetched("calendar");
 			return;
 		}
 
-		const cacheKey = "calendar_default";
-		const dbCached = await readApiCache(
-			cacheKey,
-			CACHE_TTL_MS.calendar,
-			userId,
-		);
-		if (dbCached) {
-			set({ calEvents: dbCached });
-			cacheIt("calendar", dbCached);
-			get().markFetched("calendar");
-			return;
-		}
+		try {
+			const cacheKey = "calendar_today";
 
-		const {
-			data: { session },
-		} = await supabase.auth.getSession();
-		const token = session?.provider_token;
-		if (!token) {
-			const mock = await fetchCalendarEvents();
-			set({ calEvents: mock });
-			get().markFetched("calendar");
-			return;
-		}
-		const data = await invokeEdge("calendar", { token });
-		if (data) {
-			set({ calEvents: data });
-			cacheIt("calendar", data);
-			await writeApiCache(cacheKey, data, userId);
-			get().markFetched("calendar");
-		} else {
-			const mock = await fetchCalendarEvents();
-			set({ calEvents: cached("calendar", mock) });
+			if (!force) {
+				const dbCached = await readApiCache(cacheKey, userId, false);
+				if (dbCached) {
+					set({ calEvents: dbCached });
+					cacheIt("calendar", dbCached);
+					get().markFetched("calendar");
+					return;
+				}
+			}
+
+			const {
+				data: { session },
+			} = await supabase.auth.getSession();
+			const token = session?.provider_token;
+			if (!token) {
+				const mock = await mockFetchCalendarEvents();
+				set({ calEvents: mock });
+				get().markFetched("calendar");
+				return;
+			}
+
+			const data = await invokeEdge("calendar", { token, todayOnly: true });
+			if (data && Array.isArray(data)) {
+				// 프론트에서도 오늘 일정만 필터링 (안전장치)
+				const now = new Date();
+				const todayStr = now.toISOString().slice(0, 10);
+				const todayEvents = data.filter((ev) => {
+					const start = ev.start;
+					if (!start) return false;
+					return String(start).startsWith(todayStr);
+				});
+				set({ calEvents: todayEvents });
+				cacheIt("calendar", todayEvents);
+				await writeApiCache(cacheKey, todayEvents, userId);
+				get().markFetched("calendar");
+			} else {
+				const mock = await mockFetchCalendarEvents();
+				set({ calEvents: cached("calendar", mock) });
+				get().markFetched("calendar");
+			}
+		} catch (e) {
+			console.warn("fetchCalendar failed:", e?.message || e);
+			try {
+				const mock = await mockFetchCalendarEvents();
+				set({ calEvents: cached("calendar", mock) });
+			} catch {
+				/* mock 실패 무시 */
+			}
 			get().markFetched("calendar");
 		}
 	},
 
-	fetchHealth: async (userId) => {
+	/* ══════════════════════════════════════════
+	   건강 (Google Fitness)
+	   Steps + Sleep 중심, 나머지는 보조 데이터
+	   ══════════════════════════════════════════ */
+	fetchHealth: async (userId, force = false) => {
 		if (!supabase) {
-			const mock = await fetchHealthData();
+			const mock = await mockFetchHealthData();
 			set({ healthData: mock });
 			return;
 		}
 
-		const cacheKey = "health_default";
-		const dbCached = await readApiCache(cacheKey, CACHE_TTL_MS.health, userId);
-		if (dbCached) {
-			set({ healthData: dbCached });
-			cacheIt("health", dbCached);
-			return;
-		}
+		try {
+			const cacheKey = "health_default";
 
-		const {
-			data: { session },
-		} = await supabase.auth.getSession();
-		const token = session?.provider_token;
-		if (!token) {
-			const mock = await fetchHealthData();
-			set({ healthData: mock });
-			return;
-		}
-		const data = await invokeEdge("fitness", { token });
-		if (data) {
-			set({ healthData: data });
-			cacheIt("health", data);
-			await writeApiCache(cacheKey, data, userId);
-		} else {
-			const mock = await fetchHealthData();
-			set({ healthData: cached("health", mock) });
+			if (!force) {
+				const dbCached = await readApiCache(cacheKey, userId, false);
+				if (dbCached) {
+					set({ healthData: dbCached });
+					cacheIt("health", dbCached);
+					return;
+				}
+			}
+
+			const {
+				data: { session },
+			} = await supabase.auth.getSession();
+			const token = session?.provider_token;
+			if (!token) {
+				const mock = await mockFetchHealthData();
+				set({ healthData: mock });
+				return;
+			}
+
+			const data = await invokeEdge("fitness", { token });
+			if (data) {
+				const normalized = normalizeHealthData(data);
+				set({ healthData: normalized });
+				cacheIt("health", normalized);
+				await writeApiCache(cacheKey, normalized, userId);
+			} else {
+				const mock = await mockFetchHealthData();
+				set({ healthData: cached("health", mock) });
+			}
+		} catch (e) {
+			console.warn("fetchHealth failed:", e?.message || e);
+			try {
+				const mock = await mockFetchHealthData();
+				set({ healthData: cached("health", mock) });
+			} catch {
+				/* mock 실패 무시 */
+			}
 		}
 	},
 
-	/* ── 전체 fetch (기존 인터페이스 유지) ── */
+	/* ══════════════════════════════════════════
+	   전체 fetch (접속 시간 기반 30분 캐싱)
+
+	   1) 접속 시 Δt > 30분 → 모든 API 즉시 호출 (auto-refresh)
+	   2) Δt ≤ 30분 → 캐시 사용 (API 호출 생략)
+	   3) 위젯별 수동 새로고침 → force=true로 시간제한 없이 호출
+	   ══════════════════════════════════════════ */
 	fetchAll: async () => {
 		const store = get();
+		const shouldForceRefresh = isCacheStale();
 
 		let userId = null;
 		let visibleWidgets = Object.keys(DEFAULT_VIS).filter(
@@ -624,61 +787,117 @@ export const useDataStore = create((set, get) => ({
 		);
 
 		if (supabase) {
-			userId = await getUserId();
-			if (userId) {
-				const [settingsRes, layoutRes] = await Promise.all([
-					supabase.from("user_settings").select("*").eq("id", userId).single(),
-					supabase
-						.from("widget_layouts")
-						.select("layouts")
-						.eq("id", userId)
-						.single(),
-				]);
+			try {
+				userId = getUserId();
+				if (userId) {
+					const [settingsRes, layoutRes] = await Promise.all([
+						supabase.from("user_settings").select("*").eq("id", userId).single(),
+						supabase
+							.from("widget_layouts")
+							.select("layouts")
+							.eq("id", userId)
+							.single(),
+					]);
 
-				const settings = settingsRes.data ?? null;
-				const layouts = layoutRes.data?.layouts ?? null;
+					const settings = settingsRes.data ?? null;
+					const layouts = layoutRes.data?.layouts ?? null;
 
-				set({
-					onboardingProfile: {
-						age: null,
-						interests: [],
-						persona: settings?.persona ?? null,
-					},
-				});
+					set({
+						onboardingProfile: {
+							age: null,
+							interests: [],
+							persona: settings?.persona ?? null,
+						},
+					});
 
-				const visibility = {
-					...DEFAULT_VIS,
-					...(settings?.vis ?? {}),
-				};
+					const visibility = {
+						...DEFAULT_VIS,
+						...(settings?.vis ?? {}),
+					};
 
-				const layoutIds = extractLayoutWidgetIds(layouts);
-				if (layoutIds.size > 0) {
-					visibleWidgets = [...layoutIds].filter(
-						(widgetId) =>
-							widgetId.startsWith("smart_") || visibility[widgetId] === true,
-					);
-				} else {
-					visibleWidgets = Object.keys(visibility).filter(
-						(widgetId) => visibility[widgetId] === true,
-					);
+					const layoutIds = extractLayoutWidgetIds(layouts);
+					if (layoutIds.size > 0) {
+						visibleWidgets = [...layoutIds].filter(
+							(widgetId) =>
+								widgetId.startsWith("smart_") || visibility[widgetId] === true,
+						);
+					} else {
+						visibleWidgets = Object.keys(visibility).filter(
+							(widgetId) => visibility[widgetId] === true,
+						);
+					}
 				}
+			} catch (dbErr) {
+				console.warn("[fetchAll] DB query failed, using defaults:", dbErr?.message);
 			}
 		}
 
 		set({ activeWidgetIds: visibleWidgets });
 
+
+
+		const stockSymbols =
+			useSettingsStore?.getState?.()?.stockSymbols ?? defaultStockSymbols;
+
 		const jobs = [];
 		if (visibleWidgets.includes("weather"))
-			jobs.push(store.fetchWeather(undefined, undefined, userId));
+			jobs.push(
+				store
+					.fetchWeather(undefined, undefined, userId, shouldForceRefresh)
+					.catch((e) =>
+						console.warn("fetchWeather failed in fetchAll:", e?.message),
+					),
+			);
 		if (visibleWidgets.includes("stocks"))
-			jobs.push(store.fetchStocks(defaultStockSymbols, userId));
-		if (visibleWidgets.includes("trends")) jobs.push(store.fetchTrends(userId));
+			jobs.push(
+				store
+					.fetchStocks(stockSymbols, userId, shouldForceRefresh)
+					.catch((e) =>
+						console.warn("fetchStocks failed in fetchAll:", e?.message),
+					),
+			);
+		if (visibleWidgets.includes("trends"))
+			jobs.push(
+				store
+					.fetchTrends(userId, shouldForceRefresh)
+					.catch((e) =>
+						console.warn("fetchTrends failed in fetchAll:", e?.message),
+					),
+			);
 		if (visibleWidgets.includes("restaurants"))
-			jobs.push(store.fetchRestaurants("맛집", undefined, undefined, userId));
+			jobs.push(
+				store
+					.fetchRestaurants(
+						"맛집",
+						undefined,
+						undefined,
+						userId,
+						shouldForceRefresh,
+					)
+					.catch((e) =>
+						console.warn("fetchRestaurants failed in fetchAll:", e?.message),
+					),
+			);
 		if (visibleWidgets.includes("calendar"))
-			jobs.push(store.fetchCalendar(userId));
-		if (visibleWidgets.includes("health")) jobs.push(store.fetchHealth(userId));
+			jobs.push(
+				store
+					.fetchCalendar(userId, shouldForceRefresh)
+					.catch((e) =>
+						console.warn("fetchCalendar failed in fetchAll:", e?.message),
+					),
+			);
+		if (visibleWidgets.includes("health"))
+			jobs.push(
+				store
+					.fetchHealth(userId, shouldForceRefresh)
+					.catch((e) =>
+						console.warn("fetchHealth failed in fetchAll:", e?.message),
+					),
+			);
 
 		await Promise.all(jobs);
+
+		// fetchAll 완료 후 접속 시간 갱신
+		setLastAccessTime();
 	},
 }));

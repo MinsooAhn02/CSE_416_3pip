@@ -66,7 +66,7 @@ const StocksWidget = () => {
 			icon={TrendingUp}
 			widgetId="stocks"
 			headerMeta={lastUpdatedText}
-			onRefresh={() => fetchStocks(stockSymbols)}
+			onRefresh={() => fetchStocks(stockSymbols, undefined, true)}
 			refreshing={!!loading}
 			refreshIcon={RefreshCw}
 		>

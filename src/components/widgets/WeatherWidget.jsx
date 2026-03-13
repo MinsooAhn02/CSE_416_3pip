@@ -1,4 +1,4 @@
-import { Sun, RefreshCw } from "lucide-react";
+import { Sun, Droplets, Wind, Cloud, RefreshCw } from "lucide-react";
 import { useTheme } from "../../hooks/useTheme";
 import { useDataStore } from "../../store/useDataStore";
 import { useSettingsStore } from "../../store/useSettingsStore";
@@ -37,48 +37,75 @@ const WeatherWidget = () => {
 			icon={Sun}
 			widgetId="weather"
 			headerMeta={lastUpdatedText}
-			onRefresh={() => fetchWeather()}
+			onRefresh={() => fetchWeather(undefined, undefined, undefined, true)}
 			refreshing={!!loading}
 			refreshIcon={RefreshCw}
 		>
 			{error && <p className="text-[11px] text-red-400 mb-2">{error}</p>}
 			{weather ? (
-				<div className="flex items-center justify-between">
-					<div className="flex items-center gap-3">
-						<Sun
-							size={28}
-							className={isDark ? "text-yellow-300" : "text-amber-500"}
-						/>
-						<p className="text-3xl font-bold">
-							{displayTemp}
-							{unitLabel}
-						</p>
+				<div className="space-y-3">
+					{/* 온도 + 도시 + 상태 */}
+					<div className="flex items-center justify-between">
+						<div className="flex items-center gap-3">
+							<Sun
+								size={28}
+								className={isDark ? "text-yellow-300" : "text-amber-500"}
+							/>
+							<div>
+								<p className="text-3xl font-bold">
+									{displayTemp}
+									{unitLabel}
+								</p>
+								<p className={`text-xs ${isDark ? "opacity-60" : "text-slate-500"}`}>
+									{weather.city} · {weather.condition}
+								</p>
+							</div>
+						</div>
+						<div className="flex items-center gap-1">
+							<button
+								onClick={() => setTempUnit("c")}
+								className={`text-xs px-2 py-1 rounded-md ${
+									tempUnit === "c"
+										? "bg-blue-500 text-white"
+										: isDark
+											? "bg-white/10"
+											: "bg-gray-100"
+								}`}
+							>
+								C
+							</button>
+							<button
+								onClick={() => setTempUnit("f")}
+								className={`text-xs px-2 py-1 rounded-md ${
+									tempUnit === "f"
+										? "bg-blue-500 text-white"
+										: isDark
+											? "bg-white/10"
+											: "bg-gray-100"
+								}`}
+							>
+								F
+							</button>
+						</div>
 					</div>
-					<div className="flex items-center gap-1">
-						<button
-							onClick={() => setTempUnit("c")}
-							className={`text-xs px-2 py-1 rounded-md ${
-								tempUnit === "c"
-									? "bg-blue-500 text-white"
-									: isDark
-										? "bg-white/10"
-										: "bg-gray-100"
-							}`}
-						>
-							C
-						</button>
-						<button
-							onClick={() => setTempUnit("f")}
-							className={`text-xs px-2 py-1 rounded-md ${
-								tempUnit === "f"
-									? "bg-blue-500 text-white"
-									: isDark
-										? "bg-white/10"
-										: "bg-gray-100"
-							}`}
-						>
-							F
-						</button>
+
+					{/* 상세 정보 그리드 */}
+					<div className="grid grid-cols-3 gap-2">
+						<div className={`p-2 rounded-lg text-center ${isDark ? "bg-white/5" : "bg-gray-50"}`}>
+							<Droplets size={14} className="mx-auto mb-1 text-blue-400" />
+							<p className="text-xs font-medium">{weather.humidity}%</p>
+							<p className={`text-[10px] ${isDark ? "opacity-50" : "text-slate-400"}`}>습도</p>
+						</div>
+						<div className={`p-2 rounded-lg text-center ${isDark ? "bg-white/5" : "bg-gray-50"}`}>
+							<Cloud size={14} className="mx-auto mb-1 text-gray-400" />
+							<p className="text-xs font-medium">{weather.precipitation}%</p>
+							<p className={`text-[10px] ${isDark ? "opacity-50" : "text-slate-400"}`}>강수</p>
+						</div>
+						<div className={`p-2 rounded-lg text-center ${isDark ? "bg-white/5" : "bg-gray-50"}`}>
+							<Wind size={14} className="mx-auto mb-1 text-green-400" />
+							<p className="text-xs font-medium">{weather.airQuality}</p>
+							<p className={`text-[10px] ${isDark ? "opacity-50" : "text-slate-400"}`}>대기질</p>
+						</div>
 					</div>
 				</div>
 			) : loading ? (

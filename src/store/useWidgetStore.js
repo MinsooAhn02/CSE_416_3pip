@@ -6,7 +6,7 @@ import { useAuthStore } from "./useAuthStore";
 import { useDataStore } from "./useDataStore";
 import { DEFAULT_VIS, DEFAULT_LAYOUTS, WIDGET_LIST } from "../constants";
 
-const LAYOUT_VERSION = 13;
+const LAYOUT_VERSION = 14;
 const BUILTIN_IDS = new Set(WIDGET_LIST.map((w) => w.id));
 
 const initLayouts = () => {
@@ -195,8 +195,31 @@ export const useWidgetStore = create((set, get) => ({
 		set((s) => ({
 			editMode: typeof v === "function" ? v(s.editMode) : v,
 		})),
-	handleLayoutChange: (_currentLayout, _allLayouts) => {
-		/* Only save on user drag — triggered via onDragStop */
+	handleLayoutChange: (currentLayout) => {
+		const { currentBreakpoint: bp, layouts: currentLayouts } = get();
+		const bpLayout = currentLayouts[bp];
+		if (!bpLayout) return;
+		const compacted = new Map(
+			currentLayout.map((l) => [l.i, { y: l.y, h: l.h }]),
+		);
+		let changed = false;
+		for (const item of bpLayout) {
+			const c = compacted.get(item.i);
+			if (c && (item.y !== c.y || item.h !== c.h)) {
+				changed = true;
+				break;
+			}
+		}
+		if (!changed) return;
+		const next = {
+			...currentLayouts,
+			[bp]: bpLayout.map((l) => {
+				const c = compacted.get(l.i);
+				return c ? { ...l, y: c.y, h: c.h } : l;
+			}),
+		};
+		set({ layouts: next });
+		save("mb_layouts", next);
 	},
 	saveDraggedLayout: (layout) => {
 		const { layouts: currentLayouts, currentBreakpoint: bp } = get();
