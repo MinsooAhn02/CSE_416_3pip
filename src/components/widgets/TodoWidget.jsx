@@ -65,13 +65,18 @@ const TodoWidget = () => {
 							type="text"
 							value={newTodoText}
 							onChange={(e) => setNewTodoText(e.target.value)}
-							onKeyDown={(e) => e.key === "Enter" && addTodo()}
+							onKeyDown={(e) => {
+								if (e.key === "Enter") {
+									e.preventDefault();
+									void addTodo();
+								}
+							}}
 							placeholder="할 일 입력..."
 							autoFocus
 							className={`flex-grow rounded-lg px-3 py-1.5 text-sm outline-none border focus:border-blue-400 ${inputCls}`}
 						/>
 						<button
-							onClick={addTodo}
+							onClick={() => void addTodo()}
 							className="text-blue-400 text-sm font-medium"
 						>
 							추가

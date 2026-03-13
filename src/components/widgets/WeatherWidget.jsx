@@ -1,34 +1,84 @@
-import { Sun } from "lucide-react";
+import { Sun, RefreshCw } from "lucide-react";
 import { useTheme } from "../../hooks/useTheme";
 import { useDataStore } from "../../store/useDataStore";
+import { useSettingsStore } from "../../store/useSettingsStore";
 import WidgetCard from "../common/WidgetCard";
 
+const toFahrenheit = (celsius) => Math.round((celsius * 9) / 5 + 32);
+
+const formatLastUpdated = (minutes) => {
+	if (minutes == null) return "갱신 전";
+	if (minutes <= 0) return "방금 갱신";
+	return `${minutes}분 전`;
+};
+
 const WeatherWidget = () => {
-	const { muted, isDark } = useTheme();
+	const { isDark } = useTheme();
 	const weather = useDataStore((s) => s.weather);
 	const loading = useDataStore((s) => s.loading.weather);
 	const error = useDataStore((s) => s.errors.weather);
 	const rawWeather = useDataStore((s) => s.rawData.weather);
+	const fetchWeather = useDataStore((s) => s.fetchWeather);
+	const getLastUpdatedMinutes = useDataStore((s) => s.getLastUpdatedMinutes);
+	const tempUnit = useSettingsStore((s) => s.tempUnit);
+	const setTempUnit = useSettingsStore((s) => s.setTempUnit);
+
+	const lastUpdatedText = formatLastUpdated(getLastUpdatedMinutes("weather"));
+	const displayTemp = weather
+		? tempUnit === "f"
+			? toFahrenheit(weather.temp)
+			: weather.temp
+		: null;
+	const unitLabel = tempUnit === "f" ? "°F" : "°C";
 
 	return (
-		<WidgetCard title="현재 날씨" icon={Sun} widgetId="weather">
+		<WidgetCard
+			title="현재 날씨"
+			icon={Sun}
+			widgetId="weather"
+			headerMeta={lastUpdatedText}
+			onRefresh={() => fetchWeather()}
+			refreshing={!!loading}
+			refreshIcon={RefreshCw}
+		>
 			{error && <p className="text-[11px] text-red-400 mb-2">{error}</p>}
 			{weather ? (
 				<div className="flex items-center justify-between">
-					<div>
-						<p className="text-3xl font-bold">{weather.temp}°C</p>
-						<p className={`text-xs ${muted}`}>
-							{weather.city}, {weather.condition}
+					<div className="flex items-center gap-3">
+						<Sun
+							size={28}
+							className={isDark ? "text-yellow-300" : "text-amber-500"}
+						/>
+						<p className="text-3xl font-bold">
+							{displayTemp}
+							{unitLabel}
 						</p>
 					</div>
-					<div className="text-right">
-						<p className={`text-[10px] ${muted}`}>
-							강수확률 {weather.precipitation}%
-						</p>
-						<p className={`text-[10px] ${muted}`}>
-							미세먼지 {weather.airQuality}
-						</p>
-						<p className={`text-[10px] ${muted}`}>습도 {weather.humidity}%</p>
+					<div className="flex items-center gap-1">
+						<button
+							onClick={() => setTempUnit("c")}
+							className={`text-xs px-2 py-1 rounded-md ${
+								tempUnit === "c"
+									? "bg-blue-500 text-white"
+									: isDark
+										? "bg-white/10"
+										: "bg-gray-100"
+							}`}
+						>
+							C
+						</button>
+						<button
+							onClick={() => setTempUnit("f")}
+							className={`text-xs px-2 py-1 rounded-md ${
+								tempUnit === "f"
+									? "bg-blue-500 text-white"
+									: isDark
+										? "bg-white/10"
+										: "bg-gray-100"
+							}`}
+						>
+							F
+						</button>
 					</div>
 				</div>
 			) : loading ? (

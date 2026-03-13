@@ -161,6 +161,26 @@ const extractLayoutWidgetIds = (layouts) => {
 	return ids;
 };
 
+const defaultStockSymbols = ["KOSPI", "NASDAQ", "SP500", "USDKRW"];
+
+const normalizeStockSymbols = (symbols) => {
+	if (!Array.isArray(symbols) || symbols.length === 0)
+		return defaultStockSymbols;
+	const unique = Array.from(
+		new Set(
+			symbols
+				.map((s) =>
+					String(s || "")
+						.trim()
+						.toUpperCase(),
+				)
+				.filter(Boolean),
+		),
+	);
+	if (unique.length === 0) return defaultStockSymbols;
+	return unique.slice(0, 4);
+};
+
 const numberFormatter = new Intl.NumberFormat("ko-KR", {
 	maximumFractionDigits: 2,
 });
@@ -248,7 +268,20 @@ export const useDataStore = create((set, get) => ({
 	activeWidgetIds: [],
 	loading: {},
 	errors: {},
+	lastFetchedAt: load("mb_last_fetched_at", {}),
 	setActiveWidgetIds: (ids) => set({ activeWidgetIds: ids }),
+	markFetched: (key) =>
+		set((s) => {
+			const next = { ...s.lastFetchedAt, [key]: Date.now() };
+			save("mb_last_fetched_at", next);
+			return { lastFetchedAt: next };
+		}),
+	getLastUpdatedMinutes: (key) => {
+		const ts = get().lastFetchedAt?.[key];
+		if (!ts) return null;
+		const mins = Math.max(0, Math.floor((Date.now() - ts) / 60000));
+		return Number.isFinite(mins) ? mins : null;
+	},
 
 	/* ── 개별 fetch (Edge Function 또는 mock fallback) ── */
 	fetchWeather: async (lat = 37.5665, lon = 126.978, userId) => {
@@ -264,6 +297,7 @@ export const useDataStore = create((set, get) => ({
 			if (dbCached) {
 				set({ weather: dbCached });
 				cacheIt("weather", dbCached);
+				get().markFetched("weather");
 				return;
 			}
 
@@ -294,6 +328,7 @@ export const useDataStore = create((set, get) => ({
 				set({ weather: parsed });
 				cacheIt("weather", parsed);
 				await writeApiCache(cacheKey, parsed, userId);
+				get().markFetched("weather");
 				return;
 			}
 
@@ -314,6 +349,7 @@ export const useDataStore = create((set, get) => ({
 
 			const mock = await fetchWeather(lat, lon);
 			set({ weather: cached("weather", mock) });
+			get().markFetched("weather");
 		} catch (e) {
 			console.warn("fetchWeather failed:", e?.message || e);
 			set((s) => ({
@@ -324,16 +360,18 @@ export const useDataStore = create((set, get) => ({
 			}));
 			const mock = await fetchWeather(lat, lon);
 			set({ weather: cached("weather", mock) });
+			get().markFetched("weather");
 		} finally {
 			set((s) => ({ loading: { ...s.loading, weather: false } }));
 		}
 	},
 
-	fetchStocks: async (userId) => {
+	fetchStocks: async (symbols = defaultStockSymbols, userId) => {
 		set((s) => ({ loading: { ...s.loading, stocks: true } }));
 		set((s) => ({ errors: { ...s.errors, stocks: null } }));
 		try {
-			const cacheKey = "stocks_default";
+			const normalizedSymbols = normalizeStockSymbols(symbols);
+			const cacheKey = `stocks_${normalizedSymbols.join("_")}`;
 			const dbCached = await readApiCache(
 				cacheKey,
 				CACHE_TTL_MS.stocks,
@@ -342,11 +380,12 @@ export const useDataStore = create((set, get) => ({
 			if (dbCached && hasMeaningfulStockValues(dbCached)) {
 				set({ stocks: dbCached });
 				cacheIt("stocks", dbCached);
+				get().markFetched("stocks");
 				return;
 			}
 
 			const edge = await invokeEdgeDetailed("stocks", {
-				symbols: ["KOSPI", "NASDAQ", "SP500", "USDKRW"],
+				symbols: normalizedSymbols,
 			});
 			if (
 				edge?.ok &&
@@ -360,6 +399,7 @@ export const useDataStore = create((set, get) => ({
 				set({ stocks: normalized });
 				cacheIt("stocks", normalized);
 				await writeApiCache(cacheKey, normalized, userId);
+				get().markFetched("stocks");
 				return;
 			}
 
@@ -375,6 +415,7 @@ export const useDataStore = create((set, get) => ({
 
 			const mock = await fetchStocks();
 			set({ stocks: cached("stocks", mock) });
+			get().markFetched("stocks");
 		} catch (e) {
 			console.warn("fetchStocks failed:", e?.message || e);
 			set((s) => ({
@@ -385,6 +426,7 @@ export const useDataStore = create((set, get) => ({
 			}));
 			const mock = await fetchStocks();
 			set({ stocks: cached("stocks", mock) });
+			get().markFetched("stocks");
 		} finally {
 			set((s) => ({ loading: { ...s.loading, stocks: false } }));
 		}
@@ -403,6 +445,7 @@ export const useDataStore = create((set, get) => ({
 			if (dbCached) {
 				set({ trends: dbCached });
 				cacheIt("trends", dbCached);
+				get().markFetched("trends");
 				return;
 			}
 
@@ -417,6 +460,7 @@ export const useDataStore = create((set, get) => ({
 				set({ trends: edge.data.trends });
 				cacheIt("trends", edge.data.trends);
 				await writeApiCache(cacheKey, edge.data.trends, userId);
+				get().markFetched("trends");
 				return;
 			}
 
@@ -429,6 +473,7 @@ export const useDataStore = create((set, get) => ({
 
 			const mock = await fetchTrends();
 			set({ trends: cached("trends", mock) });
+			get().markFetched("trends");
 		} catch (e) {
 			console.warn("fetchTrends failed:", e?.message || e);
 			set((s) => ({
@@ -439,6 +484,7 @@ export const useDataStore = create((set, get) => ({
 			}));
 			const mock = await fetchTrends();
 			set({ trends: cached("trends", mock) });
+			get().markFetched("trends");
 		} finally {
 			set((s) => ({ loading: { ...s.loading, trends: false } }));
 		}
@@ -493,6 +539,7 @@ export const useDataStore = create((set, get) => ({
 		if (!supabase) {
 			const mock = await fetchCalendarEvents();
 			set({ calEvents: mock });
+			get().markFetched("calendar");
 			return;
 		}
 
@@ -505,6 +552,7 @@ export const useDataStore = create((set, get) => ({
 		if (dbCached) {
 			set({ calEvents: dbCached });
 			cacheIt("calendar", dbCached);
+			get().markFetched("calendar");
 			return;
 		}
 
@@ -515,6 +563,7 @@ export const useDataStore = create((set, get) => ({
 		if (!token) {
 			const mock = await fetchCalendarEvents();
 			set({ calEvents: mock });
+			get().markFetched("calendar");
 			return;
 		}
 		const data = await invokeEdge("calendar", { token });
@@ -522,9 +571,11 @@ export const useDataStore = create((set, get) => ({
 			set({ calEvents: data });
 			cacheIt("calendar", data);
 			await writeApiCache(cacheKey, data, userId);
+			get().markFetched("calendar");
 		} else {
 			const mock = await fetchCalendarEvents();
 			set({ calEvents: cached("calendar", mock) });
+			get().markFetched("calendar");
 		}
 	},
 
@@ -619,7 +670,8 @@ export const useDataStore = create((set, get) => ({
 		const jobs = [];
 		if (visibleWidgets.includes("weather"))
 			jobs.push(store.fetchWeather(undefined, undefined, userId));
-		if (visibleWidgets.includes("stocks")) jobs.push(store.fetchStocks(userId));
+		if (visibleWidgets.includes("stocks"))
+			jobs.push(store.fetchStocks(defaultStockSymbols, userId));
 		if (visibleWidgets.includes("trends")) jobs.push(store.fetchTrends(userId));
 		if (visibleWidgets.includes("restaurants"))
 			jobs.push(store.fetchRestaurants("맛집", undefined, undefined, userId));

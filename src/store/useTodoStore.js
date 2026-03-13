@@ -103,31 +103,47 @@ export const useTodoStore = create((set, get) => ({
 		}),
 
 	addTodo: async (opts = {}) => {
+		const safeOpts =
+			opts && typeof opts === "object" && !("nativeEvent" in opts) ? opts : {};
 		const { newTodoText } = get();
-		const txt = (opts.text ?? newTodoText).trim();
+		const txt = (safeOpts.text ?? newTodoText).trim();
 		if (!txt) return;
-		const isFixed = !!opts.isFixed;
+		const isFixed = !!safeOpts.isFixed;
 
 		let newId = Date.now();
 
 		// Supabase DB에 먼저 삽입하여 실제 UUID 획득
 		if (supabase) {
-			const {
-				data: { user },
-			} = await supabase.auth.getUser();
-			if (user) {
-				const { data } = await supabase
-					.from("todos")
-					.insert({
-						user_id: user.id,
-						text: txt,
-						completed: false,
-						done: false,
-						is_fixed: isFixed,
-					})
-					.select("id")
-					.single();
-				if (data) newId = data.id;
+			try {
+				const {
+					data: { user },
+				} = await supabase.auth.getUser();
+				if (user) {
+					const { data, error } = await supabase
+						.from("todos")
+						.insert({
+							user_id: user.id,
+							text: txt,
+							completed: false,
+							done: false,
+							is_fixed: isFixed,
+						})
+						.select("id")
+						.single();
+					if (error) {
+						console.warn(
+							"Todo insert failed, using local fallback:",
+							error.message,
+						);
+					} else if (data) {
+						newId = data.id;
+					}
+				}
+			} catch (e) {
+				console.warn(
+					"Todo insert failed, using local fallback:",
+					e?.message || e,
+				);
 			}
 		}
 
@@ -139,9 +155,9 @@ export const useTodoStore = create((set, get) => ({
 			save("mb_todos", todos);
 			return {
 				todos,
-				newTodoText: opts.text ? s.newTodoText : "",
-				newRoutineText: opts.isFixed ? "" : s.newRoutineText,
-				showAddTodo: opts.text ? s.showAddTodo : false,
+				newTodoText: safeOpts.text ? s.newTodoText : "",
+				newRoutineText: safeOpts.isFixed ? "" : s.newRoutineText,
+				showAddTodo: safeOpts.text ? s.showAddTodo : false,
 			};
 		});
 	},

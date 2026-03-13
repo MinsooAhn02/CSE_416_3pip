@@ -21,6 +21,13 @@ export const useSettingsStore = create((set) => ({
 	theme: load("mb_theme", "dark"),
 	bgImage: load("mb_bg", null),
 	clockStyle: load("mb_clock", "digital"),
+	tempUnit: load("mb_temp_unit", "c"),
+	stockSymbols: load("mb_stock_symbols", [
+		"KOSPI",
+		"NASDAQ",
+		"SP500",
+		"USDKRW",
+	]),
 	showSettings: false,
 	settingsTab: "widgets",
 	showBriefSettings: false,
@@ -52,6 +59,14 @@ export const useSettingsStore = create((set) => ({
 		if (data.clock_style) {
 			patch.clockStyle = data.clock_style;
 			save("mb_clock", data.clock_style);
+		}
+		if (data.temp_unit) {
+			patch.tempUnit = data.temp_unit;
+			save("mb_temp_unit", data.temp_unit);
+		}
+		if (Array.isArray(data.stock_symbols) && data.stock_symbols.length > 0) {
+			patch.stockSymbols = data.stock_symbols;
+			save("mb_stock_symbols", data.stock_symbols);
 		}
 		if (data.tone) {
 			patch.tone = data.tone;
@@ -109,5 +124,15 @@ export const useSettingsStore = create((set) => ({
 		set({ clockStyle: s });
 		save("mb_clock", s);
 		syncSettings({ clock_style: s });
+	},
+	setTempUnit: (u) => {
+		set({ tempUnit: u });
+		save("mb_temp_unit", u);
+		syncSettings({ temp_unit: u });
+	},
+	setStockSymbols: (symbols) => {
+		set({ stockSymbols: symbols });
+		save("mb_stock_symbols", symbols);
+		syncSettings({ stock_symbols: symbols });
 	},
 }));

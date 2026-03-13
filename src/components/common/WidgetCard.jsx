@@ -3,7 +3,17 @@ import { useTheme } from "../../hooks/useTheme";
 import { useWidgetStore } from "../../store/useWidgetStore";
 import DragHandle from "./DragHandle";
 
-const WidgetCard = ({ title, icon: Icon, widgetId, children, noPad }) => {
+const WidgetCard = ({
+	title,
+	icon: Icon,
+	widgetId,
+	children,
+	noPad,
+	headerMeta,
+	onRefresh,
+	refreshing,
+	refreshIcon: RefreshIcon,
+}) => {
 	const { isDark, cardCls, muted } = useTheme();
 	const closeWidget = useWidgetStore((s) => s.closeWidget);
 
@@ -24,15 +34,32 @@ const WidgetCard = ({ title, icon: Icon, widgetId, children, noPad }) => {
 					)}
 					<h3 className="font-semibold text-sm">{title}</h3>
 				</div>
-				{widgetId && (
-					<button
-						onClick={() => closeWidget(widgetId)}
-						className={`${muted} hover:opacity-100 transition-opacity p-1 rounded-lg ${isDark ? "hover:bg-white/10" : "hover:bg-gray-200"}`}
-						title="위젯 끄기"
-					>
-						<X size={14} />
-					</button>
-				)}
+				<div className="flex items-center gap-1.5">
+					{headerMeta && (
+						<span className={`text-[10px] ${muted}`}>{headerMeta}</span>
+					)}
+					{onRefresh && RefreshIcon && (
+						<button
+							onClick={onRefresh}
+							className={`${muted} hover:opacity-100 transition-opacity p-1 rounded-lg ${isDark ? "hover:bg-white/10" : "hover:bg-gray-200"}`}
+							title="새로고침"
+						>
+							<RefreshIcon
+								size={14}
+								className={refreshing ? "animate-spin" : ""}
+							/>
+						</button>
+					)}
+					{widgetId && (
+						<button
+							onClick={() => closeWidget(widgetId)}
+							className={`${muted} hover:opacity-100 transition-opacity p-1 rounded-lg ${isDark ? "hover:bg-white/10" : "hover:bg-gray-200"}`}
+							title="위젯 끄기"
+						>
+							<X size={14} />
+						</button>
+					)}
+				</div>
 			</div>
 			<div className={noPad ? "p-5 pt-3" : ""}>{children}</div>
 		</div>

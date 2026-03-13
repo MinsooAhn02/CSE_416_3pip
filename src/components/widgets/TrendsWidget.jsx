@@ -1,7 +1,13 @@
-import { TrendingUp } from "lucide-react";
+import { TrendingUp, RefreshCw } from "lucide-react";
 import { useTheme } from "../../hooks/useTheme";
 import { useDataStore } from "../../store/useDataStore";
 import WidgetCard from "../common/WidgetCard";
+
+const formatLastUpdated = (minutes) => {
+	if (minutes == null) return "갱신 전";
+	if (minutes <= 0) return "방금 갱신";
+	return `${minutes}분 전`;
+};
 
 const TrendsWidget = () => {
 	const { isDark } = useTheme();
@@ -9,9 +15,20 @@ const TrendsWidget = () => {
 	const loading = useDataStore((s) => s.loading.trends);
 	const error = useDataStore((s) => s.errors.trends);
 	const rawTrends = useDataStore((s) => s.rawData.trends);
+	const fetchTrends = useDataStore((s) => s.fetchTrends);
+	const getLastUpdatedMinutes = useDataStore((s) => s.getLastUpdatedMinutes);
+	const lastUpdatedText = formatLastUpdated(getLastUpdatedMinutes("trends"));
 
 	return (
-		<WidgetCard title="실시간 트렌드" icon={TrendingUp} widgetId="trends">
+		<WidgetCard
+			title="실시간 트렌드"
+			icon={TrendingUp}
+			widgetId="trends"
+			headerMeta={lastUpdatedText}
+			onRefresh={() => fetchTrends()}
+			refreshing={!!loading}
+			refreshIcon={RefreshCw}
+		>
 			{error && <p className="text-[11px] text-red-400 mb-2">{error}</p>}
 			{loading ? (
 				<p className="text-sm opacity-60">트렌드 데이터를 불러오는 중...</p>

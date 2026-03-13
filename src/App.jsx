@@ -35,8 +35,8 @@ import BriefSettingsModal from "./components/modals/BriefSettingsModal";
 
 /* ════════════════════════════════════════════════ */
 
-const ROW_H = 30;
-const MARGIN_Y = 16;
+const ROW_H = 26;
+const MARGIN_Y = 10;
 const DEBUG_FLOW = import.meta.env.VITE_DEBUG_FLOW === "1";
 
 const AutoHeight = ({ widgetKey, children }) => {
@@ -79,6 +79,7 @@ const App = () => {
 
 	const bgImage = useSettingsStore((s) => s.bgImage);
 	const clockStyle = useSettingsStore((s) => s.clockStyle);
+	const stockSymbols = useSettingsStore((s) => s.stockSymbols);
 	const { isDark, muted, inputCls, cardCls } = useTheme();
 
 	const vis = useWidgetStore((s) => s.vis);
@@ -187,7 +188,7 @@ const App = () => {
 			void fetchWeather();
 		}
 		if (vis.stocks && stocks.length === 0 && !loading.stocks) {
-			void fetchStocks();
+			void fetchStocks(stockSymbols);
 		}
 		if (vis.trends && trends.length === 0 && !loading.trends) {
 			void fetchTrends();
@@ -220,6 +221,7 @@ const App = () => {
 		setActiveWidgetIds,
 		fetchWeather,
 		fetchStocks,
+		stockSymbols,
 		fetchTrends,
 		fetchRestaurants,
 		fetchCalendar,
@@ -273,10 +275,10 @@ const App = () => {
 		for (const bp of Object.keys(layouts)) {
 			out[bp] = layouts[bp]
 				.filter((l) => visibleKeys.has(l.i))
-				.map(({ static: _s, ...rest }) => rest);
+				.map(({ static: _s, ...rest }) => ({ ...rest, static: !editMode }));
 		}
 		return out;
-	}, [layouts, visibleKeys]);
+	}, [layouts, visibleKeys, editMode]);
 
 	/* ═══════════ Login gate ═══════════ */
 	if (!isLoggedIn) return <LoginScreen />;
@@ -466,13 +468,13 @@ const App = () => {
 							layouts={filteredLayouts}
 							breakpoints={{ lg: 1200, md: 900, sm: 600, xs: 0 }}
 							cols={{ lg: 12, md: 9, sm: 6, xs: 3 }}
-							rowHeight={30}
+							rowHeight={ROW_H}
 							onLayoutChange={handleLayoutChange}
 							onBreakpointChange={setCurrentBreakpoint}
 							onDragStop={(layout) => saveDraggedLayout(layout)}
 							draggableHandle=".drag-handle"
 							compactType="vertical"
-							margin={[16, 16]}
+							margin={[10, MARGIN_Y]}
 							isDraggable={editMode}
 							isResizable={false}
 						>
