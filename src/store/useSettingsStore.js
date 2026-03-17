@@ -18,7 +18,7 @@ const syncSettings = async (fields) => {
 };
 
 export const useSettingsStore = create((set) => ({
-	theme: load("mb_theme", "dark"),
+	theme: load("mb_theme", "light"),
 	bgImage: load("mb_bg", null),
 	clockStyle: load("mb_clock", "digital"),
 	tempUnit: load("mb_temp_unit", "c"),

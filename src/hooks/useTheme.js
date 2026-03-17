@@ -7,11 +7,11 @@ export const useTheme = () => {
 	return {
 		isDark,
 		cardCls: isDark
-			? "bg-white/10 border-white/20 text-white"
+			? "bg-[#2a2a2a] border-[#3a3a3a] text-white"
 			: "bg-white/80 border-gray-200 text-slate-800",
-		muted: isDark ? "opacity-60" : "text-slate-500",
+		muted: isDark ? "text-neutral-400" : "text-slate-500",
 		inputCls: isDark
-			? "bg-white/10 border-white/20 placeholder:text-white/30 text-white"
+			? "bg-[#333333] border-[#444444] placeholder:text-neutral-500 text-white"
 			: "bg-white/60 border-gray-300 placeholder:text-gray-400 text-slate-800",
 	};
 };

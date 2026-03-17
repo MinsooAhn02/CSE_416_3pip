@@ -41,7 +41,7 @@ const WidgetCard = ({
 					{onRefresh && RefreshIcon && (
 						<button
 							onClick={onRefresh}
-							className={`${muted} hover:opacity-100 transition-opacity p-1 rounded-lg ${isDark ? "hover:bg-white/10" : "hover:bg-gray-200"}`}
+							className={`${muted} hover:opacity-100 transition-opacity p-1 rounded-lg ${isDark ? "hover:bg-[#333333]" : "hover:bg-gray-200"}`}
 							title="새로고침"
 						>
 							<RefreshIcon
@@ -53,7 +53,7 @@ const WidgetCard = ({
 					{widgetId && (
 						<button
 							onClick={() => closeWidget(widgetId)}
-							className={`${muted} hover:opacity-100 transition-opacity p-1 rounded-lg ${isDark ? "hover:bg-white/10" : "hover:bg-gray-200"}`}
+							className={`${muted} hover:opacity-100 transition-opacity p-1 rounded-lg ${isDark ? "hover:bg-[#333333]" : "hover:bg-gray-200"}`}
 							title="위젯 끄기"
 						>
 							<X size={14} />

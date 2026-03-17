@@ -19,7 +19,7 @@ const HealthWidget = () => {
 						</span>
 					</div>
 					<div
-						className={`w-full h-1.5 rounded-full ${isDark ? "bg-white/10" : "bg-gray-200"}`}
+						className={`w-full h-1.5 rounded-full ${isDark ? "bg-[#333333]" : "bg-gray-200"}`}
 					>
 						<div
 							className="h-full bg-green-500 rounded-full"
@@ -35,7 +35,7 @@ const HealthWidget = () => {
 						</span>
 					</div>
 					<div
-						className={`w-full h-1.5 rounded-full ${isDark ? "bg-white/10" : "bg-gray-200"}`}
+						className={`w-full h-1.5 rounded-full ${isDark ? "bg-[#333333]" : "bg-gray-200"}`}
 					>
 						<div
 							className="h-full bg-indigo-500 rounded-full"
@@ -46,19 +46,19 @@ const HealthWidget = () => {
 					</div>
 					<div className="grid grid-cols-2 gap-2 mt-2">
 						<div
-							className={`text-center p-2 rounded-lg ${isDark ? "bg-white/5" : "bg-gray-50"}`}
+							className={`text-center p-2 rounded-lg ${isDark ? "bg-[#333333]" : "bg-gray-50"}`}
 						>
 							<p className="text-lg font-bold">❤️ {healthData.heartRate}</p>
 							<p className={`text-[10px] ${muted}`}>BPM</p>
 						</div>
 						<div
-							className={`text-center p-2 rounded-lg ${isDark ? "bg-white/5" : "bg-gray-50"}`}
+							className={`text-center p-2 rounded-lg ${isDark ? "bg-[#333333]" : "bg-gray-50"}`}
 						>
 							<p className="text-lg font-bold">🔥 {healthData.calories}</p>
 							<p className={`text-[10px] ${muted}`}>kcal</p>
 						</div>
 						<div
-							className={`text-center p-2 rounded-lg ${isDark ? "bg-white/5" : "bg-gray-50"}`}
+							className={`text-center p-2 rounded-lg ${isDark ? "bg-[#333333]" : "bg-gray-50"}`}
 						>
 							<p className="text-lg font-bold">
 								💧 {healthData.water}/{healthData.waterGoal}

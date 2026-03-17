@@ -66,7 +66,7 @@ const FixedButtons = () => {
 					<div
 						className={`absolute bottom-0 right-14 w-72 backdrop-blur-xl border rounded-2xl p-4 shadow-2xl ${
 							isDark
-								? "bg-slate-800/90 border-white/10"
+								? "bg-[#2a2a2a]/90 border-white/10"
 								: "bg-white/90 border-gray-200"
 						}`}
 					>

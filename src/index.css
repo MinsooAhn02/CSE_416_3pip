@@ -1,5 +1,3 @@
-@import "react-grid-layout/css/styles.css";
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -14,24 +12,6 @@ body {
 	font-family: "Noto Sans KR", sans-serif;
 }
 
-/* Hide all resize handles (resize disabled) */
-.react-resizable-handle {
-	display: none !important;
-}
-
-/* Kill any border/outline on grid items */
-.react-grid-item {
-	border: none !important;
-	outline: none !important;
-}
-
-/* Drag placeholder */
-.react-grid-placeholder {
-	border-radius: 16px !important;
-	background: rgba(96, 165, 250, 0.08) !important;
-	border: 2px dashed rgba(96, 165, 250, 0.3) !important;
-}
-
 /* Hide scrollbar but keep scrolling */
 ::-webkit-scrollbar {
 	display: none;
@@ -39,4 +19,21 @@ body {
 
 html {
 	scrollbar-width: none;
+}
+
+/* Diary card scroll area */
+.diary-scroll::-webkit-scrollbar {
+	display: block;
+	width: 4px;
+}
+.diary-scroll::-webkit-scrollbar-track {
+	background: transparent;
+}
+.diary-scroll::-webkit-scrollbar-thumb {
+	background: #888;
+	border-radius: 4px;
+}
+.diary-scroll {
+	scrollbar-width: thin;
+	scrollbar-color: #888 transparent;
 }

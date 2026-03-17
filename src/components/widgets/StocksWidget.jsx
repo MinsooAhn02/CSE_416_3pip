@@ -73,7 +73,7 @@ const StocksWidget = () => {
 			<div className="flex justify-end mb-2">
 				<button
 					onClick={() => setShowSettings((v) => !v)}
-					className={`p-1 rounded-md ${isDark ? "hover:bg-white/10" : "hover:bg-gray-100"}`}
+					className={`p-1 rounded-md ${isDark ? "hover:bg-[#333333]" : "hover:bg-gray-100"}`}
 					title="심볼 설정"
 				>
 					<Settings size={13} className="opacity-70" />
@@ -83,7 +83,7 @@ const StocksWidget = () => {
 			{showSettings && (
 				<div
 					className={`mb-3 p-2 rounded-lg border ${
-						isDark ? "border-white/10 bg-white/5" : "border-gray-200 bg-gray-50"
+						isDark ? "border-[#3a3a3a] bg-[#333333]" : "border-gray-200 bg-gray-50"
 					}`}
 				>
 					<p className="text-[11px] mb-2 opacity-70">
@@ -98,7 +98,7 @@ const StocksWidget = () => {
 									selectedSet.has(opt.id)
 										? "border-blue-400 text-blue-400"
 										: isDark
-											? "border-white/20"
+											? "border-gray-600"
 											: "border-gray-300"
 								}`}
 							>
@@ -146,11 +146,11 @@ const StocksWidget = () => {
 					{stocks.map((s, i) => (
 						<div
 							key={i}
-							className={`p-3 rounded-xl ${isDark ? "bg-white/5" : "bg-gray-50"}`}
+							className={`p-3 rounded-xl ${isDark ? "bg-[#333333]" : "bg-gray-50"}`}
 						>
 							<div className="flex justify-between items-center mb-1">
 								<span
-									className={`text-[10px] ${isDark ? "opacity-60" : "text-slate-500"}`}
+									className={`text-[10px] ${isDark ? "text-gray-400" : "text-slate-500"}`}
 								>
 									{s.name}
 								</span>
@@ -172,7 +172,7 @@ const StocksWidget = () => {
 				</summary>
 				<pre
 					className={`mt-2 text-[10px] leading-relaxed p-2 rounded-lg overflow-auto max-h-48 ${
-						isDark ? "bg-black/20" : "bg-gray-100"
+						isDark ? "bg-[#222222]" : "bg-gray-100"
 					}`}
 				>
 					{JSON.stringify(rawStocks ?? stocks, null, 2)}

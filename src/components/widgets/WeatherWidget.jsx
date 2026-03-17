@@ -56,7 +56,7 @@ const WeatherWidget = () => {
 									{displayTemp}
 									{unitLabel}
 								</p>
-								<p className={`text-xs ${isDark ? "opacity-60" : "text-slate-500"}`}>
+								<p className={`text-xs ${isDark ? "text-gray-400" : "text-slate-500"}`}>
 									{weather.city} · {weather.condition}
 								</p>
 							</div>
@@ -68,7 +68,7 @@ const WeatherWidget = () => {
 									tempUnit === "c"
 										? "bg-blue-500 text-white"
 										: isDark
-											? "bg-white/10"
+											? "bg-[#333333]"
 											: "bg-gray-100"
 								}`}
 							>
@@ -80,7 +80,7 @@ const WeatherWidget = () => {
 									tempUnit === "f"
 										? "bg-blue-500 text-white"
 										: isDark
-											? "bg-white/10"
+											? "bg-[#333333]"
 											: "bg-gray-100"
 								}`}
 							>
@@ -91,20 +91,20 @@ const WeatherWidget = () => {
 
 					{/* 상세 정보 그리드 */}
 					<div className="grid grid-cols-3 gap-2">
-						<div className={`p-2 rounded-lg text-center ${isDark ? "bg-white/5" : "bg-gray-50"}`}>
+						<div className={`p-2 rounded-lg text-center ${isDark ? "bg-[#333333]" : "bg-gray-50"}`}>
 							<Droplets size={14} className="mx-auto mb-1 text-blue-400" />
 							<p className="text-xs font-medium">{weather.humidity}%</p>
-							<p className={`text-[10px] ${isDark ? "opacity-50" : "text-slate-400"}`}>습도</p>
+							<p className={`text-[10px] ${isDark ? "text-gray-400" : "text-slate-400"}`}>습도</p>
 						</div>
-						<div className={`p-2 rounded-lg text-center ${isDark ? "bg-white/5" : "bg-gray-50"}`}>
+						<div className={`p-2 rounded-lg text-center ${isDark ? "bg-[#333333]" : "bg-gray-50"}`}>
 							<Cloud size={14} className="mx-auto mb-1 text-gray-400" />
 							<p className="text-xs font-medium">{weather.precipitation}%</p>
-							<p className={`text-[10px] ${isDark ? "opacity-50" : "text-slate-400"}`}>강수</p>
+							<p className={`text-[10px] ${isDark ? "text-gray-400" : "text-slate-400"}`}>강수</p>
 						</div>
-						<div className={`p-2 rounded-lg text-center ${isDark ? "bg-white/5" : "bg-gray-50"}`}>
+						<div className={`p-2 rounded-lg text-center ${isDark ? "bg-[#333333]" : "bg-gray-50"}`}>
 							<Wind size={14} className="mx-auto mb-1 text-green-400" />
 							<p className="text-xs font-medium">{weather.airQuality}</p>
-							<p className={`text-[10px] ${isDark ? "opacity-50" : "text-slate-400"}`}>대기질</p>
+							<p className={`text-[10px] ${isDark ? "text-gray-400" : "text-slate-400"}`}>대기질</p>
 						</div>
 					</div>
 				</div>
@@ -120,7 +120,7 @@ const WeatherWidget = () => {
 				</summary>
 				<pre
 					className={`mt-2 text-[10px] leading-relaxed p-2 rounded-lg overflow-auto max-h-48 ${
-						isDark ? "bg-black/20" : "bg-gray-100"
+						isDark ? "bg-[#222222]" : "bg-gray-100"
 					}`}
 				>
 					{JSON.stringify(rawWeather ?? weather, null, 2)}

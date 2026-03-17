@@ -1,58 +1,81 @@
-import { User, Moon, Sun } from "lucide-react";
+import { useState, useEffect } from "react";
+import { User, Moon, Sun, Search } from "lucide-react";
 import { useTheme } from "../../hooks/useTheme";
 import { useSettingsStore } from "../../store/useSettingsStore";
-import { mockBookmarks } from "../../mock/data";
+import QuickLinks from "./QuickLinks";
 
 const TopNav = () => {
-	const { isDark, muted } = useTheme();
+	const { isDark, inputCls } = useTheme();
 	const setTheme = useSettingsStore((s) => s.setTheme);
 
+	const [currentTime, setCurrentTime] = useState(new Date());
+	const [searchQuery, setSearchQuery] = useState("");
+
+	useEffect(() => {
+		const t = setInterval(() => setCurrentTime(new Date()), 1000);
+		return () => clearInterval(t);
+	}, []);
+
+	const timeStr = currentTime.toLocaleTimeString("ko-KR", {
+		hour: "2-digit",
+		minute: "2-digit",
+		hour12: false,
+	});
+
+	const handleSearch = (e) => {
+		e.preventDefault();
+		if (searchQuery.trim())
+			window.open(
+				`https://www.google.com/search?q=${encodeURIComponent(searchQuery)}`,
+				"_blank",
+				"noopener,noreferrer",
+			);
+	};
+
 	return (
-		<div className="relative z-10 w-full p-6 flex justify-between items-start">
-			<div className="flex flex-col gap-4">
-				<div className="flex items-center gap-3 mb-2">
-					<div className="w-10 h-10 rounded-full bg-blue-600 flex items-center justify-center border-2 border-white/30">
-						<User size={20} className="text-white" />
-					</div>
-					<div>
-						<p className={`text-xs ${muted}`}>안녕하세요,</p>
-						<p className="font-bold text-sm tracking-tight">
-							MorningBrief.AI User
-						</p>
-					</div>
-				</div>
-				<div className="flex gap-2">
-					{mockBookmarks.map((link, i) => (
-						<a
-							key={i}
-							href={link.url}
-							target="_blank"
-							rel="noreferrer"
-							title={link.name}
-							className={`w-10 h-10 flex items-center justify-center rounded-xl transition-all border group ${
-								isDark
-									? "bg-white/5 hover:bg-white/20 border-white/10"
-									: "bg-white/50 hover:bg-white/80 border-gray-200"
-							}`}
-						>
-							<span className="font-bold text-xs group-hover:scale-110 transition-transform inline-block">
-								{link.icon}
-							</span>
-						</a>
-					))}
-				</div>
+		<header className="relative z-10 flex items-center justify-between px-6 pt-10 pb-14">
+			{/* Left — Avatar */}
+			<div className="w-10 h-10 rounded-full bg-blue-600 flex items-center justify-center border-2 border-white/30">
+				<User size={20} className="text-white" />
 			</div>
-			<button
-				onClick={() => setTheme(isDark ? "light" : "dark")}
-				className={`w-10 h-10 rounded-full flex items-center justify-center border transition-all ${
-					isDark
-						? "bg-white/5 hover:bg-white/15 border-white/10"
-						: "bg-white/50 hover:bg-white/80 border-gray-200"
-				}`}
-			>
-				{isDark ? <Moon size={18} /> : <Sun size={18} />}
-			</button>
-		</div>
+
+			{/* Center — Clock + Search */}
+			<div className="flex flex-col items-center gap-8">
+				<h1 className="text-4xl font-light tracking-tighter drop-shadow-lg">
+					{timeStr}
+				</h1>
+				<form onSubmit={handleSearch} className="w-full max-w-md relative group">
+					<div className="absolute inset-y-0 left-4 flex items-center pointer-events-none">
+						<Search
+							className={`${isDark ? "text-white/40" : "text-gray-400"} group-focus-within:text-blue-400 transition-colors`}
+							size={18}
+						/>
+					</div>
+					<input
+						type="text"
+						value={searchQuery}
+						onChange={(e) => setSearchQuery(e.target.value)}
+						placeholder="검색하거나 AI에게 물어보세요..."
+						className={`w-full h-11 backdrop-blur-xl rounded-full pl-10 pr-5 text-sm outline-none focus:ring-4 focus:ring-blue-500/20 transition-all shadow-lg border ${inputCls}`}
+					/>
+				</form>
+			</div>
+
+			{/* Right — QuickLinks + Theme toggle */}
+			<div className="flex items-center gap-2">
+				<QuickLinks />
+				<button
+					onClick={() => setTheme(isDark ? "light" : "dark")}
+					className={`w-10 h-10 rounded-full flex items-center justify-center border transition-all ${
+						isDark
+							? "bg-[#2a2a2a] hover:bg-[#353535] border-[#3a3a3a]"
+							: "bg-white/50 hover:bg-white/80 border-gray-200"
+					}`}
+				>
+					{isDark ? <Moon size={18} /> : <Sun size={18} />}
+				</button>
+			</div>
+		</header>
 	);
 };
 

@@ -51,9 +51,7 @@ const TrendsWidget = () => {
 							<span
 								key={i}
 								className={`text-xs px-3 py-1.5 rounded-lg border ${
-									isDark
-										? "bg-white/5 border-white/10"
-										: "bg-gray-50 border-gray-200"
+									isDark ? "bg-[#333333] border-[#3a3a3a]" : "bg-gray-50 border-gray-200"
 								}`}
 							>
 								{tag}
@@ -75,7 +73,7 @@ const TrendsWidget = () => {
 									rel="noopener noreferrer"
 									className={`flex items-start gap-1.5 p-1.5 rounded-md text-xs transition-colors ${
 										isDark
-											? "hover:bg-white/5"
+											? "hover:bg-[#333333]"
 											: "hover:bg-gray-50"
 									}`}
 								>
@@ -96,7 +94,7 @@ const TrendsWidget = () => {
 				</summary>
 				<pre
 					className={`mt-2 text-[10px] leading-relaxed p-2 rounded-lg overflow-auto max-h-48 ${
-						isDark ? "bg-black/20" : "bg-gray-100"
+						isDark ? "bg-[#222222]" : "bg-gray-100"
 					}`}
 				>
 					{JSON.stringify(rawTrends ?? trends, null, 2)}
