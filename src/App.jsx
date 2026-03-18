@@ -19,7 +19,7 @@ import SettingsModal from "./components/modals/SettingsModal";
 import BriefSettingsModal from "./components/modals/BriefSettingsModal";
 
 import BriefingWidget from "./components/widgets/BriefingWidget";
-import MiniWidgetGrid from "./components/widgets/MiniWidgetGrid";
+import NewsWidget from "./components/widgets/NewsWidget";
 import DiaryCard from "./components/widgets/DiaryCard";
 import CalendarWidget from "./components/widgets/CalendarWidget";
 import WeatherWidget from "./components/widgets/WeatherWidget";
@@ -28,19 +28,19 @@ import TrendsWidget from "./components/widgets/TrendsWidget";
 import HealthWidget from "./components/widgets/HealthWidget";
 import SmartWidgetContent from "./components/widgets/SmartWidgetContent";
 
-/* ── v5: @hello-pangea/dnd 도입 — 터치 지원, 자유 이동 ── */
-const LAYOUT_VERSION = 5;
+/* ── v6: MiniWidgetGrid → NewsWidget 교체, 레이아웃 초기화 수정 ── */
+const LAYOUT_VERSION = 6;
 
 const DEFAULT_LAYOUT = {
 	col1: ["briefing"],
-	col2: ["weather", "stocks"],
-	col3: ["trends", "health", "diary", "miniWidgets"],
+	col2: ["weather", "stocks", "news"],
+	col3: ["trends", "health", "diary"],
 };
 
 /* 캘린더·Todo는 레이아웃에서 제거 → 별도 고정 렌더링 */
 const WIDGET_COMPONENTS = {
 	briefing: BriefingWidget,
-	miniWidgets: MiniWidgetGrid,
+	news: NewsWidget,
 	diary: DiaryCard,
 	weather: WeatherWidget,
 	stocks: StocksWidget,
@@ -276,11 +276,17 @@ const App = () => {
 						ref={provided.innerRef}
 						{...provided.draggableProps}
 						{...provided.dragHandleProps}
-						className={`transition-all duration-200 ${
+						className={
 							snapshot.isDragging
 								? "ring-2 ring-blue-500 rounded-2xl shadow-2xl opacity-90"
 								: ""
-						}`}
+						}
+						style={{
+							...provided.draggableProps.style,
+							transition: snapshot.isDragging
+								? undefined
+								: "box-shadow 0.2s ease, opacity 0.2s ease",
+						}}
 					>
 						<Component />
 					</div>
@@ -327,7 +333,7 @@ const App = () => {
 
 			{/* v5: 4열 레이아웃 + @hello-pangea/dnd — col1(1.5) + col2(1) + col3(1) + 캘린더(3, 고정) */}
 			<DragDropContext onDragEnd={handleDragEnd}>
-				<div className="relative z-10 flex flex-col lg:flex-row gap-8 pl-8 pr-8 pb-6 mt-2 flex-1">
+				<div className="relative z-10 flex flex-col lg:flex-row gap-8 px-12 pb-6 mt-2 flex-1">
 					{/* 왼쪽 3열: 위젯 영역 (드래그 앤 드롭 가능) */}
 					{renderColumn("col1", "flex-[1.5]")}
 					{renderColumn("col2", "flex-1")}

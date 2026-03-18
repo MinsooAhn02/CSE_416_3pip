@@ -102,7 +102,7 @@ const QuickLinks = () => {
 			{showEditor && (
 				<div
 					ref={editorRef}
-					className={`absolute top-12 right-0 w-80 rounded-2xl shadow-2xl border p-4 z-50 ${
+					className={`absolute top-12 right-0 w-80 rounded-2xl shadow-2xl border p-4 z-[9999] ${
 						isDark
 							? "bg-[#2a2a2a] border-[#3a3a3a] text-white"
 							: "bg-white border-gray-200 text-slate-800"

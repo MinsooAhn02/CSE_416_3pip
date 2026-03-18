@@ -43,7 +43,7 @@ const SettingsModal = () => {
 		smartWidgetData,
 		newKeyword,
 		toggleVis,
-		resetLayout,
+		resetDndLayout,
 		setNewKeyword,
 		addSmartWidget,
 		removeSmartWidget,
@@ -384,7 +384,7 @@ const SettingsModal = () => {
 									</div>
 								</div>
 								<button
-									onClick={resetLayout}
+									onClick={resetDndLayout}
 									className={`w-full p-3 rounded-xl text-sm font-medium transition-colors ${isDark ? "bg-white/5 hover:bg-white/10" : "bg-gray-50 hover:bg-gray-100"}`}
 								>
 									🔄 레이아웃 초기화

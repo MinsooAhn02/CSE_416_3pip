@@ -309,6 +309,9 @@ export const useDataStore = create((set, get) => ({
 	trends: [],
 	trendsAnswer: null,
 	trendsResults: [],
+	news: [],
+	newsAnswer: null,
+	newsResults: [],
 	restaurants: [],
 	calEvents: [],
 	healthData: null,
@@ -316,6 +319,7 @@ export const useDataStore = create((set, get) => ({
 		weather: null,
 		stocks: null,
 		trends: null,
+		news: null,
 	},
 	onboardingProfile: null,
 	activeWidgetIds: [],
@@ -594,6 +598,86 @@ export const useDataStore = create((set, get) => ({
 			get().markFetched("trends");
 		} finally {
 			set((s) => ({ loading: { ...s.loading, trends: false } }));
+		}
+	},
+
+	/* ══════════════════════════════════════════
+	   뉴스 (Tavily API - 별도 호출)
+	   news: 뉴스 키워드 배열
+	   newsAnswer: AI 요약 문자열
+	   newsResults: 뉴스 기사 배열 [{title, url, content}, ...]
+	   ══════════════════════════════════════════ */
+	fetchNews: async (userId, force = false) => {
+		set((s) => ({
+			loading: { ...s.loading, news: true },
+			errors: { ...s.errors, news: null },
+		}));
+		try {
+			const cacheKey = "news_full";
+
+			if (!force) {
+				const dbCached = await readApiCache(cacheKey, userId, false);
+				if (dbCached && dbCached.results) {
+					set({
+						news: dbCached.news ?? [],
+						newsAnswer: dbCached.answer ?? null,
+						newsResults: dbCached.results ?? [],
+					});
+					cacheIt("news", dbCached);
+					get().markFetched("news");
+					return;
+				}
+			}
+
+			const edge = await invokeEdgeDetailed("tavily", {
+				query: "대한민국 최신 뉴스 헤드라인 주요 뉴스 속보 10개",
+			});
+			if (edge?.data) {
+				set((s) => ({ rawData: { ...s.rawData, news: edge.data } }));
+			}
+
+			if (edge?.ok && edge.data?.results) {
+				const full = {
+					news: edge.data.trends ?? [],
+					answer: edge.data.answer ?? null,
+					results: (edge.data.results ?? []).slice(0, 10).map((r) => ({
+						title: r.title ?? "",
+						url: r.url ?? "",
+						content: r.content ?? "",
+					})),
+				};
+				set({
+					news: full.news,
+					newsAnswer: full.answer,
+					newsResults: full.results,
+				});
+				cacheIt("news", full);
+				await writeApiCache(cacheKey, full, userId);
+				get().markFetched("news");
+				return;
+			}
+
+			set((s) => ({
+				errors: {
+					...s.errors,
+					news: edge?.error || "뉴스 API 응답이 비어 있습니다.",
+				},
+			}));
+			// 뉴스 mock fallback (trends mock 재사용)
+			const mock = await mockFetchTrends();
+			set({ newsResults: mock.map((t) => ({ title: t, url: "", content: "" })) });
+			get().markFetched("news");
+		} catch (e) {
+			console.warn("fetchNews failed:", e?.message || e);
+			set((s) => ({
+				errors: {
+					...s.errors,
+					news: e?.message || "뉴스를 불러오지 못했습니다.",
+				},
+			}));
+			get().markFetched("news");
+		} finally {
+			set((s) => ({ loading: { ...s.loading, news: false } }));
 		}
 	},
 

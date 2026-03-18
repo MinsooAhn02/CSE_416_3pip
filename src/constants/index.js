@@ -16,6 +16,7 @@ export const WIDGET_LIST = [
 	{ id: "trends", label: "실시간 트렌드", category: "core" },
 	{ id: "stocks", label: "주식/환율", category: "core" },
 	{ id: "weather", label: "날씨", category: "core" },
+	{ id: "news", label: "뉴스", category: "core" },
 ];
 
 export const DEFAULT_VIS = {
@@ -25,6 +26,7 @@ export const DEFAULT_VIS = {
 	stocks: true,
 	weather: true,
 	calendar: true,
+	news: true,
 };
 
 export const DEFAULT_LAYOUTS = {

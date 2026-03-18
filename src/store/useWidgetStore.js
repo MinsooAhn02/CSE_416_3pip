@@ -238,6 +238,18 @@ export const useWidgetStore = create((set, get) => ({
 		save("mb_layouts", DEFAULT_LAYOUTS);
 		syncWidgetDB({ layouts: DEFAULT_LAYOUTS });
 	},
+	// App.jsx DND 레이아웃 리셋 함수 (col1, col2, col3 형식)
+	resetDndLayout: () => {
+		const DEFAULT_DND_LAYOUT = {
+			col1: ["briefing"],
+			col2: ["weather", "stocks", "news"],
+			col3: ["trends", "health", "diary"],
+		};
+		save("mb_widget_layout", DEFAULT_DND_LAYOUT);
+		save("mb_widget_layout_ver", 6);
+		// 페이지 새로고침으로 적용 (state는 App.jsx에서 관리)
+		window.location.reload();
+	},
 	setShowAddSmart: (v) => set({ showAddSmart: v }),
 	setNewKeyword: (v) => set({ newKeyword: v }),
 	addSmartWidget: async () => {

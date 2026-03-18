@@ -92,6 +92,9 @@ const TopNav = () => {
 		hour12: false,
 	});
 
+	// 날짜 상세 포맷: "2026년 03월 18일 07시 17분 21초"
+	const detailedTimeStr = `${currentTime.getFullYear()}년 ${String(currentTime.getMonth() + 1).padStart(2, "0")}월 ${String(currentTime.getDate()).padStart(2, "0")}일 ${String(currentTime.getHours()).padStart(2, "0")}시 ${String(currentTime.getMinutes()).padStart(2, "0")}분 ${String(currentTime.getSeconds()).padStart(2, "0")}초`;
+
 	const handleSearch = (e) => {
 		e.preventDefault();
 		if (searchQuery.trim())
@@ -103,7 +106,7 @@ const TopNav = () => {
 	};
 
 	return (
-		<header className="relative z-10 flex items-center justify-between px-6 pt-10 pb-14">
+		<header className="relative z-10 flex items-center justify-between px-12 pt-10 pb-14">
 			{/* Left — Avatar with user profile */}
 			<div className="flex items-center gap-3">
 				{user?.avatarUrl ? (
@@ -136,13 +139,17 @@ const TopNav = () => {
 				{/* 환경설정에서 선택한 시계 스타일 반영 */}
 				{clockStyle === "analog" ? (
 					<AnalogClock time={currentTime} isDark={isDark} />
+				) : clockStyle === "dateInfo" ? (
+					<h1 className="text-2xl font-light tracking-tight drop-shadow-lg whitespace-nowrap">
+						{detailedTimeStr}
+					</h1>
 				) : (
 					<h1 className="text-6xl font-light tracking-tighter drop-shadow-lg">
 						{timeStr}
 					</h1>
 				)}
-				<form onSubmit={handleSearch} className="w-full max-w-2xl relative group">
-					<div className="absolute inset-y-0 left-5 flex items-center pointer-events-none">
+				<form onSubmit={handleSearch} className="w-full max-w-5xl relative group">
+					<div className="absolute inset-y-0 left-8 flex items-center pointer-events-none">
 						<Search
 							className={`${isDark ? "text-white/40" : "text-gray-400"} group-focus-within:text-blue-400 transition-colors`}
 							size={20}
@@ -153,7 +160,7 @@ const TopNav = () => {
 						value={searchQuery}
 						onChange={(e) => setSearchQuery(e.target.value)}
 						placeholder="검색하거나 AI에게 물어보세요..."
-						className={`w-full h-14 backdrop-blur-xl rounded-full pl-12 pr-6 text-base outline-none focus:ring-4 focus:ring-blue-500/20 transition-all shadow-lg border ${inputCls}`}
+						className={`w-full h-14 backdrop-blur-xl rounded-full pl-16 pr-12 text-base outline-none focus:ring-4 focus:ring-blue-500/20 transition-all shadow-lg border ${inputCls}`}
 					/>
 				</form>
 			</div>
