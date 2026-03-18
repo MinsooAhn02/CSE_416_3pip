@@ -135,7 +135,7 @@ const TopNav = () => {
 			</div>
 
 			{/* Center — Clock + Search */}
-			<div className="flex flex-col items-center gap-12">
+			<div className="flex flex-col items-center gap-12 flex-1">
 				{/* 환경설정에서 선택한 시계 스타일 반영 */}
 				{clockStyle === "analog" ? (
 					<AnalogClock time={currentTime} isDark={isDark} />
@@ -148,10 +148,10 @@ const TopNav = () => {
 						{timeStr}
 					</h1>
 				)}
-				<form onSubmit={handleSearch} className="w-full max-w-5xl relative group">
-					<div className="absolute inset-y-0 left-8 flex items-center pointer-events-none">
+				<form onSubmit={handleSearch} className="w-1/2 max-w-5xl relative group">
+					<div className="absolute inset-y-0 left-4 flex items-center pointer-events-none z-10">
 						<Search
-							className={`${isDark ? "text-white/40" : "text-gray-400"} group-focus-within:text-blue-400 transition-colors`}
+							className={`${isDark ? "text-white/50" : "text-gray-500"} group-focus-within:text-blue-400 transition-colors`}
 							size={20}
 						/>
 					</div>

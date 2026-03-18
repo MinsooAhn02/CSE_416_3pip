@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { Globe, MoreHorizontal, X, Plus, Trash2 } from "lucide-react";
 import { useTheme } from "../../hooks/useTheme";
 import { useQuickLinksStore } from "../../store/useQuickLinksStore";
@@ -15,12 +16,24 @@ const QuickLinks = () => {
 	const [newColor, setNewColor] = useState("#4285F4");
 	const containerRef = useRef(null);
 	const editorRef = useRef(null);
+	const [editorPos, setEditorPos] = useState({ top: 0, right: 0 });
 
-	// Close editor on outside click
+	// Close editor on outside click & calculate position
 	useEffect(() => {
 		if (!showEditor) return;
+
+		// Calculate editor position based on container
+		if (containerRef.current) {
+			const rect = containerRef.current.getBoundingClientRect();
+			setEditorPos({
+				top: rect.bottom + 8,
+				right: window.innerWidth - rect.right
+			});
+		}
+
 		const handler = (e) => {
-			if (editorRef.current && !editorRef.current.contains(e.target)) {
+			if (editorRef.current && !editorRef.current.contains(e.target) && 
+				containerRef.current && !containerRef.current.contains(e.target)) {
 				setShowEditor(false);
 			}
 		};
@@ -55,7 +68,7 @@ const QuickLinks = () => {
 			className="relative flex items-center"
 			ref={containerRef}
 			onMouseEnter={() => setHovered(true)}
-			onMouseLeave={() => setHovered(false)}
+			onMouseLeave={() => {setHovered(false); setShowEditor(false);}}
 		>
 			{/* 호버 시 왼쪽으로 펼쳐지는 오버레이 — absolute로 시계를 밀지 않음 */}
 			<div
@@ -98,17 +111,21 @@ const QuickLinks = () => {
 				<Globe size={18} className="opacity-60" />
 			</button>
 
-			{/* Editor popup */}
-			{showEditor && (
+			{/* Editor popup — rendered as portal to escape stacking context */}
+			{showEditor && createPortal(
 				<div
 					ref={editorRef}
-					className={`absolute top-12 right-0 w-80 rounded-2xl shadow-2xl border p-4 z-[9999] ${
+					className={`fixed w-80 rounded-2xl shadow-2xl border p-4 z-[10001] ${
 						isDark
 							? "bg-[#2a2a2a] border-[#3a3a3a] text-white"
 							: "bg-white border-gray-200 text-slate-800"
 					}`}
+					style={{
+						top: `${editorPos.top}px`,
+						right: `${editorPos.right}px`
+					}}
 				>
-					<div className="flex items-center justify-between mb-3">
+					<div className="flex items-center justify-between mb-3 ">
 						<h3 className="text-sm font-bold">즐겨찾기 편집</h3>
 						<button onClick={() => setShowEditor(false)}>
 							<X size={16} className="opacity-60 hover:opacity-100" />
@@ -162,30 +179,31 @@ const QuickLinks = () => {
 								placeholder="URL (예: github.com)"
 								className={`w-full rounded-lg px-3 py-1.5 text-xs outline-none border focus:border-blue-400 ${inputCls}`}
 							/>
-							<div className="flex gap-2">
+							<div className="flex gap-2 items-center h-8">
 								<input
 									type="text"
 									value={newIcon}
 									onChange={(e) => setNewIcon(e.target.value)}
 									placeholder="아이콘 (예: GH)"
-									className={`flex-1 rounded-lg px-3 py-1.5 text-xs outline-none border focus:border-blue-400 ${inputCls}`}
+									className={`flex-1 h-8 w-4 rounded-lg px-3 py-0 text-xs outline-none border focus:border-blue-400 ${inputCls}`}
 								/>
 								<input
 									type="color"
 									value={newColor}
 									onChange={(e) => setNewColor(e.target.value)}
-									className="w-8 h-8 rounded-lg border-0 cursor-pointer"
+									className="w-8 h-8 border-0 cursor-pointer appearance-none flex-shrink-0"
 								/>
 								<button
 									onClick={handleAdd}
-									className="bg-blue-500 hover:bg-blue-400 text-white px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1"
+									className="h-8 bg-blue-500 hover:bg-blue-400 text-white px-3 py-0 rounded-lg text-xs font-bold flex items-center justify-center gap-1"
 								>
 									<Plus size={12} /> 추가
 								</button>
 							</div>
 						</div>
 					</div>
-				</div>
+				</div>,
+				document.body
 			)}
 		</div>
 	);
