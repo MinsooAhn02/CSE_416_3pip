@@ -1,7 +1,18 @@
 import { useState, useEffect, useRef, useMemo } from "react";
-import { Calendar, MoreVertical, ChevronLeft, ChevronRight } from "lucide-react";
+import {
+	Calendar,
+	MoreVertical,
+	ChevronLeft,
+	ChevronRight,
+	CheckCircle2,
+	X,
+	Plus,
+} from "lucide-react";
 import { useTheme } from "../../hooks/useTheme";
-import { mockCalendarEvents } from "../../mock/data";
+import { useDataStore } from "../../store/useDataStore";
+import { useTodoStore } from "../../store/useTodoStore";
+import { useDiaryStore } from "../../store/useDiaryStore";
+import DiaryModal from "../modals/DiaryModal";
 
 const DAYS = ["일", "월", "화", "수", "목", "금", "토"];
 
@@ -11,16 +22,38 @@ const sameDay = (a, b) =>
 	a.getDate() === b.getDate();
 
 const CalendarWidget = () => {
-	const { isDark, cardCls, muted } = useTheme();
+	const { isDark, cardCls, muted, inputCls } = useTheme();
 	const [calView, setCalView] = useState("month");
 	const [menuOpen, setMenuOpen] = useState(false);
 	const [currentDate, setCurrentDate] = useState(new Date());
+	const [diaryDateStr, setDiaryDateStr] = useState(null); // 선택된 날짜 (DiaryModal용)
 	const menuRef = useRef(null);
+
+	/* ── 외부 스토어 연결 ── */
+	const calEvents = useDataStore((s) => s.calEvents) || [];
+	const getDiaryDates = useDiaryStore((s) => s.getDiaryDates);
+	const diaryDates = useMemo(() => new Set(getDiaryDates()), [getDiaryDates]);
+	const {
+		todos,
+		newTodoText,
+		showAddTodo,
+		toggleTodo,
+		addTodo,
+		deleteTodo,
+		ensureDailyReset,
+		setNewTodoText,
+		setShowAddTodo,
+	} = useTodoStore();
 
 	const now = new Date();
 	const today = now.getDate();
 	const viewYear = currentDate.getFullYear();
 	const viewMonth = currentDate.getMonth();
+
+	/* 초기 로드 시 일일 리셋 확인 */
+	useEffect(() => {
+		ensureDailyReset?.();
+	}, [ensureDailyReset]);
 
 	/* Close menu on outside click */
 	useEffect(() => {
@@ -159,22 +192,38 @@ const CalendarWidget = () => {
 							{d}
 						</div>
 					))}
-					{cells.map((day, i) => (
-						<div
-							key={i}
-							className={`text-center py-2 text-sm rounded-full cursor-default ${
-								day === null ? "invisible" : ""
-							} ${
-								day === today && isCurrentMonth
-									? "bg-blue-500 text-white font-bold"
-									: isDark
-										? "hover:bg-[#353535]"
-										: "hover:bg-gray-100"
-							}`}
-						>
-							{day}
-						</div>
-					))}
+					{cells.map((day, i) => {
+						if (day === null) {
+							return <div key={i} className="invisible py-2" />;
+						}
+						const dateStr = `${viewYear}-${String(viewMonth + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+						const hasDiary = diaryDates.has(dateStr);
+						const isToday = day === today && isCurrentMonth;
+
+						return (
+							<div
+								key={i}
+								onClick={() => setDiaryDateStr(dateStr)}
+								className={`relative text-center py-2 text-sm rounded-full cursor-pointer transition-colors ${
+									isToday
+										? "bg-blue-500 text-white font-bold"
+										: isDark
+											? "hover:bg-[#353535]"
+											: "hover:bg-gray-100"
+								}`}
+							>
+								{day}
+								{/* 일기 있는 날짜에 점 표시 */}
+								{hasDiary && (
+									<span
+										className={`absolute bottom-0.5 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full ${
+											isToday ? "bg-white" : "bg-blue-500"
+										}`}
+									/>
+								)}
+							</div>
+						);
+					})}
 				</div>
 			)}
 
@@ -212,26 +261,135 @@ const CalendarWidget = () => {
 				</div>
 			)}
 
-			{/* Today's events */}
+			{/* ── 하단 5:5 분할: 오늘의 일정 + AI Todo ── */}
 			<div className={`mt-4 pt-4 border-t ${isDark ? "border-[#3a3a3a]" : "border-gray-200"}`}>
-				<p className={`text-xs font-medium mb-2 ${muted}`}>오늘 일정</p>
-				<div className="space-y-2">
-					{mockCalendarEvents.map((ev, i) => (
-						<div key={i} className="flex items-center gap-3">
-							<div
-								className="w-1 h-8 rounded-full flex-shrink-0"
-								style={{ backgroundColor: ev.color }}
-							/>
-							<div className="flex-grow">
-								<p className="text-xs font-medium">{ev.title}</p>
-								<p className={`text-[10px] ${muted}`}>
-									{ev.time} · {ev.location}
-								</p>
-							</div>
+				<div className="flex gap-4">
+					{/* 왼쪽: 오늘의 일정 */}
+					<div className="flex-1 min-w-0">
+						<p className={`text-xs font-medium mb-2 ${muted}`}>오늘 일정</p>
+						<div className="space-y-2">
+							{calEvents.length === 0 ? (
+								<p className={`text-xs ${muted}`}>오늘 일정이 없습니다.</p>
+							) : (
+								calEvents.map((ev, i) => (
+									<div key={i} className="flex items-center gap-3">
+										<div
+											className="w-1 h-8 rounded-full flex-shrink-0"
+											style={{ backgroundColor: ev.color || "#4f46e5" }}
+										/>
+										<div className="flex-grow min-w-0">
+											<p className="text-xs font-medium truncate">
+												{ev.title || ev.summary}
+											</p>
+											<p className={`text-[10px] truncate ${muted}`}>
+												{ev.time || ""} {ev.location ? `· ${ev.location}` : ""}
+											</p>
+										</div>
+									</div>
+								))
+							)}
 						</div>
-					))}
+					</div>
+
+					{/* 오른쪽: AI Todo (기존 TodoWidget 로직 인라인) */}
+					<div className="flex-1 min-w-0">
+						<p className={`text-xs font-medium mb-2 ${muted}`}>AI Todo</p>
+						<div className="space-y-2">
+							{todos.map((t) => (
+								<div key={t.id} className="flex items-center gap-2 group">
+									<button
+										onClick={() => toggleTodo(t.id)}
+										className={`w-4 h-4 rounded flex-shrink-0 flex items-center justify-center border transition-colors ${
+											t.completed
+												? "bg-blue-500 border-blue-500"
+												: isDark
+													? "border-white/30 hover:border-blue-400"
+													: "border-gray-300 hover:border-blue-400"
+										}`}
+									>
+										{t.completed && (
+											<CheckCircle2 size={10} className="text-white" />
+										)}
+									</button>
+									<span
+										className={`text-xs flex-grow truncate ${
+											t.completed ? "line-through opacity-40" : ""
+										}`}
+									>
+										{t.text}
+									</span>
+									{t.isFixed && (
+										<span
+											className={`text-[9px] px-1 py-0.5 rounded ${
+												isDark
+													? "bg-emerald-500/20 text-emerald-300"
+													: "bg-emerald-100 text-emerald-700"
+											}`}
+										>
+											루틴
+										</span>
+									)}
+									<button
+										onClick={() => deleteTodo(t.id)}
+										className="opacity-0 group-hover:opacity-60 hover:!opacity-100 transition-opacity"
+									>
+										<X size={12} />
+									</button>
+								</div>
+							))}
+
+							{/* Todo 추가 UI */}
+							{showAddTodo ? (
+								<div className="flex items-center gap-1 mt-1">
+									<input
+										type="text"
+										value={newTodoText}
+										onChange={(e) => setNewTodoText(e.target.value)}
+										onKeyDown={(e) => {
+											if (e.key === "Enter") {
+												e.preventDefault();
+												void addTodo();
+											}
+										}}
+										placeholder="할 일 입력..."
+										autoFocus
+										className={`flex-grow rounded-lg px-2 py-1 text-xs outline-none border focus:border-blue-400 ${inputCls}`}
+									/>
+									<button
+										onClick={() => void addTodo()}
+										className="text-blue-400 text-xs font-medium"
+									>
+										추가
+									</button>
+									<button
+										onClick={() => {
+											setShowAddTodo(false);
+											setNewTodoText("");
+										}}
+									>
+										<X size={14} className={muted} />
+									</button>
+								</div>
+							) : (
+								<button
+									onClick={() => setShowAddTodo(true)}
+									className="flex items-center gap-1 text-[10px] text-blue-400 mt-1 hover:underline"
+								>
+									<Plus size={12} /> 새 할 일
+								</button>
+							)}
+						</div>
+					</div>
 				</div>
 			</div>
+
+			{/* DiaryModal — 날짜 클릭 시 표시 */}
+			{diaryDateStr && (
+				<DiaryModal
+					dateStr={diaryDateStr}
+					onClose={() => setDiaryDateStr(null)}
+				/>
+			)}
 		</div>
 	);
 };

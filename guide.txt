@@ -1,0 +1,829 @@
+================================================================================
+  MORNING BRIEF - 프로젝트 종합 가이드
+  작성일: 2026-03-18
+  Version: v2 (DND 적용 완료)
+================================================================================
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+1. 프로젝트 개요
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+프로젝트명: MorningBrief.AI
+형태: Chrome New Tab Extension (React 기반 대시보드)
+목표: 사용자 데이터(날씨, 주식, 뉴스, 일정, 건강 정보)를 한눈에 파악하고,
+      AI 기반 브리핑 및 일기/TODO 관리 기능 제공
+
+핵심 기술 스택:
+  - Frontend: React 18 + Vite
+  - 상태 관리: Zustand
+  - UI: Tailwind CSS 3 + Lucide React 아이콘
+  - 드래그: @hello-pangea/dnd (DND library)
+  - 백엔드: Supabase (Auth, DB, Edge Functions)
+  - LLM: Groq API
+  - 데이터: Twelve Data, Tavily Search, Kakao Local, Google APIs
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+2. 구조 및 아키텍처
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+2-1) 파일 구조
+─────────────────────────────────────────────────────────────────────────────
+
+src/
+├── App.jsx                    # 메인 앱, @hello-pangea/dnd 레이아웃 관리
+├── index.css                  # 글로벌 스타일 (Tailwind + 커스텀)
+├── components/
+│   ├── layout/
+│   │   ├── TopNav.jsx         # 헤더 (프로필, 시계, 검색, 테마, 즐겨찾기)
+│   │   ├── QuickLinks.jsx     # 즐겨찾기 링크 (원형, 드롭다운)
+│   │   ├── EditModeBanner.jsx # 드래그 활성화 배너
+│   │   └── FixedButtons.jsx   # FAB 스택 (설정, 스마트 위젯 추가 등)
+│   ├── widgets/
+│   │   ├── BriefingWidget.jsx       # AI 브리핑 카드 (왼쪽 열)
+│   │   ├── CalendarWidget.jsx       # 달력 (오른쪽, kebab 메뉴)
+│   │   ├── DiaryCard.jsx            # 다이어리 질문 카드 (중앙)
+│   │   ├── MiniWidgetGrid.jsx       # 미니 위젯 2x2 그리드
+│   │   ├── WeatherWidget.jsx        # 날씨 정보
+│   │   ├── StocksWidget.jsx         # 주식/환율
+│   │   ├── TrendsWidget.jsx         # 뉴스 트렌드
+│   │   ├── HealthWidget.jsx         # 건강 정보
+│   │   ├── TodoWidget.jsx           # TODO 및 고정 루틴
+│   │   ├── RestaurantsWidget.jsx    # 맛집 검색
+│   │   ├── FoodRouletteWidget.jsx   # 음식 룰렛
+│   │   └── SmartWidgetContent.jsx   # 스마트 위젯 (동적)
+│   ├── modals/
+│   │   ├── OnboardingModal.jsx      # 신규 유저 온보딩
+│   │   ├── SettingsModal.jsx        # 설정 모달
+│   │   ├── DiaryModal.jsx           # 날짜별 일기 상세
+│   │   ├── NewsDetailModal.jsx      # 뉴스 상세
+│   │   ├── BriefSettingsModal.jsx   # 브리핑 설정
+│   │   └── AddSmartWidget.jsx       # 스마트 위젯 추가
+│   ├── common/
+│   │   ├── DragHandle.jsx           # 드래그 핸들
+│   │   ├── WidgetCard.jsx           # 공통 위젯 래퍼
+│   │   ├── AnalogClock.jsx          # 아날로그 시계
+│   │   └── ... (기타 공통 컴포넌트)
+│   └── [기타 컴포넌트들]
+├── store/
+│   ├── useAuthStore.js        # 인증 (Google OAuth, 세션, provider token)
+│   ├── useSettingsStore.js    # 설정 (테마, 브리핑, 시계 스타일)
+│   ├── useWidgetStore.js      # 위젯 상태 (visibility, 레이아웃, 스마트 키워드)
+│   ├── useDataStore.js        # 데이터 로딩 (API 호출, 캐시, 각 위젯 데이터)
+│   ├── useTodoStore.js        # TODO (일반 + 고정, 일일 리셋)
+│   └── useDiaryStore.js       # 일기 (entries, answers, 메모)
+├── services/
+│   ├── aiService.js           # AI 브리핑 + 스마트 위젯 + 일기 생성
+│   └── supabaseClient.js      # Supabase 초기화
+├── hooks/
+│   ├── useTheme.js            # 테마 (isDark, cardCls, muted 등)
+│   └── [기타 커스텀 훅]
+├── mock/
+│   └── data.js                # Mock 데이터 (fallback용)
+└── constants/
+    └── index.js               # 상수 (DEFAULT_LAYOUT, DEFAULT_VIS 등)
+
+supabase/
+├── schema.sql                 # DB 테이블 정의 (user_settings, todos, diaries 등)
+└── functions/                 # Edge Functions
+    ├── groq/
+    ├── stocks/
+    ├── tavily/
+    ├── kakao-places/
+    ├── calendar/
+    ├── fitness/
+    ├── smart-widget/
+    └── weather/
+
+
+2-2) 핵심 데이터 흐름
+─────────────────────────────────────────────────────────────────────────────
+
+[1] 앱 시작 → 로그인
+  → App 마운트
+  → onAuthStateChange 리스너
+  → session 생성 → useAuthStore.handleAuthChange()
+  → isLoggedIn = true
+
+[2] 초기화 (hydrate)
+  → useSettingsStore.hydrateFromDB()
+  → useWidgetStore.hydrateFromDB()
+  → useTodoStore.hydrateFromDB()
+  → useDiaryStore.hydrateFromDB()
+
+[3] 데이터 로딩
+  → useDataStore.fetchAll()
+  → user_settings + widget_layouts 조회
+  → 활성 위젯(activeWidgetIds) 결정
+  → 병렬 API 호출 (weather, stocks, trends, calendar, etc.)
+  → 각 fetch: DB 캐시 → Edge Function → Mock fallback
+
+[4] 캐시 관리
+  → API 응답 → api_cache 테이블 저장 (TTL: 5-20분)
+  → localStorage mb_cache_* 저장 (즉시 접근용)
+  → isCacheStale() 판정 (30분 기준) → 재호출 여부 결정
+
+[5] 렌더링
+  → 3열 + 캘린더 레이아웃 (@hello-pangea/dnd)
+    - col1: BriefingWidget
+    - col2: Weather, Stocks, Health, Diary, Mini
+    - col3: Trends, Health, Diary, Mini
+    - calendar: 오른쪽 (3배 너비)
+  → 각 위젯: 데이터 표시 + 상호작용
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+3. 핵심 기능별 설명
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+3-1) 인증 & 온보딩 (useAuthStore)
+─────────────────────────────────────────────────────────────────────────────
+
+기능:
+  - Google OAuth 로그인 (calendar, fitness scope 포함)
+  - 세션 관리 (Supabase)
+  - provider_token 자동 저장
+  - 신규 유저 온보딩 분기 (OnboardingModal 자동 표시)
+
+주요 함수:
+  - login(): Google OAuth 시작
+  - handleAuthChange(session): 세션 변경 처리
+  - loadUserSettings(): DB에서 설정 로드
+  - ensureProviderToken(): 토큰 재확보
+
+사용처:
+  - App.jsx: isLoggedIn 체크 → LoginScreen 또는 대시보드 표시
+  - 데이터 로드: provider_token으로 Google 데이터 접근
+
+
+3-2) 설정 & 테마 (useSettingsStore, useTheme)
+─────────────────────────────────────────────────────────────────────────────
+
+지원 설정:
+  - 테마: "dark" (회색계) / "light" (밝은 배경)
+  - 시계 스타일: "digital" / "analog"
+  - 브리핑 톤: "formal" / "casual"
+  - 브리핑 길이: "short" (1줄) / "medium" (3줄) / "long" (5줄)
+  - 음성 ON/OFF
+  - 인격(persona): 미리 설정된 프로필
+
+다크/라이트 모드:
+  - Tailwind dark: 클래스 조건부 렌더링
+  - useTheme(): isDark, cardCls, muted, inputCls 반환
+  - transition-colors duration-300: 부드러운 전환
+
+시계 스타일:
+  - Digital: 현재 시각 대형 표시 (TopNav 중앙)
+  - Analog: 아날로그 시계 컴포넌트 (AnalogClock.jsx)
+
+
+3-3) 데이터 로딩 (useDataStore)
+─────────────────────────────────────────────────────────────────────────────
+
+Selective Loading:
+  - 모든 위젯 데이터를 한번에 로드하지 않음
+  - 활성 위젯만 선별 로드 (activeWidgetIds 기준)
+  - 사용자가 위젯 visibility 설정 → 동적 로드
+
+캐시 전략 (TTL):
+  - weather: 10분
+  - stocks: 5분
+  - trends: 20분
+  - restaurants: 20분
+  - calendar: 5분
+  - health: 15분
+
+각 fetch 함수 구조:
+  1) DB api_cache 조회 (key, TTL 검사)
+  2) 캐시 유효 → 즉시 반환
+  3) 캐시 만료 또는 force=true → Edge Function 호출
+  4) 성공 → normalize + DB 저장 + localStorage 저장
+  5) 실패 → mock 데이터 fallback
+
+API 별 상세:
+  - 날씨: Groq LLM (좌표 기반 현실적 추정)
+  - 주식: Twelve Data (KOSPI, NASDAQ, S&P500, USD/KRW)
+  - 트렌드: Tavily Search (실시간 검색 + 요약)
+  - 맛집: Kakao Local API (좌표 기반, radius 1200m)
+  - 캘린더: Google Calendar (OAuth token 필요)
+  - 건강: Google Fit (provider_token 필요)
+
+
+3-4) 위젯 관리 (useWidgetStore)
+─────────────────────────────────────────────────────────────────────────────
+
+위젯 가시성 (visibility):
+  - user_settings.vis: JSON 객체 (widget_id: true/false)
+  - localStorage mb_vis에서 우선 로드
+  - SettingsModal에서 토글 가능
+
+레이아웃 (위젯 배치):
+  - @hello-pangea/dnd 기반
+  - col1, col2, col3, calendar 4개 드롭 존
+  - 사용자 드래그 → 위치 변경 → localStorage + DB 저장
+
+스마트 위젯 키워드:
+  - useWidgetStore.smartKeywords: 동적 키워드 배열
+  - 사용자가 AddSmartWidget에서 키워드 추가
+  - 키워드별 스마트 위젯 자동 생성
+
+
+3-5) TODO 관리 (useTodoStore + aiService)
+─────────────────────────────────────────────────────────────────────────────
+
+TODO 유형:
+  1) 일반 TODO: 사용자 직접 추가, 하루가 지나면 삭제
+  2) 고정 TODO (루틴): isFixed=true, 매일 리셋되어 재등장
+
+일일 리셋 로직:
+  - 앱 시작 → ensureDailyReset() 호출
+  - mb_todo_last_reset 확인 (localStorage)
+  - 24시간 경과 → 일반 TODO 전부 삭제, 고정 TODO reset
+
+AI TODO 자동 생성:
+  - generateAiTodo(calEvents, onboardingProfile): Groq 호출
+  - 오늘 일정 분석 → 추천 TODO 3개 생성
+  - useTodoStore.addAiTodos()로 추가
+
+사용처:
+  - TodoWidget: 리스트 표시, 완료 체크, 루틴 배지
+  - SettingsModal 고정 TODO 탭: 루틴 추가/삭제
+
+
+3-6) 일기 & 메모 (useDiaryStore + DiaryCard)
+─────────────────────────────────────────────────────────────────────────────
+
+저장 모델:
+  - 날짜별 저장 (diaries 테이블)
+  - 각 날짜: diary_text(일기 전체) + memo(핵심 요약)
+
+DiaryCard 기능:
+  - AI 질문: "오늘 가장 기분 좋았던 순간은 언제인가요?"
+  - textarea에 입력 → "확인" 버튼 클릭
+  - 저장된 항목 리스트 (시간 + 내용) 아래에 표시
+  - 스크롤 가능 (내용 많을 때)
+
+자동 일기 생성:
+  - 자정(00:00) 감지 (setInterval)
+  - 전날 일기 미존재 확인 → generateDiary() Groq 호출
+  - AI가 생성한 일기 자동 저장
+
+메모 → 브리핑 반영:
+  - 어제 메모 자동 로드 (useDiaryStore.entries)
+  - BriefingWidget → aiService.generateBriefing에 yesterdayMemo 전달
+  - 브리핑에 어제 내용 반영
+
+사용처:
+  - DiaryCard: 하루 질문 답변
+  - DiaryModal: 날짜별 상세 조회 + 메모 편집
+  - CalendarWidget 날짜 클릭 → DiaryModal 열기
+
+
+3-7) AI 브리핑 (BriefingWidget + aiService)
+─────────────────────────────────────────────────────────────────────────────
+
+브리핑 컨텍스트:
+  - weather, stocks, trends, restaurants, calEvents, healthData
+  - todos, activeWidgetIds, onboardingProfile
+  - 시간대 프로필: morning(5-11), lunch(11-14), day(14-18), evening(18-24)
+
+생성 로직:
+  - aiService.generateBriefing(context): Groq LLM 호출
+  - 시간대별 프롬프트 + 데이터 삽입
+  - 상위 3개 시그널 선택 (점수식)
+  - 출력 강제 3줄 (실패 시 로컬 fallback)
+
+사용처:
+  - BriefingWidget: 앱 시작 시 자동 생성, "새로고침" 버튼으로 재생성
+  - 사용자 환경설정 (tone, length, persona) 반영
+
+
+3-8) 스마트 위젯 (SmartWidgetContent + smart-widget Edge)
+─────────────────────────────────────────────────────────────────────────────
+
+동작 원리:
+  1) 사용자 AddSmartWidget에서 키워드 입력 (예: "AI 뉴스")
+  2) useWidgetStore.smartKeywords에 저장
+  3) SmartWidgetContent 마운트 → loadSmartWidget() 호출
+  4) Edge function smart-widget 호출
+     - Route 결정: weather/stocks/trends/restaurants/etc.
+     - persona 기반 검색 포인트 3개 생성
+     - Tavily 검색 → Groq 요약
+  5) 결과 렌더 (emoji, sections, lastUpdated, debug)
+
+캐싱:
+  - smartWidgetData[keyword]: 생성된 데이터
+  - smartWidgetErrors[keyword]: 에러 메시지
+  - useEffect with force 파라미터: 강제 재생성
+
+
+3-9) 드래그 & 드롭 (@hello-pangea/dnd)
+─────────────────────────────────────────────────────────────────────────────
+
+구조:
+  - DragDropContext: App 최상위
+  - Droppable: col1, col2, col3, calendar 4개 존
+  - Draggable: 각 위젯 래핑
+  - onDragEnd: 레이아웃 변경 → DB + localStorage 저장
+
+자동 스크롤:
+  - @hello-pangea/dnd 내장 지원
+  - 드래그 중 화면 끝 닿으면 자동 스크롤
+
+터치 지원:
+  - sensors 옵션: autoScroll=true
+  - 모바일/태블릿 드래그 지원
+
+
+3-10) 헤더 & 즐겨찾기 (TopNav + QuickLinks)
+──────────────────────────────────────────────────────────────────────────────
+
+TopNav 구성:
+  - 왼쪽: 프로필 아바타 (useAuthStore.user.avatarUrl)
+  - 중앙: 시계(digital/analog) + 검색 바
+  - 오른쪽: 테마 전환 + 즐겨찾기 + 설정 아이콘
+
+시계:
+  - useSettingsStore.clockStyle로 형태 결정
+  - AnalogClock: 아날로그 시계 컴포넌트 (수동 구현)
+
+검색:
+  - form onSubmit → window.open(`https://www.google.com/search?q=...`)
+  - 라운드 코너 (rounded-full), max-w-2xl, h-14
+
+즐겨찾기 (QuickLinks):
+  - 원형 아이콘 + 드롭다운 (hover 시 펼쳐짐)
+  - 사용자 설정 웹사이트 링크 저장
+  - 점 3개(⋮) 아이콘: 편집 모달 열기
+  - 링크 클릭 → 새 탭에서 열기
+  - cursor 이동하면 자동 닫기
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+4. 사용자 사용 가이드
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+4-1) 시작하기
+─────────────────────────────────────────────────────────────────────────────
+
+1. Chrome에서 확장 프로그램 로드:
+   - chrome://extensions/
+   - "개발자 모드" 활성화
+   - "압축해제된 확장 프로그램 로드"
+   - 프로젝트 /dist 폴더 선택
+
+2. 새 탭 열기:
+   - Ctrl + T (또는 Cmd + T)
+   - MorningBrief.AI 대시보드 표시
+
+3. Google 로그인 (처음만):
+   - LoginScreen의 "Google로 시작하기" 클릭
+   - Google 계정 선택
+   - calendar, fitness 권한 동의
+   - OnboardingModal 자동 표시 → 프로필 설정 (인격, 관심사 등)
+
+4. 대시보드 구성:
+   - 왼쪽 열: AI 브리핑 (하루 핵심 요약)
+   - 중앙: 위젯 3~4개 + 다이어리 (스크롤 가능)
+   - 오른쪽: 캘린더 (월간 뷰)
+   - 헤더: 시계, 검색, 테마, 즐겨찾기
+
+
+4-2) 주요 기능 사용법
+─────────────────────────────────────────────────────────────────────────────
+
+[1] 다크/라이트 모드 전환
+  → 오른쪽 상단 해/달 아이콘 클릭
+  → 색상 부드럽게 변경 (0.3초)
+
+[2] 시계 스타일 변경
+  → 오른쪽 상단 설정(⚙️) 클릭
+  → "시계 스타일" 탭
+  → "디지털" 또는 "아날로그" 선택
+  → TopNav에 즉시 반영
+
+[3] 즐겨찾기 웹사이트 관리
+  → 오른쪽 상단 원형 아이콘 (즐겨찾기)
+  → 마우스 오버 → 6개 웹사이트 링크 펼쳐짐
+  → 점 3개(⋮) → 편집 모달
+    - 웹사이트 추가/삭제
+    - 이름, URL, 아이콘 설정
+  → 링크 클릭 → 새 탭에서 해당 사이트로 이동
+
+[4] 위젯 드래그 (위치 변경)
+  → 위젯 드래그 핸들 (🔲 아이콘) 잡기
+  → 다른 위치로 드래그
+  → 드롭 존(col1/col2/col3/calendar)에 놓기
+  → 자동 저장 (localStorage + DB)
+  → 다음 접속 시 같은 위치 유지
+
+[5] 브리핑 새로고침
+  → BriefingWidget의 새로고침(🔄) 버튼
+  → AI 브리핑 재생성
+  → 15초 정도 소요 (Groq 호출)
+
+[6] 날씨, 주식, 뉴스 각 위젯의 새로고침
+  → 각 위젯 상단 새로고침(🔄) 버튼
+  → 강제 API 재호출 (캐시 무시)
+
+[7] 일기 쓰기
+  → 중앙 DiaryCard
+  → "오늘 가장 기분 좋았던 순간은 언제인가요?" 질문 아래
+  → textarea에 답변 입력
+  → "확인" 버튼 클릭
+  → 저장된 항목 리스트 아래 표시
+  → 내용 많으면 스크롤 가능
+
+[8] 날짜별 일기 조회/편집
+  → 오른쪽 캘린더에서 날짜 클릭
+  → DiaryModal 열기
+  → 그날 일기 내용 + 메모 표시
+  → 메모 편집 후 저장
+
+[9] TODO 관리
+  → TodoWidget
+  → "추가" 버튼으로 새 TODO 생성
+  → 체크박스로 완료 표시
+  → "루틴" 배지: 고정 TODO (매일 자동 리셋)
+
+[10] 고정 TODO (루틴) 추가
+  → 설정(⚙️) → "고정 TODO" 탭
+  → "루틴 추가" 버튼
+  → 루틴명 입력, 시간 설정 (선택)
+  → 저장
+  → 매일 자동으로 재등장
+
+[11] 스마트 위젯 생성
+  → 설정(⚙️) → "스마트 위젯" 탭
+  → "새 키워드 추가"
+  → 키워드 입력 (예: "AI 뉴스", "주식 분석", "맛집 추천")
+  → 저장
+  → SmartWidget 자동 생성 (20초 정도, Tavily + Groq)
+
+[12] 검색
+  → TopNav 중앙 검색 바
+  → 검색어 입력
+  → Enter 또는 검색 아이콘 클릭
+  → Google 검색 결과 새 탭에서 열기
+
+
+4-3) 데이터 흐름 및 업데이트 주기
+─────────────────────────────────────────────────────────────────────────────
+
+앱 시작 시:
+  1) 로그인 확인
+  2) Supabase에서 설정 로드 (테마, 시계 스타일, 위젯 visibility)
+  3) 활성 위젯 결정
+  4) 병렬 API 호출 (weather, stocks, trends 등)
+  5) 데이터 캐시 (DB + localStorage)
+  6) 대시보드 렌더
+
+백그라운드 업데이트:
+  - 30분마다: 캐시 자동 갱신
+  - 사용자 새로고침 버튼: 즉시 강제 갱신
+  - 위젯 visibility 변경: 동적 로드
+
+자동 생성 (백그라운드):
+  - 매일 자정(00:00): 어제 일기 미존재 시 AI 자동 생성
+  - 매일 7시: AI TODO 자동 생성 (시뮬레이션)
+  - 주기적: AI 브리핑 갱신 (사용자 설정 기준)
+
+
+4-4) 설정 카테고리
+─────────────────────────────────────────────────────────────────────────────
+
+SettingsModal 탭들:
+
+[프로필]
+  - 프로필 사진 (Google 기본)
+  - 이름, 이메일 (Google 기본)
+  - 인격(persona) 선택 (비즈니스맨, 학생, 디자이너 등)
+  - 관심 카테고리 (선택 사항, 스마트 위젯 추천용)
+
+[테마]
+  - 다크 모드 (회색계 검정)
+  - 라이트 모드 (밝은 배경)
+  - 자동 모드 (시스템 설정 따라감)
+
+[시계]
+  - 디지털 시계 (HH:MM:SS)
+  - 아날로그 시계 (바늘 시계)
+
+[브리핑]
+  - 톤: Formal / Casual
+  - 길이: Short (1줄) / Medium (3줄) / Long (5줄)
+  - 음성 ON/OFF (TTS)
+
+[고정 TODO]
+  - 루틴 목록 (매일 자동 리셋)
+  - 루틴 추가/삭제
+
+[스마트 위젯]
+  - 활성 키워드 목록
+  - 키워드 추가/삭제
+  - 강제 재생성 버튼
+
+[위젯 가시성]
+  - 각 위젯 ON/OFF 토글
+  - 활성 위젯만 데이터 로드
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+5. 개발 가이드
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+5-1) 설치 & 실행
+─────────────────────────────────────────────────────────────────────────────
+
+# 의존성 설치 (@hello-pangea/dnd 포함)
+npm install
+
+# 개발 서버 실행 (http://localhost:5173)
+npm run dev
+
+# 프로덕션 빌드
+npm run build
+
+# Supabase 함수 배포
+npx supabase functions deploy
+
+
+5-2) 환경 변수 설정
+─────────────────────────────────────────────────────────────────────────────
+
+.env 파일 (프론트엔드):
+  VITE_SUPABASE_URL=https://xxx.supabase.co
+  VITE_SUPABASE_ANON_KEY=xxx
+
+Supabase Secrets (Edge Functions용):
+  npx supabase secrets set GROQ_API_KEY=xxx
+  npx supabase secrets set TAVILY_API_KEY=xxx
+  npx supabase secrets set KAKAO_REST_KEY=xxx
+  npx supabase secrets set TWELVEDATA_API_KEY=xxx
+  npx supabase secrets set OPENWEATHER_API_KEY=xxx
+
+
+5-3) API 테스트 (PowerShell)
+─────────────────────────────────────────────────────────────────────────────
+
+# 환경변수 로드
+$envMap = @{}
+Get-Content .env |
+  Where-Object { $_ -match '^[A-Za-z_][A-Za-z0-9_]*=' } |
+  ForEach-Object { $k,$v = $_.Split('=',2); $envMap[$k]=$v }
+
+$base = "$($envMap.VITE_SUPABASE_URL)/functions/v1"
+$key = $envMap.VITE_SUPABASE_ANON_KEY
+$headers = @{ apikey=$key; Authorization="Bearer $key"; 'Content-Type'='application/json' }
+
+# Groq 테스트 (날씨)
+Invoke-RestMethod -Method Post -Uri "$base/groq" -Headers $headers `
+  -Body '{"system":"날씨 JSON 생성기","prompt":"좌표 37.5665,126.978 기반 현실적 날씨 JSON","temperature":0.2}'
+
+# Stocks 테스트
+Invoke-RestMethod -Method Post -Uri "$base/stocks" -Headers $headers `
+  -Body '{"symbols":["KOSPI","NASDAQ","SP500","USDKRW"]}'
+
+# Tavily 테스트
+Invoke-RestMethod -Method Post -Uri "$base/tavily" -Headers $headers `
+  -Body '{"query":"대한민국 실시간 이슈 트렌드"}'
+
+
+5-4) 주요 코드 패턴
+─────────────────────────────────────────────────────────────────────────────
+
+[1] Zustand 스토어 사용
+  import { useMyStore } from '../store/useMyStore';
+  
+  const value = useMyStore((s) => s.value);
+  const setValue = useMyStore((s) => s.setValue);
+  setValue(newValue);
+
+[2] Supabase API 호출
+  import { supabase } from '../services/supabaseClient';
+  
+  const { data, error } = await supabase
+    .from('table_name')
+    .select('*')
+    .eq('user_id', userId);
+
+[3] Edge Function 호출
+  import { useDataStore } from '../store/useDataStore';
+  
+  const invokeEdge = useDataStore((s) => s.invokeEdge);
+  const result = await invokeEdge('function_name', { param: 'value' });
+
+[4] 테마 적용
+  import { useTheme } from '../hooks/useTheme';
+  
+  const { isDark, cardCls, muted, inputCls } = useTheme();
+  
+  return (
+    <div className={`${cardCls} transition-colors duration-300`}>
+      <input className={inputCls} />
+      <span className={muted}>Text</span>
+    </div>
+  );
+
+[5] 드래그 & 드롭
+  import { Draggable, Droppable } from '@hello-pangea/dnd';
+  
+  <Droppable droppableId="col1">
+    {(provided, snapshot) => (
+      <div {...provided.droppableProps} ref={provided.innerRef}>
+        {widgets.map((w, idx) => (
+          <Draggable key={w.id} draggableId={w.id} index={idx}>
+            {(provided) => (
+              <div {...provided.draggableProps} {...provided.dragHandleProps} ref={provided.innerRef}>
+                <WidgetCard>{w}</WidgetCard>
+              </div>
+            )}
+          </Draggable>
+        ))}
+        {provided.placeholder}
+      </div>
+    )}
+  </Droppable>
+
+
+5-5) 모달 & 상호작용
+─────────────────────────────────────────────────────────────────────────────
+
+OnboardingModal:
+  - 신규 유저 자동 표시 (useAuthStore.showOnboarding)
+  - 인격, 관심사 선택
+  - 완료 → finishOB() → useAuthStore 저장
+
+SettingsModal:
+  - 설정(⚙️) 아이콘 클릭
+  - 여러 탭 (프로필, 테마, 시계, 브리핑, 고정TODO, 스마트위젯, 가시성)
+  - 저장 → Supabase + localStorage 동기화
+
+DiaryModal:
+  - 캘린더 날짜 클릭
+  - 그날 일기 표시
+  - 메모 편집 후 저장
+
+NewsDetailModal:
+  - TrendsWidget의 트렌드 항목 클릭
+  - 뉴스 리스트 확장
+  - AI 요약 표시, 원문 링크
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+6. 문제 해결 & 유지보수
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+6-1) 일반적인 문제
+─────────────────────────────────────────────────────────────────────────────
+
+[문제] 로그인 후 대시보드가 안 보임
+→ 원인: isLoggedIn이 false, 또는 세션 로드 지연
+→ 해결:
+  1) Chrome DevTools 콘솔 확인
+  2) useAuthStore 상태 로그 출력
+  3) Supabase 연결 확인 (.env 파일)
+  4) 로컬 저장소 초기화: localStorage.clear() → 새로고침
+
+[문제] 위젯 데이터가 0 또는 나타나지 않음
+→ 원인: API 호출 실패, 캐시 오염, 또는 mock fallback 사용 중
+→ 해결:
+  1) DevTools Network 탭에서 Edge Function 호출 확인
+  2) 응답 상태 코드 (200 vs 4xx/5xx)
+  3) 캐시 초기화: localStorage.clear()
+  4) API 키 확인 (Supabase Secrets)
+  5) 함수 재배포: npx supabase functions deploy
+
+[문제] 드래그 후 위치가 저장되지 않음
+→ 원인: localStorage 비활성화, 또는 Supabase DB 저장 실패
+→ 해결:
+  1) localStorage 활성화 확인
+  2) 브라우저 개발자도구 → Application → localStorage 확인
+  3) Supabase 권한(RLS) 확인
+  4) widget_layouts 테이블 존재 확인
+
+[문제] 자정 일기가 자동 생성되지 않음
+→ 원인: 브라우저 닫혀 있음, 또는 setInterval 미실행
+→ 해결:
+  1) 브라우저 계속 열어두기
+  2) 다음 접속 시 자동 생성 로직 (checkAndGenerateMissingDiary)
+  3) App.jsx useEffect 확인
+
+
+6-2) API/데이터 문제
+─────────────────────────────────────────────────────────────────────────────
+
+[문제] 날씨만 안 나타남
+→ 원인: GROQ_API_KEY 누락 또는 groq 응답 JSON 파싱 실패
+→ 해결:
+  1) Supabase Secrets 확인: npx supabase secrets list
+  2) Groq API 키 재설정: npx supabase secrets set GROQ_API_KEY=xxx
+  3) 함수 재배포: npx supabase functions deploy groq
+
+[문제] 주식 가격이 전부 0
+→ 원인: Twelve Data 한도 초과, 또는 심볼 오류
+→ 해결:
+  1) Twelve Data 계정 확인 (할당량)
+  2) API 키 재발급
+  3) supabase/functions/stocks/index.ts의 심볼 확인
+  4) 함수 재배포
+
+[문제] 트렌드가 이상한 태그로 나타남
+→ 원인: Tavily 응답 정제 규칙 미흡
+→ 해결:
+  1) Tavily API 키 유효한지 확인
+  2) supabase/functions/tavily/index.ts의 정제 로직 검토
+  3) 응답 형식 확인 (trends 배열 구조)
+
+[문제] 캘린더 이벤트가 보이지 않음
+→ 원인: Google OAuth token 만료, 또는 권한 부족
+→ 해결:
+  1) 다시 로그인 (Google 권한 재동의)
+  2) useAuthStore.ensureProviderToken() 호출 확인
+  3) calendar scope 포함 확인
+  4) Google Calendar 공개 권한 확인
+
+
+6-3) 성능 최적화
+─────────────────────────────────────────────────────────────────────────────
+
+캐싱 활용:
+  - 불필요한 API 호출 줄이기 (TTL 준수)
+  - 자주 조회하는 데이터 localStorage 캐시
+  - activeWidgetIds 기반 selective loading
+
+번들 크기 최적화:
+  - npm run build 후 dist 크기 확인
+  - 불필요한 라이브러리 제거
+  - 트리 쉐이킹 확인 (Vite 기본)
+
+렌더링 최적화:
+  - React.memo 사용 (컴포넌트 재렌더 방지)
+  - useMemo, useCallback 활용 (선택적)
+  - 긴 리스트는 가상 스크롤 고려
+
+
+6-4) 보안 주의사항
+─────────────────────────────────────────────────────────────────────────────
+
+API 키 관리:
+  - 클라이언트에 API 키 노출 금지 (VITE_* 변수는 최소화)
+  - 모든 API 호출은 Edge Function 프록시 사용
+  - Supabase Secrets에 저장 (환경변수)
+
+Supabase RLS (Row Level Security):
+  - user_id 기반 접근 제어 필수
+  - api_cache, todos, diaries 테이블 RLS 활성화
+  - 정책 검토: INSERT/SELECT/UPDATE/DELETE 권한 확인
+
+Supabase 권한:
+  - anon key: 클라이언트용 (로그인 전)
+  - service_role key: 서버용 (절대 클라이언트 노출 금지)
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+7. 최신 변경 사항 (v2)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+[2026-03-18] v2 완료
+  ✅ @hello-pangea/dnd 도입 → 모든 위젯 자유 드래그 가능
+  ✅ 검색창 2.5배 확대 (max-w-2xl, h-14)
+  ✅ 아날로그 시계 구현 (AnalogClock 컴포넌트)
+  ✅ 시계 스타일 환경설정 (digital/analog 토글)
+  ✅ TopNav 프로필 개선 (아바타 + 이름 + 이메일)
+  ✅ AI TODO 자동 생성 (앱 시작 시)
+  ✅ 자정 일기 자동 생성 (setInterval 기반)
+  ✅ QuickLinks (즐겨찾기) 구현 (원형 아이콘, 드롭다운)
+  ✅ 다크 모드 색상 개선 (푸른색 → 회색계)
+
+[주요 파일 변경]
+  - package.json: "@hello-pangea/dnd": "^17.0.0" 추가
+  - src/App.jsx: DragDropContext 적용, LAYOUT_VERSION = 5
+  - src/components/layout/TopNav.jsx: AnalogClock, QuickLinks 통합
+  - src/store/useAuthStore.js: 신규 유저 온보딩 자동 분기
+  - src/store/useTodoStore.js: addAiTodos() 함수 추가
+  - src/components/widgets/CalendarWidget.jsx: 날짜 클릭 → DiaryModal
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+8. 문서 참조
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+이 프로젝트의 상세 정보는 아래 파일에서 확인:
+
+  - apply.txt: 프로젝트 리뉴얼 적용 내역 (UI 구조 변경)
+  - tofix.txt: 수정 필요 사항 (카카오, 구글 OAuth 등)
+  - howto.txt: 기본 사용 방법 및 기능 설명
+  - change.txt: 주요 변경 사항 요약
+  - change2.txt: 추가 변경 사항 요약
+  - feedback1.txt, feedback2.txt: 코드 리뷰 및 개선 계획
+  - structure.txt: 프로젝트 구조 상세 설명
+  - project_notes.txt: 프로젝트 개발 노트
+  - v2_implementation_review.txt: v2 구현 현황 및 계획
+  - v2_refactoring_summary.md: v2 리팩토링 요약
+
+
+================================================================================
+  END OF GUIDE
+================================================================================

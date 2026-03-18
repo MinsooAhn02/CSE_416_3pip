@@ -469,12 +469,24 @@ const SettingsModal = () => {
 						{settingsTab === "profile" && (
 							<div className="space-y-6">
 								<div className="flex items-center gap-4">
-									<div className="w-16 h-16 rounded-full bg-blue-600 flex items-center justify-center border-2 border-blue-400">
-										<User size={28} className="text-white" />
-									</div>
+									{useAuthStore.getState().user?.avatarUrl ? (
+										<img
+											src={useAuthStore.getState().user.avatarUrl}
+											alt="프로필"
+											className="w-16 h-16 rounded-full border-2 border-blue-400 object-cover"
+										/>
+									) : (
+										<div className="w-16 h-16 rounded-full bg-blue-600 flex items-center justify-center border-2 border-blue-400">
+											<User size={28} className="text-white" />
+										</div>
+									)}
 									<div>
-										<p className="font-bold">MorningBrief.AI User</p>
-										<p className={`text-xs ${muted}`}>user@google.com (demo)</p>
+										<p className="font-bold">
+											{useAuthStore.getState().user?.displayName || "MorningBrief.AI User"}
+										</p>
+										<p className={`text-xs ${muted}`}>
+											{useAuthStore.getState().user?.email || "로그인 정보 없음"}
+										</p>
 									</div>
 								</div>
 								<button

@@ -1,14 +1,21 @@
 import { useState } from "react";
 import { useTheme } from "../../hooks/useTheme";
+import { useDiaryStore } from "../../store/useDiaryStore";
+
+const todayStr = () => new Date().toISOString().slice(0, 10);
 
 const DiaryCard = () => {
 	const { cardCls, isDark } = useTheme();
 	const [diaryText, setDiaryText] = useState("");
-	const [savedEntries, setSavedEntries] = useState([]);
+
+	/* useDiaryStore에서 오늘 날짜 답변 관리 */
+	const addAnswer = useDiaryStore((s) => s.addAnswer);
+	const getAnswers = useDiaryStore((s) => s.getAnswers);
+	const savedEntries = getAnswers(todayStr());
 
 	const handleSave = () => {
 		if (!diaryText.trim()) return;
-		setSavedEntries((prev) => [...prev, { text: diaryText, date: new Date() }]);
+		addAnswer(todayStr(), diaryText.trim());
 		setDiaryText("");
 	};
 
@@ -38,18 +45,12 @@ const DiaryCard = () => {
 
 			{savedEntries.length > 0 && (
 				<div className="mt-4 flex-1 min-h-0 overflow-y-auto diary-scroll space-y-2">
-					{savedEntries.map((entry, idx) => (
+					{savedEntries.map((text, idx) => (
 						<div
 							key={idx}
 							className={`text-xs p-2 rounded-lg ${isDark ? "bg-[#333333]" : "bg-gray-50"}`}
 						>
-							<p className="opacity-50 text-[10px] mb-1">
-								{entry.date.toLocaleTimeString("ko-KR", {
-									hour: "2-digit",
-									minute: "2-digit",
-								})}
-							</p>
-							<p>{entry.text}</p>
+							<p>{text}</p>
 						</div>
 					))}
 				</div>

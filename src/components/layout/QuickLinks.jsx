@@ -57,13 +57,15 @@ const QuickLinks = () => {
 			onMouseEnter={() => setHovered(true)}
 			onMouseLeave={() => setHovered(false)}
 		>
-			{/* Expanded links - appear on hover, from right to left */}
+			{/* 호버 시 왼쪽으로 펼쳐지는 오버레이 — absolute로 시계를 밀지 않음 */}
 			<div
-				className={`flex items-center gap-1.5 overflow-hidden transition-all duration-300 ease-in-out ${
-					hovered ? "max-w-[500px] opacity-100 mr-2" : "max-w-0 opacity-0 mr-0"
+				className={`absolute right-full mr-2 flex items-center gap-1.5 overflow-hidden transition-all duration-300 ease-in-out ${
+					hovered
+						? "max-w-[500px] opacity-100 backdrop-blur-md bg-white/10 dark:bg-black/20 rounded-full px-2 py-1"
+						: "max-w-0 opacity-0"
 				}`}
 			>
-				{/* Edit button (three dots) */}
+				{/* 편집 버튼 */}
 				<button
 					onClick={(e) => {
 						e.stopPropagation();
@@ -75,7 +77,7 @@ const QuickLinks = () => {
 					<MoreHorizontal size={16} className="opacity-60" />
 				</button>
 
-				{/* Site links */}
+				{/* 사이트 링크들 */}
 				{links.map((link) => (
 					<a
 						key={link.id}
@@ -91,7 +93,7 @@ const QuickLinks = () => {
 				))}
 			</div>
 
-			{/* Main globe icon (always visible) */}
+			{/* 메인 지구본 아이콘 (항상 표시) */}
 			<button className={btnCls} title="즐겨찾기">
 				<Globe size={18} className="opacity-60" />
 			</button>

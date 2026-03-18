@@ -200,4 +200,22 @@ export const useTodoStore = create((set, get) => ({
 	setNewTodoText: (v) => set({ newTodoText: v }),
 	setNewRoutineText: (v) => set({ newRoutineText: v }),
 	setShowAddTodo: (v) => set({ showAddTodo: v }),
+
+	/**
+	 * AI 추천 Todo 일괄 추가
+	 * @param {Array} aiTodos - [{ text: string }] 형식
+	 * TODO: 추후 실시간 업데이트 예정 - 일정 변경 시 자동 재생성
+	 */
+	addAiTodos: async (aiTodos = []) => {
+		if (!aiTodos.length) return;
+		const { todos } = get();
+		const existingTexts = new Set(todos.map((t) => t.text.toLowerCase()));
+
+		for (const item of aiTodos) {
+			const txt = (item.text || item).trim();
+			if (!txt || existingTexts.has(txt.toLowerCase())) continue;
+			await get().addTodo({ text: txt, isFixed: false });
+			existingTexts.add(txt.toLowerCase());
+		}
+	},
 }));

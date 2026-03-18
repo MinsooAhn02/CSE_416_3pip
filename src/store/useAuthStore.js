@@ -114,6 +114,10 @@ export const useAuthStore = create((set, get) => ({
 			});
 			save("mb_onboarded", true);
 			save("mb_persona", data.persona);
+		} else {
+			// 신규 유저: 온보딩 모달 표시
+			set({ onboarded: false, showOnboarding: true, obStep: 0 });
+			save("mb_onboarded", false);
 		}
 	},
 
