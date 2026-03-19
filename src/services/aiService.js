@@ -304,6 +304,154 @@ const localBriefingFallback = ({ topSignals, timeProfile }) => {
 	].join("\n");
 };
 
+/**
+ * 캘린더 이벤트를 AI 프롬프트용 가독성 높은 문자열로 변환
+ * @param {Array} calEvents - 캘린더 일정 배열
+ * @returns {string} "HH:MM 제목, HH:MM 제목" 형식 문자열
+ */
+export function formatCalEventsForAI(calEvents = []) {
+	if (!Array.isArray(calEvents) || calEvents.length === 0) {
+		return "오늘 예정된 일정이 없습니다.";
+	}
+	return calEvents
+		.slice()
+		.sort((a, b) => new Date(a.start) - new Date(b.start))
+		.map((e) => {
+			const startDate = new Date(e.start);
+			const time = startDate.toLocaleTimeString("ko-KR", {
+				hour: "2-digit",
+				minute: "2-digit",
+				hour12: false,
+			});
+			return `${time} ${e.title || e.summary || "일정"}`;
+		})
+		.join(", ");
+}
+
+/**
+ * 시간대별 공식 인사말 반환
+ * @returns {string} 시간대에 맞는 공식 인사말
+ */
+export function getTimeGreeting() {
+	const hour = new Date().getHours();
+	if (hour >= 5 && hour < 12) {
+		return "안녕하세요. 상쾌한 아침입니다. 금일 예정된 일정과 주요 정보를 보고드립니다.";
+	} else if (hour >= 12 && hour < 18) {
+		return "안녕하세요. 활기찬 오후입니다. 현재 시각 기준 업데이트된 브리핑을 확인해 주십시오.";
+	} else {
+		return "안녕하세요. 편안한 저녁입니다. 금일 하루의 마무리 요약과 내일의 준비 사항입니다.";
+	}
+}
+
+/**
+ * 상세 브리핑 생성 (summary + detail 동시 반환)
+ * @param {{ tone: string, length: string, context: object }} params
+ * @returns {Promise<{ summary: string, detail: string } | null>}
+ */
+export async function generateDetailedBriefing({ tone, length, context }) {
+	const timeProfile = getTimeProfile();
+	const topSignals = scoreSignals({ context: context ?? {}, timeProfile });
+	
+	// calEvents를 가독성 높은 문자열로 변환
+	const formattedCalEvents = formatCalEventsForAI(context?.calEvents);
+	
+	const contextWithPriority = {
+		...(context ?? {}),
+		timeProfile,
+		topSignals,
+		topSignalIds: topSignals.map((s) => s.id),
+		formattedCalEvents,
+	};
+
+	const prompt = [
+		"당신은 사용자의 시간대별 대시보드 브리핑 AI입니다.",
+		`톤: ${tone}`,
+		`길이: ${length}`,
+		`현재 모드: ${timeProfile.label} (${timeProfile.mode})`,
+		`모드 가이드: ${timeProfile.desc}`,
+		"",
+		"=== 오늘의 일정 ===",
+		formattedCalEvents,
+		"",
+		"=== 작업 지시 ===",
+		"다음 JSON 형식으로 정확히 응답하세요:",
+		'{ "summary": "3줄 요약 (각 줄은 \\n으로 구분)", "detail": "10~15줄 상세 브리핑 (각 줄은 \\n으로 구분)" }',
+		"",
+		"- summary: 핵심 정보를 3줄로 간결하게 요약",
+		"- detail: 날씨, 일정, 트렌드, 증시, 주요 뉴스를 자연스럽게 포함한 상세 브리핑",
+		"- 공식적이고 정중한 어체 사용",
+		"- JSON만 반환하고 다른 텍스트는 작성하지 마세요.",
+		"",
+		context?.yesterdayMemo
+			? `사용자가 전날 남긴 메모를 참고하세요: "${context.yesterdayMemo}"`
+			: "",
+		"",
+		"=== 컨텍스트 데이터 ===",
+		JSON.stringify(contextWithPriority, null, 2),
+	]
+		.filter(Boolean)
+		.join("\n");
+
+	const data = await invokeFunction("groq", {
+		prompt,
+		system: [
+			"당신은 개인화된 브리핑 작성기입니다.",
+			"반드시 유효한 JSON 형식으로만 응답하세요.",
+			"summary는 정확히 3줄, detail은 10~15줄로 작성하세요.",
+			"공식적이고 정중한 한국어를 사용하세요.",
+		].join("\n"),
+	});
+
+	if (!data?.text) {
+		// 로컬 폴백
+		const fallbackSummary = localBriefingFallback({ topSignals, timeProfile });
+		return {
+			summary: fallbackSummary,
+			detail: [
+				getTimeGreeting(),
+				"",
+				"현재 시스템에서 상세 브리핑을 생성하지 못했습니다.",
+				"주요 정보를 간략히 안내드립니다.",
+				"",
+				formattedCalEvents !== "오늘 예정된 일정이 없습니다."
+					? `📅 오늘의 일정: ${formattedCalEvents}`
+					: "📅 오늘 예정된 일정이 없습니다.",
+				"",
+				topSignals.length > 0
+					? `📊 주요 시그널: ${topSignals.map((s) => s.title).join(", ")}`
+					: "",
+				"",
+				"새로고침 버튼을 눌러 다시 시도해 주십시오.",
+			]
+				.filter(Boolean)
+				.join("\n"),
+		};
+	}
+
+	try {
+		const parsed = JSON.parse(data.text);
+		if (parsed.summary && parsed.detail) {
+			return {
+				summary: String(parsed.summary),
+				detail: String(parsed.detail),
+			};
+		}
+	} catch {
+		console.warn("AI 상세 브리핑 JSON 파싱 실패:", data.text);
+	}
+
+	// 파싱 실패 시 텍스트 그대로 사용
+	const lines = String(data.text)
+		.split("\n")
+		.map((line) => line.trim())
+		.filter(Boolean);
+	
+	return {
+		summary: lines.slice(0, 3).join("\n") || "브리핑 요약을 생성하지 못했습니다.",
+		detail: lines.join("\n") || "상세 브리핑을 생성하지 못했습니다.",
+	};
+}
+
 export async function generateBriefing({ tone, length, context }) {
 	const timeProfile = getTimeProfile();
 	const topSignals = scoreSignals({ context: context ?? {}, timeProfile });
