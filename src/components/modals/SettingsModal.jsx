@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import {
 	X,
 	Moon,
@@ -12,13 +12,15 @@ import {
 	Clock,
 	Calendar,
 	Timer,
+	ListOrdered,
 } from "lucide-react";
+import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 import { useTheme } from "../../hooks/useTheme";
 import { useSettingsStore } from "../../store/useSettingsStore";
 import { useWidgetStore } from "../../store/useWidgetStore";
 import { useAuthStore } from "../../store/useAuthStore";
 import { useTodoStore } from "../../store/useTodoStore";
-import { WIDGET_LIST } from "../../constants";
+import { WIDGET_LIST, STANDARD_WIDGETS, DEFAULT_PRIORITY_ORDER } from "../../constants";
 import { save } from "../../utils/storage";
 import Toggle from "../common/Toggle";
 
@@ -30,12 +32,16 @@ const SettingsModal = () => {
 		theme,
 		bgImage,
 		clockStyle,
+		priorityOrder,
+		showFirstLoginBriefing,
 		setShowSettings,
 		setSettingsTab,
 		setTheme,
 		setBgImage,
 		removeBg,
 		setClockStyle,
+		setPriorityOrder,
+		setShowFirstLoginBriefing,
 	} = useSettingsStore();
 	const {
 		vis,
@@ -61,6 +67,21 @@ const SettingsModal = () => {
 	const recurringTodos = todos.filter((t) => t.isFixed);
 
 	const bgRef = useRef(null);
+
+	// Get widget labels for priority display
+	const getWidgetLabel = (widgetId) => {
+		const widget = STANDARD_WIDGETS.find((w) => w.id === widgetId);
+		return widget?.label || widgetId;
+	};
+
+	// Handle priority DnD reorder
+	const handlePriorityDragEnd = (result) => {
+		if (!result.destination) return;
+		const newOrder = Array.from(priorityOrder);
+		const [removed] = newOrder.splice(result.source.index, 1);
+		newOrder.splice(result.destination.index, 0, removed);
+		setPriorityOrder(newOrder);
+	};
 
 	if (!showSettings) return null;
 
@@ -96,9 +117,11 @@ const SettingsModal = () => {
 						{[
 							{ id: "widgets", label: "위젯 관리" },
 							{ id: "smart", label: "스마트 위젯" },
+							{ id: "priority", label: "데이터 우선순위" },
 							{ id: "routine", label: "고정 TODO" },
 							{ id: "clock", label: "시계 스타일" },
 							{ id: "layout", label: "레이아웃" },
+							{ id: "briefing", label: "AI 브리핑" },
 							{ id: "theme", label: "테마" },
 							{ id: "profile", label: "프로필" },
 						].map((tab) => (
@@ -509,6 +532,111 @@ const SettingsModal = () => {
 								>
 									<LogOut size={16} /> 로그아웃
 								</button>
+							</div>
+						)}
+						{settingsTab === "priority" && (
+							<div className="space-y-4">
+								<div>
+									<p className="text-sm font-medium mb-2">데이터 우선순위</p>
+									<p className={`text-xs mb-4 ${muted}`}>
+										드래그하여 순서를 변경하세요. 높은 순위의 데이터가 AI 브리핑에서 먼저 언급됩니다.
+									</p>
+								</div>
+								<DragDropContext onDragEnd={handlePriorityDragEnd}>
+									<Droppable droppableId="priority-list">
+										{(provided) => (
+											<div
+												ref={provided.innerRef}
+												{...provided.droppableProps}
+												className="space-y-2"
+											>
+												{priorityOrder.map((widgetId, index) => (
+													<Draggable
+														key={widgetId}
+														draggableId={widgetId}
+														index={index}
+													>
+														{(provided, snapshot) => (
+															<div
+																ref={provided.innerRef}
+																{...provided.draggableProps}
+																{...provided.dragHandleProps}
+																className={`flex items-center gap-3 p-3 rounded-xl transition-all ${
+																	snapshot.isDragging
+																		? "shadow-lg scale-[1.02]"
+																		: ""
+																} ${
+																	isDark
+																		? "bg-white/5 hover:bg-white/10"
+																		: "bg-gray-50 hover:bg-gray-100"
+																}`}
+															>
+																<div className={`flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold ${
+																	isDark ? "bg-blue-600/30 text-blue-300" : "bg-blue-100 text-blue-600"
+																}`}>
+																	{index + 1}
+																</div>
+																<GripVertical
+																	size={16}
+																	className={`${muted} cursor-grab`}
+																/>
+																<span className="text-sm flex-1">
+																	{getWidgetLabel(widgetId)}
+																</span>
+															</div>
+														)}
+													</Draggable>
+												))}
+												{provided.placeholder}
+											</div>
+										)}
+									</Droppable>
+								</DragDropContext>
+								<button
+									onClick={() => setPriorityOrder(DEFAULT_PRIORITY_ORDER)}
+									className={`w-full p-3 rounded-xl text-sm font-medium transition-colors ${
+										isDark
+											? "bg-white/5 hover:bg-white/10"
+											: "bg-gray-50 hover:bg-gray-100"
+									}`}
+								>
+									🔄 기본 순서로 초기화
+								</button>
+							</div>
+						)}
+						{settingsTab === "briefing" && (
+							<div className="space-y-6">
+								<div>
+									<p className="text-sm font-medium mb-2">AI 브리핑 설정</p>
+									<p className={`text-xs mb-4 ${muted}`}>
+										AI 브리핑 관련 설정을 관리합니다.
+									</p>
+								</div>
+								<div
+									className={`flex items-center justify-between p-4 rounded-xl ${
+										isDark ? "bg-white/5" : "bg-gray-50"
+									}`}
+								>
+									<div className="flex-1">
+										<p className="text-sm font-medium">첫 접속 상세 브리핑</p>
+										<p className={`text-xs mt-1 ${muted}`}>
+											자정 이후 첫 탭 열람 시 상세 브리핑을 자동으로 표시합니다.
+										</p>
+									</div>
+									<Toggle
+										on={showFirstLoginBriefing}
+										onToggle={() => setShowFirstLoginBriefing(!showFirstLoginBriefing)}
+									/>
+								</div>
+								<div className={`p-4 rounded-xl ${isDark ? "bg-white/5" : "bg-gray-50"}`}>
+									<div className="flex items-center gap-2 mb-2">
+										<Sparkles size={16} className="text-blue-500" />
+										<p className="text-sm font-medium">Factual-Only 모드</p>
+									</div>
+									<p className={`text-xs ${muted}`}>
+										AI 브리핑과 다이어리는 사실 기반으로만 생성됩니다. 감정적 표현, 비교, 예측은 자동으로 제외됩니다.
+									</p>
+								</div>
 							</div>
 						)}
 					</div>

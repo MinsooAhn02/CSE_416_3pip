@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 import { useAuthStore } from "./store/useAuthStore";
 import { useSettingsStore } from "./store/useSettingsStore";
@@ -7,9 +7,11 @@ import { useDataStore } from "./store/useDataStore";
 import { useTodoStore } from "./store/useTodoStore";
 import { useDiaryStore } from "./store/useDiaryStore";
 import { useTheme } from "./hooks/useTheme";
+import { useMidnightTrigger } from "./hooks/useMidnightTrigger";
 import { supabase } from "./lib/supabase";
 import { load, save } from "./utils/storage";
-import { generateDiary, generateAiTodo } from "./services/aiService";
+import { generateAiTodo } from "./services/aiService";
+import { STANDARD_WIDGETS, DEFAULT_PRIORITY_ORDER } from "./constants";
 
 import LoginScreen from "./components/layout/LoginScreen";
 import TopNav from "./components/layout/TopNav";
@@ -17,45 +19,29 @@ import FixedButtons from "./components/layout/FixedButtons";
 import OnboardingModal from "./components/modals/OnboardingModal";
 import SettingsModal from "./components/modals/SettingsModal";
 import BriefSettingsModal from "./components/modals/BriefSettingsModal";
+import FirstLoginBriefingModal from "./components/modals/FirstLoginBriefingModal";
 
 import BriefingWidget from "./components/widgets/BriefingWidget";
 import NewsWidget from "./components/widgets/NewsWidget";
 import DiaryCard from "./components/widgets/DiaryCard";
 import CalendarWidget from "./components/widgets/CalendarWidget";
+import TodoWidget from "./components/widgets/TodoWidget";
 import WeatherWidget from "./components/widgets/WeatherWidget";
 import StocksWidget from "./components/widgets/StocksWidget";
 import TrendsWidget from "./components/widgets/TrendsWidget";
 import HealthWidget from "./components/widgets/HealthWidget";
 import SmartWidgetContent from "./components/widgets/SmartWidgetContent";
 
-/* ── v6: MiniWidgetGrid → NewsWidget 교체, 레이아웃 초기화 수정 ── */
-const LAYOUT_VERSION = 6;
+/* ── v7: 1:3:3 Layout Architecture (REQ-WS-001) ── */
+const LAYOUT_VERSION = 7;
 
-const DEFAULT_LAYOUT = {
-	col1: ["briefing"],
-	col2: ["weather", "stocks", "news"],
-	col3: ["trends", "health", "diary"],
-};
-
-/* 캘린더·Todo는 레이아웃에서 제거 → 별도 고정 렌더링 */
-const WIDGET_COMPONENTS = {
-	briefing: BriefingWidget,
-	news: NewsWidget,
-	diary: DiaryCard,
+// Standard Widgets for Middle Column (REQ-WS-002)
+const STANDARD_WIDGET_COMPONENTS = {
 	weather: WeatherWidget,
 	stocks: StocksWidget,
 	trends: TrendsWidget,
 	health: HealthWidget,
-};
-
-const initLayout = () => {
-	const savedVer = load("mb_widget_layout_ver", 0);
-	if (savedVer < LAYOUT_VERSION) {
-		save("mb_widget_layout_ver", LAYOUT_VERSION);
-		save("mb_widget_layout", DEFAULT_LAYOUT);
-		return DEFAULT_LAYOUT;
-	}
-	return load("mb_widget_layout", DEFAULT_LAYOUT);
+	news: NewsWidget,
 };
 
 // Stable wrapper to avoid re-mount on every render
@@ -64,86 +50,23 @@ const SmartWidget = ({ keyword }) => <SmartWidgetContent keyword={keyword} />;
 const App = () => {
 	const isLoggedIn = useAuthStore((s) => s.isLoggedIn);
 	const handleAuthChange = useAuthStore((s) => s.handleAuthChange);
-	const { isDark } = useTheme();
+	const { isDark, pageCls } = useTheme();
 	const fetchAll = useDataStore((s) => s.fetchAll);
 	const smartKeywords = useWidgetStore((s) => s.smartKeywords);
-	const midnightChecked = useRef(false);
+	const priorityOrder = useSettingsStore((s) => s.priorityOrder) || DEFAULT_PRIORITY_ORDER;
 
-	// Drag & Drop state
-	const [layout, setLayout] = useState(initLayout);
+	// Use the new midnight trigger hook (REQ-CS-005, REQ-AJ-001)
+	useMidnightTrigger(isLoggedIn);
 
-	/**
-	 * 전날 일기 미생성 시 자동 생성
-	 * (브라우저 종료 후 다음 날 접속 시 실행)
-	 */
-	const checkAndGenerateMissingDiary = async () => {
-		const { getDiary, saveDiary, wasActiveOn, markActive } = useDiaryStore.getState();
-		const yesterday = new Date();
-		yesterday.setDate(yesterday.getDate() - 1);
-		const yesterdayStr = yesterday.toISOString().slice(0, 10);
+	// Middle Column widget order state (priority-based)
+	const [middleWidgetOrder, setMiddleWidgetOrder] = useState(DEFAULT_PRIORITY_ORDER);
 
-		// 어제 접속했지만 일기가 없으면 생성
-		if (wasActiveOn(yesterdayStr) && !getDiary(yesterdayStr)?.diary) {
-			try {
-				const diaryContext = {
-					weather: useDataStore.getState().weather,
-					calEvents: useDataStore.getState().calEvents,
-					todos: useTodoStore.getState().todos,
-				};
-				const diaryText = await generateDiary(yesterdayStr, diaryContext);
-				if (diaryText) {
-					await saveDiary(yesterdayStr, diaryText);
-					console.log("[App] 전날 일기 자동 생성 완료:", yesterdayStr);
-				}
-			} catch (e) {
-				console.warn("Auto diary generation failed:", e?.message);
-			}
-		}
-
-		// 오늘 접속 기록
-		markActive();
-	};
-
-	/**
-	 * 자정 일기 트리거 (브라우저가 열려있을 때만 동작)
-	 * TODO: 실시간 업데이트는 추후 예정 - Web Worker 또는 Service Worker 활용 권장
-	 */
+	// Update middle column order when priority changes
 	useEffect(() => {
-		if (!isLoggedIn || midnightChecked.current) return;
+		setMiddleWidgetOrder(priorityOrder);
+	}, [priorityOrder]);
 
-		const now = new Date();
-		const midnight = new Date(now);
-		midnight.setHours(24, 0, 0, 0);
-		const msUntilMidnight = midnight.getTime() - now.getTime();
-
-		const timeoutId = setTimeout(async () => {
-			midnightChecked.current = true;
-			const todayStr = new Date().toISOString().slice(0, 10);
-			const { getDiary, saveDiary } = useDiaryStore.getState();
-
-			// 오늘(자정 직전) 일기가 없으면 생성
-			if (!getDiary(todayStr)?.diary) {
-				try {
-					const diaryContext = {
-						weather: useDataStore.getState().weather,
-						calEvents: useDataStore.getState().calEvents,
-						todos: useTodoStore.getState().todos,
-					};
-					const diaryText = await generateDiary(todayStr, diaryContext);
-					if (diaryText) {
-						await saveDiary(todayStr, diaryText);
-						console.log("[App] 자정 일기 자동 생성 완료:", todayStr);
-					}
-				} catch (e) {
-					console.warn("Midnight diary generation failed:", e?.message);
-				}
-			}
-		}, msUntilMidnight);
-
-		return () => clearTimeout(timeoutId);
-	}, [isLoggedIn]);
-
-	// Supabase auth listener (also handles redirect after OAuth login)
+	// Supabase auth listener
 	useEffect(() => {
 		if (!supabase) return;
 		const { data: { subscription } } = supabase.auth.onAuthStateChange(
@@ -167,12 +90,6 @@ const App = () => {
 				console.warn("Hydrate failed:", e?.message);
 			}
 			fetchAll();
-
-			// 전날 일기 미생성 확인 및 자동 생성 (실시간 업데이트는 추후 예정)
-			checkAndGenerateMissingDiary();
-
-			// AI Todo 자동 생성 (앱 로드 시 1회 실행)
-			// TODO: 추후 실시간 업데이트 예정 - 캘린더 일정 변경 시 자동 재생성
 			generateAiTodoOnLoad();
 		};
 		init();
@@ -180,14 +97,10 @@ const App = () => {
 
 	/**
 	 * AI Todo 자동 생성 — 앱 로드 시 1회 실행
-	 * 캘린더 일정 기반으로 AI가 추천하는 Todo를 생성합니다.
-	 * TODO: 추후 실시간 업데이트 예정 - 일정 변경 감지 시 재생성
 	 */
 	const generateAiTodoOnLoad = async () => {
 		const events = useDataStore.getState().calEvents || [];
 		const existingTodos = useTodoStore.getState().todos || [];
-
-		// 일정이 없으면 스킵
 		if (events.length === 0) return;
 
 		try {
@@ -201,70 +114,53 @@ const App = () => {
 		}
 	};
 
-	// Save layout changes to localStorage
-	useEffect(() => {
-		save("mb_widget_layout", layout);
-	}, [layout]);
-
-	// Sync smart keywords into layout (col2에 추가)
-	useEffect(() => {
-		if (!smartKeywords?.length) return;
-		setLayout((prev) => {
-			const allWidgets = [...prev.col1, ...prev.col2, ...prev.col3];
-			const newKeys = smartKeywords
-				.map((k) => `smart_${k}`)
-				.filter((id) => !allWidgets.includes(id));
-			if (newKeys.length === 0) return prev;
-			return { ...prev, col2: [...prev.col2, ...newKeys] };
-		});
-	}, [smartKeywords]);
-
 	/**
-	 * @hello-pangea/dnd 드래그 종료 핸들러
-	 * 모든 드롭 존(col1, col2, col3) 간 자유 이동 지원
+	 * Handle DnD reorder in Middle Column (Standard Widgets only)
 	 */
-	const handleDragEnd = useCallback((result) => {
+	const handleMiddleDragEnd = useCallback((result) => {
 		const { source, destination } = result;
-
-		// 드롭 위치가 없으면 무시
 		if (!destination) return;
+		if (source.index === destination.index) return;
 
-		// 같은 위치에 드롭하면 무시
-		if (
-			source.droppableId === destination.droppableId &&
-			source.index === destination.index
-		) {
-			return;
-		}
-
-		setLayout((prev) => {
-			const next = {
-				col1: [...prev.col1],
-				col2: [...prev.col2],
-				col3: [...prev.col3],
-			};
-
-			const srcCol = source.droppableId;
-			const dstCol = destination.droppableId;
-
-			// 소스 열에서 위젯 제거
-			const [removed] = next[srcCol].splice(source.index, 1);
-
-			// 타겟 열에 위젯 삽입
-			next[dstCol].splice(destination.index, 0, removed);
-
+		setMiddleWidgetOrder((prev) => {
+			const next = [...prev];
+			const [removed] = next.splice(source.index, 1);
+			next.splice(destination.index, 0, removed);
+			
+			// Save to settings store
+			useSettingsStore.getState().setPriorityOrder?.(next);
 			return next;
 		});
 	}, []);
 
-	/* 위젯 렌더링 (Draggable) */
-	const renderWidget = (widgetId, index) => {
-		let Component = WIDGET_COMPONENTS[widgetId];
+	/**
+	 * Render Standard Widget by ID (REQ-WS-002)
+	 */
+	const renderStandardWidget = useCallback((widgetId, index) => {
+		let Component = STANDARD_WIDGET_COMPONENTS[widgetId];
 
-		// Handle smart widgets (smart_keyword format)
+		// Handle smart widgets
 		if (!Component && widgetId.startsWith("smart_")) {
 			const keyword = widgetId.slice(6);
 			Component = () => <SmartWidget keyword={keyword} />;
+		}
+
+		// Handle base 'smart' widget
+		if (widgetId === "smart" && smartKeywords?.length > 0) {
+			return smartKeywords.map((kw, idx) => (
+				<Draggable key={`smart_${kw}`} draggableId={`smart_${kw}`} index={index + idx}>
+					{(provided, snapshot) => (
+						<div
+							ref={provided.innerRef}
+							{...provided.draggableProps}
+							{...provided.dragHandleProps}
+							className={snapshot.isDragging ? "ring-2 ring-blue-500 rounded-2xl shadow-2xl opacity-90" : ""}
+						>
+							<SmartWidget keyword={kw} />
+						</div>
+					)}
+				</Draggable>
+			));
 		}
 
 		if (!Component) return null;
@@ -276,16 +172,10 @@ const App = () => {
 						ref={provided.innerRef}
 						{...provided.draggableProps}
 						{...provided.dragHandleProps}
-						className={
-							snapshot.isDragging
-								? "ring-2 ring-blue-500 rounded-2xl shadow-2xl opacity-90"
-								: ""
-						}
+						className={snapshot.isDragging ? "ring-2 ring-blue-500 rounded-2xl shadow-2xl opacity-90" : ""}
 						style={{
 							...provided.draggableProps.style,
-							transition: snapshot.isDragging
-								? undefined
-								: "box-shadow 0.2s ease, opacity 0.2s ease",
+							transition: snapshot.isDragging ? undefined : "box-shadow 0.2s ease, opacity 0.2s ease",
 						}}
 					>
 						<Component />
@@ -293,31 +183,7 @@ const App = () => {
 				)}
 			</Draggable>
 		);
-	};
-
-	/* 드롭 가능한 열 렌더링 (Droppable) */
-	const renderColumn = (columnId, flexClass) => (
-		<Droppable droppableId={columnId}>
-			{(provided, snapshot) => (
-				<div
-					ref={provided.innerRef}
-					{...provided.droppableProps}
-					className={`${flexClass} min-w-0 flex flex-col gap-6 transition-colors duration-200 rounded-2xl ${
-						snapshot.isDraggingOver
-							? isDark
-								? "bg-blue-500/10"
-								: "bg-blue-100/50"
-							: ""
-					}`}
-				>
-					{layout[columnId].map((widgetId, index) =>
-						renderWidget(widgetId, index)
-					)}
-					{provided.placeholder}
-				</div>
-			)}
-		</Droppable>
-	);
+	}, [smartKeywords]);
 
 	if (!isLoggedIn) return <LoginScreen />;
 
@@ -325,34 +191,68 @@ const App = () => {
 		<div
 			className={`min-h-screen w-full font-sans overflow-x-hidden relative transition-colors duration-300 ${
 				isDark
-					? "bg-[#1a1a1a] text-white"
-					: "bg-gradient-to-br from-slate-50 via-blue-50 to-white text-slate-800"
+					? "bg-morning-dark-page text-morning-dark-text"
+					: "bg-morning-light-page text-morning-light-text"
 			}`}
 		>
 			<TopNav />
 
-			{/* v5: 4열 레이아웃 + @hello-pangea/dnd — col1(1.5) + col2(1) + col3(1) + 캘린더(3, 고정) */}
-			<DragDropContext onDragEnd={handleDragEnd}>
-				<div className="relative z-10 flex flex-col lg:flex-row gap-8 px-12 pb-6 mt-2 flex-1">
-					{/* 왼쪽 3열: 위젯 영역 (드래그 앤 드롭 가능) */}
-					{renderColumn("col1", "flex-[1.5]")}
-					{renderColumn("col2", "flex-1")}
-					{renderColumn("col3", "flex-1")}
+			{/* v7: 1:3:3 Dashboard Layout Architecture (REQ-WS-001) */}
+			<div className="relative z-10 flex flex-col lg:flex-row gap-6 px-6 lg:px-8 pb-6 mt-2" style={{ minHeight: "calc(100vh - 180px)" }}>
+				
+				{/* ═══ LEFT COLUMN (Ratio 1) - Fixed Widgets ═══ */}
+				<div className="w-full lg:w-[14%] lg:min-w-[200px] flex flex-col gap-6 flex-shrink-0">
+					{/* BriefingWidget - Always visible (REQ-WS-002) */}
+					<BriefingWidget />
+					{/* DiaryCard - Always visible (REQ-WS-002) */}
+					<DiaryCard />
+				</div>
 
-					{/* 오른쪽: 캘린더 고정 열 (드래그 불가, sticky) */}
-					<div className="flex-[3] min-w-0">
-						<div className="sticky top-[180px]">
-							<CalendarWidget />
-						</div>
+				{/* ═══ MIDDLE COLUMN (Ratio 3) - Standard Widgets, Independent Scroll ═══ */}
+				<DragDropContext onDragEnd={handleMiddleDragEnd}>
+					<Droppable droppableId="middleColumn" direction="vertical">
+						{(provided, snapshot) => (
+							<div
+								ref={provided.innerRef}
+								{...provided.droppableProps}
+								className={`w-full lg:w-[43%] overflow-y-auto rounded-2xl transition-colors duration-200 ${
+									snapshot.isDraggingOver
+										? isDark ? "bg-blue-500/10" : "bg-blue-100/30"
+										: ""
+								}`}
+								style={{ maxHeight: "calc(100vh - 200px)" }}
+							>
+								{/* 3 widgets per row grid (REQ-WS-001) */}
+								<div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 p-2">
+									{middleWidgetOrder.map((widgetId, index) => 
+										renderStandardWidget(widgetId, index)
+									)}
+									{provided.placeholder}
+								</div>
+							</div>
+						)}
+					</Droppable>
+				</DragDropContext>
+
+				{/* ═══ RIGHT COLUMN (Ratio 3) - Fixed Widgets ═══ */}
+				<div className="w-full lg:w-[43%] flex flex-col gap-6 flex-shrink-0">
+					{/* CalendarWidget - Top, fixed height ~60% (REQ-WS-001) */}
+					<div className="flex-[6]">
+						<CalendarWidget />
+					</div>
+					{/* TodoWidget - Bottom, flexible (REQ-WS-001) */}
+					<div className="flex-[4]">
+						<TodoWidget />
 					</div>
 				</div>
-			</DragDropContext>
+			</div>
 
-			{/* Restored components */}
+			{/* Modals & Fixed Components */}
 			<FixedButtons />
 			<OnboardingModal />
 			<SettingsModal />
 			<BriefSettingsModal />
+			<FirstLoginBriefingModal />
 		</div>
 	);
 };

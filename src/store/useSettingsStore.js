@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { load, save } from "../utils/storage";
 import { supabase } from "../lib/supabase";
+import { DEFAULT_PRIORITY_ORDER } from "../constants";
 
 /* Supabase DB에 설정 동기화 (백그라운드, 비차단) */
 const syncSettings = async (fields) => {
@@ -17,8 +18,10 @@ const syncSettings = async (fields) => {
 	}
 };
 
-export const useSettingsStore = create((set) => ({
-	theme: load("mb_theme", "light"),
+const todayStr = () => new Date().toISOString().slice(0, 10);
+
+export const useSettingsStore = create((set, get) => ({
+	theme: load("mb_theme", "dark"),
 	bgImage: load("mb_bg", null),
 	clockStyle: load("mb_clock", "digital"),
 	tempUnit: load("mb_temp_unit", "c"),
@@ -34,6 +37,14 @@ export const useSettingsStore = create((set) => ({
 	tone: load("mb_tone", "friendly"),
 	bLen: load("mb_blen", "medium"),
 	voiceOn: load("mb_voice", false),
+	
+	// Data Priority (REQ-US-006)
+	priorityOrder: load("mb_priority_order", DEFAULT_PRIORITY_ORDER),
+	
+	// First-Login Briefing Modal (REQ-WS-006)
+	showFirstLoginBriefing: load("mb_show_first_login_briefing", true),
+	lastBriefingShown: load("mb_last_briefing_shown", null),
+	showFirstLoginModal: false,
 
 	/* DB에서 불러온 설정으로 덮어쓰기 */
 	hydrateFromDB: async (data) => {
@@ -84,7 +95,28 @@ export const useSettingsStore = create((set) => ({
 			patch.bgImage = data.bg_image;
 			save("mb_bg", data.bg_image);
 		}
+		// Priority order (REQ-US-006)
+		if (Array.isArray(data.priority_order) && data.priority_order.length > 0) {
+			patch.priorityOrder = data.priority_order;
+			save("mb_priority_order", data.priority_order);
+		}
+		// First-Login Briefing toggle (REQ-WS-006)
+		if (data.show_first_login_briefing != null) {
+			patch.showFirstLoginBriefing = data.show_first_login_briefing;
+			save("mb_show_first_login_briefing", data.show_first_login_briefing);
+		}
+		if (data.last_briefing_shown) {
+			patch.lastBriefingShown = data.last_briefing_shown;
+			save("mb_last_briefing_shown", data.last_briefing_shown);
+		}
 		if (Object.keys(patch).length) set(patch);
+		
+		// Check if First-Login Modal should show (REQ-WS-006)
+		const today = todayStr();
+		const { showFirstLoginBriefing, lastBriefingShown } = get();
+		if (showFirstLoginBriefing && lastBriefingShown !== today) {
+			set({ showFirstLoginModal: true });
+		}
 	},
 
 	setTheme: (t) => {
@@ -134,5 +166,35 @@ export const useSettingsStore = create((set) => ({
 		set({ stockSymbols: symbols });
 		save("mb_stock_symbols", symbols);
 		syncSettings({ stock_symbols: symbols });
+	},
+
+	// Data Priority (REQ-US-006)
+	setPriorityOrder: (order) => {
+		set({ priorityOrder: order });
+		save("mb_priority_order", order);
+		syncSettings({ priority_order: order });
+	},
+
+	// First-Login Briefing Modal (REQ-WS-006)
+	setShowFirstLoginBriefing: (v) => {
+		set({ showFirstLoginBriefing: v });
+		save("mb_show_first_login_briefing", v);
+		syncSettings({ show_first_login_briefing: v });
+	},
+	setShowFirstLoginModal: (v) => set({ showFirstLoginModal: v }),
+	dismissFirstLoginModal: () => {
+		const today = todayStr();
+		set({ showFirstLoginModal: false, lastBriefingShown: today });
+		save("mb_last_briefing_shown", today);
+		syncSettings({ last_briefing_shown: today });
+	},
+
+	// Check and trigger First-Login Modal (called on app init)
+	checkFirstLoginModal: () => {
+		const { showFirstLoginBriefing, lastBriefingShown } = get();
+		const today = todayStr();
+		if (showFirstLoginBriefing && lastBriefingShown !== today) {
+			set({ showFirstLoginModal: true });
+		}
 	},
 }));

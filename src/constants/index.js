@@ -9,6 +9,28 @@ export const CATEGORIES = [
 	{ id: "sports", label: "스포츠", emoji: "⚽" },
 ];
 
+// Widget Classification (REQ-WS-002)
+// Fixed Widgets: Non-draggable, positioned in Left/Right columns
+// Standard Widgets: Draggable, Middle Column only
+export const FIXED_WIDGETS = [
+	{ id: "briefing", label: "AI 브리핑", zone: "left" },
+	{ id: "diary", label: "오늘의 질문", zone: "left" },
+	{ id: "calendar", label: "캘린더", zone: "right" },
+	{ id: "todo", label: "할 일", zone: "right" },
+];
+
+export const STANDARD_WIDGETS = [
+	{ id: "weather", label: "날씨", emoji: "🌤️" },
+	{ id: "stocks", label: "주식/환율", emoji: "📈" },
+	{ id: "trends", label: "실시간 트렌드", emoji: "🔥" },
+	{ id: "health", label: "건강", emoji: "💪" },
+	{ id: "news", label: "뉴스", emoji: "📰" },
+	{ id: "smart", label: "스마트 위젯", emoji: "✨" },
+];
+
+// Default priority order for Standard Widgets (REQ-US-006)
+export const DEFAULT_PRIORITY_ORDER = ["weather", "stocks", "trends", "health", "news", "smart"];
+
 export const WIDGET_LIST = [
 	{ id: "health", label: "건강 (Google Fit)", category: "core" },
 	{ id: "calendar", label: "캘린더 (Google)", category: "core" },

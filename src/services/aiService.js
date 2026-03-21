@@ -348,12 +348,17 @@ export function getTimeGreeting() {
  * @param {{ tone: string, length: string, context: object }} params
  * @returns {Promise<{ summary: string, detail: string } | null>}
  */
-export async function generateDetailedBriefing({ tone, length, context }) {
+export async function generateDetailedBriefing({ tone, length, context, priorityOrder }) {
 	const timeProfile = getTimeProfile();
 	const topSignals = scoreSignals({ context: context ?? {}, timeProfile });
 	
 	// calEvents를 가독성 높은 문자열로 변환
 	const formattedCalEvents = formatCalEventsForAI(context?.calEvents);
+	
+	// Build priority guidance for AI (REQ-US-006)
+	const priorityGuidance = priorityOrder?.length > 0 
+		? `사용자가 다음 순서로 정보 우선순위를 설정했습니다: ${priorityOrder.join(" > ")}. 이 순서대로 정보를 강조하세요.`
+		: "";
 	
 	const contextWithPriority = {
 		...(context ?? {}),
@@ -361,6 +366,7 @@ export async function generateDetailedBriefing({ tone, length, context }) {
 		topSignals,
 		topSignalIds: topSignals.map((s) => s.id),
 		formattedCalEvents,
+		priorityOrder: priorityOrder || [],
 	};
 
 	const prompt = [
@@ -369,6 +375,7 @@ export async function generateDetailedBriefing({ tone, length, context }) {
 		`길이: ${length}`,
 		`현재 모드: ${timeProfile.label} (${timeProfile.mode})`,
 		`모드 가이드: ${timeProfile.desc}`,
+		priorityGuidance ? `\n=== 우선순위 지침 ===\n${priorityGuidance}` : "",
 		"",
 		"=== 오늘의 일정 ===",
 		formattedCalEvents,
@@ -587,51 +594,69 @@ export async function generateDiary({
 }) {
 	let prompt;
 
+	// Factual-Only System Prompt (REQ-AJ-006)
+	const FACTUAL_SYSTEM_PROMPT = [
+		"당신은 사용자의 하루를 요약하는 객관적 일기 작성기입니다.",
+		"",
+		"=== 반드시 지켜야 할 규칙 ===",
+		"1. 사실 기반 서술만 사용하세요 (예: '날씨: 23°C, 흐림', '회의 3건 완료', 'KOSPI +1.2%')",
+		"2. 감정적 언어 금지: '기분 좋은', '놀라운', '실망스러운', '다행히', '아쉽게도' 등",
+		"3. 비교/추측 금지: '평소와 달리', '아마도', '~일 것이다' 등",
+		"4. 미사여구 금지: 인사말, 마무리 덕담, 응원 문구 등",
+		"",
+		"=== 올바른 예시 ===",
+		"✓ '오전 9시 팀 스탠드업 미팅 참석. 날씨 18°C 맑음. KOSPI 2,450pt(+0.8%).'",
+		"✓ '프로젝트 제안서 작성 완료. 오후 3시 클라이언트 미팅.'",
+		"",
+		"=== 잘못된 예시 ===",
+		"✗ '오늘은 정말 알찬 하루였습니다.'",
+		"✗ '날씨가 좋아서 기분이 상쾌했습니다.'",
+		"✗ '내일도 좋은 하루 되세요!'",
+	].join("\n");
+
 	if (wasActiveDay) {
 		// 시나리오 A: 풍부한 데이터 기반 일기
 		prompt = [
-			`${date}의 하루를 요약하는 일기를 작성해 주세요.`,
+			`${date}의 하루를 사실 기반으로 요약하세요.`,
 			"",
-			"=== 사용자 활동 데이터 ===",
-			briefingText ? `AI 브리핑:\n${briefingText}` : "",
+			"=== [Macro Events] 거시적 사건 ===",
+			weather ? `날씨: ${JSON.stringify(weather)}` : "",
+			stocks.length > 0 ? `증시: ${JSON.stringify(stocks.slice(0, 4))}` : "",
+			trends.length > 0 ? `뉴스 트렌드: ${trends.slice(0, 5).join(", ")}` : "",
+			"",
+			"=== [Personal Records] 개인 활동 ===",
 			completedTodos.length > 0
 				? `완료한 할 일:\n${completedTodos.map((t) => `- ${t.text || t}`).join("\n")}`
-				: "",
-			diaryAnswers.length > 0
-				? `사용자 답변:\n${diaryAnswers.join("\n")}`
-				: "",
-			"",
-			"=== 당일 사실 데이터 ===",
-			weather ? `날씨: ${JSON.stringify(weather)}` : "",
-			trends.length > 0 ? `트렌드: ${trends.slice(0, 5).join(", ")}` : "",
-			stocks.length > 0 ? `증시: ${JSON.stringify(stocks.slice(0, 4))}` : "",
+				: "완료한 할 일: 없음",
 			calEvents.length > 0
 				? `일정:\n${calEvents.slice(0, 5).map((e) => `- ${e.title || e.summary}`).join("\n")}`
+				: "일정: 없음",
+			diaryAnswers.length > 0
+				? `Daily Question 답변:\n${diaryAnswers.join("\n")}`
 				: "",
 			"",
-			"규칙:",
-			"- 3~5문장으로 따뜻하고 회고적인 톤으로 작성하세요.",
-			"- 한국어로 작성하세요.",
-			"- 거시적 사건과 개인 활동을 자연스럽게 엮어 주세요.",
+			"=== 출력 형식 ===",
+			"[Macro Events] 섹션과 [Personal Records] 섹션으로 구분하여 작성하세요.",
+			"각 섹션은 2-3문장으로 사실만 간결하게 서술하세요.",
 		]
 			.filter(Boolean)
 			.join("\n");
 	} else {
 		// 시나리오 B: 사실 기반 간결 일기
 		prompt = [
-			`${date}에 있었던 사실을 간결히 기록해 주세요.`,
+			`${date}에 있었던 사실을 기록하세요.`,
 			"(사용자가 이 날 앱에 접속하지 않아 개인 활동 데이터가 없습니다.)",
 			"",
-			weather ? `날씨: ${JSON.stringify(weather)}` : "",
-			trends.length > 0 ? `트렌드: ${trends.slice(0, 5).join(", ")}` : "",
+			"=== [Macro Events] ===",
+			weather ? `날씨: ${JSON.stringify(weather)}` : "날씨 정보 없음",
 			stocks.length > 0 ? `증시: ${JSON.stringify(stocks.slice(0, 4))}` : "",
+			trends.length > 0 ? `뉴스 트렌드: ${trends.slice(0, 5).join(", ")}` : "",
 			calEvents.length > 0
-				? `일정:\n${calEvents.slice(0, 5).map((e) => `- ${e.title || e.summary}`).join("\n")}`
+				? `예정된 일정:\n${calEvents.slice(0, 5).map((e) => `- ${e.title || e.summary}`).join("\n")}`
 				: "",
 			"",
-			"규칙:",
-			"- 2~3문장으로 사실만 간결하게 기록하세요.",
-			"- 한국어로 작성하세요.",
+			"=== 출력 형식 ===",
+			"2-3문장으로 Macro Events만 사실 기반으로 기록하세요.",
 		]
 			.filter(Boolean)
 			.join("\n");
@@ -639,16 +664,20 @@ export async function generateDiary({
 
 	const data = await invokeFunction("groq", {
 		prompt,
-		system: "사용자의 하루를 요약하는 일기를 작성하는 AI입니다. 따뜻하고 자연스러운 한국어로 작성하세요.",
+		system: FACTUAL_SYSTEM_PROMPT,
 	});
 
 	if (data?.text) {
 		return String(data.text).trim();
 	}
 
-	// 로컬 fallback
-	return wasActiveDay
-		? `${date}, 바쁜 하루였습니다. 캘린더에 ${calEvents.length}개의 일정이 있었고, 할 일을 마무리했습니다.`
-		: `${date}, 앱에 접속하지 않은 날이었습니다.${calEvents.length > 0 ? ` 캘린더에 ${calEvents.length}개의 일정이 있었습니다.` : ""}`;
+	// 로컬 fallback (also factual)
+	const fallbackParts = [`[${date}]`];
+	if (weather?.temp) fallbackParts.push(`날씨: ${weather.temp}°C`);
+	if (calEvents.length > 0) fallbackParts.push(`일정: ${calEvents.length}건`);
+	if (completedTodos.length > 0) fallbackParts.push(`완료: ${completedTodos.length}건`);
+	if (!wasActiveDay) fallbackParts.push("앱 미접속");
+	
+	return fallbackParts.join(". ") + ".";
 }
 

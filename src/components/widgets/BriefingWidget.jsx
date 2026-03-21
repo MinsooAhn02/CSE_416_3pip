@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Sparkles, RefreshCw, X } from "lucide-react";
+import { Sparkles, RefreshCw, X, Settings } from "lucide-react";
 import { useTheme } from "../../hooks/useTheme";
 import { useSettingsStore } from "../../store/useSettingsStore";
 import { useDataStore } from "../../store/useDataStore";
@@ -45,10 +45,12 @@ const BriefingSkeleton = () => (
 );
 
 const BriefingWidget = () => {
-	const { isDark, cardCls, muted } = useTheme();
+	const { isDark, cardCls, muted, hoverCls } = useTheme();
 	const tone = useSettingsStore((s) => s.tone);
-	const length = useSettingsStore((s) => s.briefingLength) || "medium";
+	const bLen = useSettingsStore((s) => s.bLen) || "medium";
+	const setBLen = useSettingsStore((s) => s.setBLen);
 	const activeWidgetIds = useSettingsStore((s) => s.activeWidgetIds) || [];
+	const priorityOrder = useSettingsStore((s) => s.priorityOrder) || [];
 
 	// 데이터 스토어에서 컨텍스트 수집
 	const weather = useDataStore((s) => s.weather);
@@ -71,6 +73,14 @@ const BriefingWidget = () => {
 	const [isLoading, setIsLoading] = useState(false);
 	const [isExpanded, setIsExpanded] = useState(false);
 	const [lastGenerated, setLastGenerated] = useState(null);
+	const [showLengthSettings, setShowLengthSettings] = useState(false);
+
+	// Length options (REQ-WS-006)
+	const lengthOptions = [
+		{ value: "short", label: "간략 (1줄)", lines: 1 },
+		{ value: "medium", label: "기본 (3줄)", lines: 3 },
+		{ value: "long", label: "상세 (5줄)", lines: 5 },
+	];
 
 	// 스크롤 잠금 및 Layout Shift 방지
 	useEffect(() => {
@@ -99,7 +109,12 @@ const BriefingWidget = () => {
 				activeWidgetIds,
 				yesterdayMemo,
 			};
-			const result = await generateDetailedBriefing({ context, tone, length });
+			const result = await generateDetailedBriefing({ 
+				context, 
+				tone, 
+				length: bLen,
+				priorityOrder,  // REQ-US-006: Pass priority order to AI
+			});
 			if (result) {
 				setDetailedBriefing(result);
 				setLastGenerated(new Date());
@@ -116,7 +131,7 @@ const BriefingWidget = () => {
 		if (!detailedBriefing && !isLoading) {
 			generateNewBriefing();
 		}
-	}, [tone]);
+	}, [tone, bLen]);
 
 	// 폴백: AI 생성 실패 시 mock 데이터 사용
 	const displayBriefing = useMemo(() => {
@@ -162,6 +177,20 @@ const BriefingWidget = () => {
 		setIsExpanded(false);
 	};
 
+	// Gear icon click handler
+	const handleGearClick = (e) => {
+		e.stopPropagation();
+		setShowLengthSettings(!showLengthSettings);
+	};
+
+	// Length change handler
+	const handleLengthChange = (newLength) => {
+		setBLen(newLength);
+		setShowLengthSettings(false);
+		// Regenerate briefing with new length
+		setTimeout(generateNewBriefing, 100);
+	};
+
 	return (
 		<>
 			{/* 위젯 카드 - 클릭 시 상세 창 열림 */}
@@ -174,16 +203,64 @@ const BriefingWidget = () => {
 						<Sparkles size={18} className="text-blue-500" />
 						<h2 className="font-bold text-sm">AI 브리핑</h2>
 					</div>
-					<button
-						onClick={handleRefresh}
-						disabled={isLoading}
-						className={`p-1.5 rounded-full transition-colors ${
-							isDark ? "hover:bg-[#353535]" : "hover:bg-gray-100"
-						} ${isLoading ? "opacity-50" : ""}`}
-						title="브리핑 새로고침"
-					>
-						<RefreshCw size={14} className={isLoading ? "animate-spin" : ""} />
-					</button>
+					<div className="flex items-center gap-1">
+						{/* Gear Icon for Length Settings (REQ-WS-006) */}
+						<div className="relative">
+							<button
+								onClick={handleGearClick}
+								className={`p-1.5 rounded-full transition-colors ${
+									isDark ? "hover:bg-morning-dark-hover" : "hover:bg-morning-light-hover/30"
+								}`}
+								title="브리핑 길이 설정"
+							>
+								<Settings size={14} />
+							</button>
+							
+							{/* Length Settings Dropdown */}
+							<AnimatePresence>
+								{showLengthSettings && (
+									<motion.div
+										initial={{ opacity: 0, y: -10 }}
+										animate={{ opacity: 1, y: 0 }}
+										exit={{ opacity: 0, y: -10 }}
+										className={`absolute right-0 top-8 z-50 rounded-lg border shadow-lg min-w-[140px] ${
+											isDark
+												? "bg-morning-dark-card border-morning-dark-hover"
+												: "bg-white border-morning-light-hover/30"
+										}`}
+										onClick={(e) => e.stopPropagation()}
+									>
+										{lengthOptions.map((opt) => (
+											<button
+												key={opt.value}
+												onClick={() => handleLengthChange(opt.value)}
+												className={`w-full px-3 py-2 text-left text-xs transition-colors first:rounded-t-lg last:rounded-b-lg ${
+													bLen === opt.value
+														? "bg-blue-500 text-white"
+														: isDark
+															? "hover:bg-morning-dark-hover"
+															: "hover:bg-morning-light-hover/20"
+												}`}
+											>
+												{opt.label}
+											</button>
+										))}
+									</motion.div>
+								)}
+							</AnimatePresence>
+						</div>
+						
+						<button
+							onClick={handleRefresh}
+							disabled={isLoading}
+							className={`p-1.5 rounded-full transition-colors ${
+								isDark ? "hover:bg-morning-dark-hover" : "hover:bg-morning-light-hover/30"
+							} ${isLoading ? "opacity-50" : ""}`}
+							title="브리핑 새로고침"
+						>
+							<RefreshCw size={14} className={isLoading ? "animate-spin" : ""} />
+						</button>
+					</div>
 				</div>
 
 				<p className={`text-xs uppercase tracking-widest mb-3 ${muted}`}>
@@ -221,6 +298,14 @@ const BriefingWidget = () => {
 				</p>
 			</div>
 
+			{/* Close length settings when clicking outside */}
+			{showLengthSettings && (
+				<div 
+					className="fixed inset-0 z-40" 
+					onClick={() => setShowLengthSettings(false)}
+				/>
+			)}
+
 			{/* 상세 브리핑 모달 */}
 			<AnimatePresence>
 				{isExpanded && (
@@ -239,8 +324,8 @@ const BriefingWidget = () => {
 						<motion.div
 							className={`fixed top-1/2 left-1/2 z-[61] w-full max-w-2xl max-h-[80vh] rounded-2xl border shadow-2xl flex flex-col overflow-hidden ${
 								isDark
-									? "bg-[#1e1e1e] border-[#3a3a3a] text-white"
-									: "bg-white border-gray-200 text-slate-800"
+									? "bg-morning-dark-card border-morning-dark-hover text-morning-dark-text"
+									: "bg-morning-light-card border-morning-light-hover/30 text-morning-light-text"
 							}`}
 							style={{ x: "-50%", y: "-50%" }}
 							initial={{ opacity: 0, scale: 0.5 }}
@@ -250,7 +335,9 @@ const BriefingWidget = () => {
 							onClick={(e) => e.stopPropagation()}
 						>
 							{/* 헤더 */}
-							<div className="flex items-center justify-between p-5 border-b border-inherit">
+							<div className={`flex items-center justify-between p-5 border-b ${
+								isDark ? "border-morning-dark-hover" : "border-morning-light-hover/30"
+							}`}>
 								<div className="flex items-center gap-3">
 									<Sparkles size={22} className="text-blue-500" />
 									<h3 className="font-bold text-base">상세 브리핑</h3>
@@ -260,7 +347,7 @@ const BriefingWidget = () => {
 										onClick={handleRefresh}
 										disabled={isLoading}
 										className={`p-2 rounded-full transition-colors ${
-											isDark ? "hover:bg-[#353535]" : "hover:bg-gray-100"
+											isDark ? "hover:bg-morning-dark-hover" : "hover:bg-morning-light-hover/30"
 										} ${isLoading ? "opacity-50" : ""}`}
 										title="브리핑 새로고침"
 									>
@@ -272,7 +359,7 @@ const BriefingWidget = () => {
 									<button
 										onClick={handleClose}
 										className={`p-2 rounded-full transition-colors ${
-											isDark ? "hover:bg-[#353535]" : "hover:bg-gray-100"
+											isDark ? "hover:bg-morning-dark-hover" : "hover:bg-morning-light-hover/30"
 										}`}
 									>
 										<X size={18} />
@@ -284,8 +371,8 @@ const BriefingWidget = () => {
 							<div
 								className={`px-5 py-4 border-b ${
 									isDark
-										? "border-[#3a3a3a] bg-[#252525]"
-										: "border-gray-100 bg-blue-50/30"
+										? "border-morning-dark-hover bg-morning-dark-cardSecondary"
+										: "border-morning-light-hover/30 bg-blue-50/30"
 								}`}
 							>
 								<p
@@ -315,9 +402,7 @@ const BriefingWidget = () => {
 												detailLines.map((line, idx) => (
 													<p
 														key={idx}
-														className={`text-sm leading-relaxed ${
-															isDark ? "text-gray-300" : "text-gray-700"
-														}`}
+														className={`text-sm leading-relaxed ${muted}`}
 													>
 														{line}
 													</p>
@@ -335,7 +420,7 @@ const BriefingWidget = () => {
 								{yesterdayMemo && (
 									<div
 										className={`mt-4 p-3 rounded-lg ${
-											isDark ? "bg-[#2a2a2a]" : "bg-gray-50"
+											isDark ? "bg-morning-dark-cardSecondary" : "bg-morning-light-hover/10"
 										}`}
 									>
 										<p className={`text-xs ${muted}`}>
