@@ -524,8 +524,8 @@ const SettingsModal = () => {
 									🔄 온보딩 다시하기
 								</button>
 								<button
-									onClick={() => {
-										logout();
+									onClick={async () => {
+										await logout();
 										setShowSettings(false);
 									}}
 									className="w-full p-3 rounded-xl text-sm text-left bg-red-500/10 text-red-400 hover:bg-red-500/20 flex items-center gap-2"
