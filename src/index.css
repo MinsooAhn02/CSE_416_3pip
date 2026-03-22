@@ -12,13 +12,45 @@ body {
 	font-family: "Noto Sans KR", sans-serif;
 }
 
-/* Hide scrollbar but keep scrolling */
+/* Hide scrollbar but keep scrolling (default) */
 ::-webkit-scrollbar {
 	display: none;
 }
 
 html {
 	scrollbar-width: none;
+}
+
+/* ═══ Widget Scroll Box - Always Visible Scrollbar (REQ-WS-001) ═══ */
+.widget-scroll-box::-webkit-scrollbar {
+	display: block;
+	width: 8px;
+}
+.widget-scroll-box::-webkit-scrollbar-track {
+	background: transparent;
+	border-radius: 4px;
+}
+.widget-scroll-box::-webkit-scrollbar-thumb {
+	background: #b1ada1;
+	border-radius: 4px;
+}
+.widget-scroll-box::-webkit-scrollbar-thumb:hover {
+	background: #9a9590;
+}
+.widget-scroll-box {
+	scrollbar-width: thin;
+	scrollbar-color: #b1ada1 transparent;
+}
+
+/* Dark mode scrollbar */
+.dark .widget-scroll-box::-webkit-scrollbar-thumb {
+	background: #38352f;
+}
+.dark .widget-scroll-box::-webkit-scrollbar-thumb:hover {
+	background: #4a473f;
+}
+.dark .widget-scroll-box {
+	scrollbar-color: #38352f transparent;
 }
 
 /* Diary card scroll area */
