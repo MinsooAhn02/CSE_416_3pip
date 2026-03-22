@@ -198,8 +198,8 @@ const App = () => {
 			<TopNav />
 
 			{/* v7: 1:3:3 Dashboard Layout Architecture (REQ-WS-001) */}
-			<div className="relative z-10 flex flex-col lg:flex-row gap-6 px-6 lg:px-8 pb-6 mt-2" style={{ minHeight: "calc(100vh - 180px)" }}>
-				
+			<div className="relative z-10 flex flex-col lg:flex-row gap-3 px-6 lg:px-8 pb-6 mt-2" style={{ minHeight: "calc(100vh - 180px)" }}>
+				<div className="hidden lg:flex lg:w-[5%] flex-shrink-0"></div>
 				{/* ═══ LEFT COLUMN (Ratio 1) - Fixed Widgets ═══ */}
 				<div className="w-full lg:w-[14%] lg:min-w-[200px] flex flex-col gap-6 flex-shrink-0">
 					{/* BriefingWidget - Always visible (REQ-WS-002) */}
@@ -245,6 +245,7 @@ const App = () => {
 						<TodoWidget />
 					</div>
 				</div>
+				<div className="hidden lg:flex lg:w-[5%] flex-shrink-0"></div>
 			</div>
 
 			{/* Modals & Fixed Components */}

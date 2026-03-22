@@ -561,9 +561,9 @@ const SettingsModal = () => {
 																ref={provided.innerRef}
 																{...provided.draggableProps}
 																{...provided.dragHandleProps}
-																className={`flex items-center gap-3 p-3 rounded-xl transition-all ${
+																className={`flex items-center gap-3 p-3 rounded-xl ${
 																	snapshot.isDragging
-																		? "shadow-lg scale-[1.02]"
+																		? "shadow-lg scale-[1.02] transition-all"
 																		: ""
 																} ${
 																	isDark
