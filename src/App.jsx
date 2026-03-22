@@ -54,6 +54,7 @@ const App = () => {
 	const fetchAll = useDataStore((s) => s.fetchAll);
 	const smartKeywords = useWidgetStore((s) => s.smartKeywords);
 	const priorityOrder = useSettingsStore((s) => s.priorityOrder) || DEFAULT_PRIORITY_ORDER;
+	const bgImage = useSettingsStore((s) => s.bgImage);
 
 	// Use the new midnight trigger hook (REQ-CS-005, REQ-AJ-001)
 	useMidnightTrigger(isLoggedIn);
@@ -194,6 +195,12 @@ const App = () => {
 					? "bg-morning-dark-page text-morning-dark-text"
 					: "bg-morning-light-page text-morning-light-text"
 			}`}
+			style={{
+				backgroundImage: bgImage ? `url(${bgImage})` : 'none',
+				backgroundSize: 'cover',
+				backgroundPosition: 'center',
+				backgroundAttachment: 'fixed'
+			}}
 		>
 			<TopNav />
 

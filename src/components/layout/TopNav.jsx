@@ -76,6 +76,7 @@ const TopNav = () => {
 	const { isDark, inputCls } = useTheme();
 	const setTheme = useSettingsStore((s) => s.setTheme);
 	const clockStyle = useSettingsStore((s) => s.clockStyle);
+	const is12Hour = useSettingsStore((s) => s.is12Hour);
 	const user = useAuthStore((s) => s.user);
 
 	const [currentTime, setCurrentTime] = useState(new Date());
@@ -86,11 +87,11 @@ const TopNav = () => {
 		return () => clearInterval(t);
 	}, []);
 
-	const timeStr = currentTime.toLocaleTimeString("ko-KR", {
-		hour: "2-digit",
-		minute: "2-digit",
-		hour12: false,
-	});
+	// 12시간 형식으로 "2:00 PM" 형태 포맷
+	const hours12 = currentTime.getHours() % 12 || 12;
+	const minutes = String(currentTime.getMinutes()).padStart(2, "0");
+	const ampm = currentTime.getHours() >= 12 ? "PM" : "AM";
+	const timeStr = `${hours12}:${minutes} ${ampm}`;
 
 	// 날짜 상세 포맷: "2026년 03월 18일 07시 17분 21초"
 	const detailedTimeStr = `${currentTime.getFullYear()}년 ${String(currentTime.getMonth() + 1).padStart(2, "0")}월 ${String(currentTime.getDate()).padStart(2, "0")}일 ${String(currentTime.getHours()).padStart(2, "0")}시 ${String(currentTime.getMinutes()).padStart(2, "0")}분 ${String(currentTime.getSeconds()).padStart(2, "0")}초`;

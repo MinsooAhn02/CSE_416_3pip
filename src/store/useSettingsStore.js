@@ -24,6 +24,7 @@ export const useSettingsStore = create((set, get) => ({
 	theme: load("mb_theme", "dark"),
 	bgImage: load("mb_bg", null),
 	clockStyle: load("mb_clock", "digital"),
+	is12Hour: load("mb_is_12hour", true),
 	tempUnit: load("mb_temp_unit", "c"),
 	stockSymbols: load("mb_stock_symbols", [
 		"KOSPI",
@@ -156,6 +157,11 @@ export const useSettingsStore = create((set, get) => ({
 		set({ clockStyle: s });
 		save("mb_clock", s);
 		syncSettings({ clock_style: s });
+	},
+	setIs12Hour: (v) => {
+		set({ is12Hour: v });
+		save("mb_is_12hour", v);
+		syncSettings({ is_12hour: v });
 	},
 	setTempUnit: (u) => {
 		set({ tempUnit: u });

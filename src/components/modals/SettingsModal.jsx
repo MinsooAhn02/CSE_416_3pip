@@ -365,8 +365,8 @@ const SettingsModal = () => {
 													clockStyle === s.id ? "text-blue-400" : muted
 												}
 											/>
-											<span className="text-sm font-medium">{s.label}</span>
-											<span className={`text-[10px] ${muted}`}>{s.desc}</span>
+										<span className="text-sm font-bold">{s.label}</span>
+										<span className={`text-[10px] font-bold ${muted}`}>{s.desc}</span>
 										</button>
 									))}
 								</div>
