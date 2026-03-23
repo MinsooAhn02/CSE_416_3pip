@@ -1,7 +1,7 @@
 ================================================================================
-  MorningBriefing.AI - Product Requirements Document (v2.1) 
+  MorningBriefing.AI - Product Requirements Document (v2.2) 
   Personalized Fact-Based Record & AI Briefing Service
-  Date: 2026-03-20
+  Date: 2026-03-23
 ================================================================================
 
 
@@ -15,7 +15,7 @@ and AI-powered insights.
 
 Core Value Proposition:
   - Automatizes the creation of daily journals by synthesizing:
-    • Completed tasks and calendar events (via Google Calendar sync)
+    • Calendar events and to-do items (via integrated CalendarWidget)
     • Personal reflections (via Daily Question prompts)
     • Real-time macro context (Weather, Stock Market, News Trends)
   
@@ -29,8 +29,8 @@ Key Differentiators:
   2. Factual-Only Journaling: All generated entries follow an objective, 
      minimalist tone—no sentiment analysis or emotional interpretation.
   
-  3. Selective Data Inclusion: Only user-confirmed items (checked tasks/calendar 
-     events + answered daily questions) are included in the final record.
+  3. Selective Data Inclusion: Only user-confirmed items (checked calendar 
+     events/todos + answered daily questions) are included in the final record.
   
   4. Macro+Personal Hierarchy: Journal entries clearly separate market/weather/news 
      (external context) from personal records (activities/reflections).
@@ -38,7 +38,7 @@ Key Differentiators:
 User Experience:
   - Upon opening a new tab, users see a personalized dashboard with:
     • Current macro data (weather, stocks, trending topics)
-    • Upcoming calendar events and to-do items
+    • Upcoming calendar events and integrated to-do list
     • Daily question prompt for reflection
   
   - At midnight, the system automates journal synthesis and presents a 
@@ -58,7 +58,7 @@ Target User:
 ================================================================================
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-2.1 IN-SCOPE (Current Release: v2.1)
+2.1 IN-SCOPE (Current Release: v2.2)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 [Data Integration]
@@ -68,10 +68,11 @@ Target User:
   ✓ Stock market & currency data (Twelve Data: KOSPI, NASDAQ, USD/KRW)
   ✓ News trends aggregation (Tavily Search with topic extraction)
 
-[Checklist & Activity Tracking]
-  ✓ TODO list management (general tasks + pinned daily routines)
+[Calendar & Activity Tracking]
+  ✓ CalendarWidget with integrated todo management
   ✓ Checkbox system: Only marked-as-done items included in journal
-  ✓ Calendar event sync to TODO list (user can check off completed events)
+  ✓ Calendar event sync with checkable completion status
+  ✓ AI Todo section embedded within CalendarWidget
 
 [Personal Records & Prompts]
   ✓ Daily Question widget (DiaryCard) with rotating prompts
@@ -82,14 +83,14 @@ Target User:
 [Automated Midnight Synthesis]
   ✓ Triggers automatically at 00:00 UTC (or user's timezone if configured)
   ✓ Collects:
-    - All checked items from TODO list (past 24h)
+    - All checked todos (from CalendarWidget's integrated section)
     - All completed calendar events (past 24h)
     - Daily Question response(s)
     - Macro data snapshot (weather, stocks, top news)
   ✓ AI generates structured, objective journal entry
   ✓ Entries formatted with clear sections:
     [Macro Events]: Weather summary, stock changes, news highlights
-    [Personal Records]: Completed tasks, calendar events, daily reflections
+    [Personal Records]: Completed todos, calendar events, daily reflections
   ✓ Preview modal shown to user for review/edit before persistence
 
 [AI-Powered Briefing & Synthesis]
@@ -102,23 +103,22 @@ Target User:
 
 [Widget System & Customization]
   ✓ Drag-and-drop layout management (@hello-pangea/dnd)
-    - 3-column grid layout + full-width calendar preview
+    - 1:3:3 ratio layout (Left:Middle:Right columns)
     - Widget repositioning without page reload
     - Layout state persisted to Supabase + localStorage
   ✓ Widget visibility toggle (Settings modal)
-  ✓ Support for 11+ pre-built widgets:
-    - BriefingWidget, CalendarWidget, DiaryCard
-    - WeatherWidget, StocksWidget, TrendsWidget
-    - HealthWidget, TodoWidget, NewsWidget
-    - SmartWidgetContent, QuickLinks
+  ✓ Support for 9 pre-built widgets:
+    - Fixed: BriefingWidget, CalendarWidget, DiaryCard
+    - Standard: WeatherWidget, StocksWidget, TrendsWidget
+    - Standard: HealthWidget, NewsWidget, SmartWidgetContent
 
 [User Settings & Customization]
   ✓ Theme toggle: Dark mode (gray-based) / Light mode
   ✓ Clock style options: Digital / Analog / Date Info (full date + time)
   ✓ Brief tone & length customization
-  ✓ Pinned TODO routines (auto-reset daily)
   ✓ Smart widget keyword management
   ✓ Widget visibility preferences
+  ✓ Data priority settings (widget ranking affects AI briefing order)
 
 [Data Persistence & Caching]
   ✓ Supabase database with RLS policies
@@ -129,17 +129,18 @@ Target User:
   ✓ Cache invalidation logic: Force refresh on user demand
   ✓ Fallback to mock data on API failures
 
-[Dashboard Layout Architecture - 1:3:3 Ratio]
-  ✓ Fixed Header Row:
+[Dashboard Layout Architecture - 1:3:3 Ratio Frame]
+  ✓ Fixed Header Row (TopNav):
     - Left: User Profile icon
     - Center: Digital Clock + Search Bar placeholder
     - Right: QuickLinks + Theme Toggle (Light/Dark mode)
   ✓ Body Content (3-column layout):
     - Left Column (Ratio 1, Fixed): BriefingWidget + DiaryCard (Daily Question)
-    - Middle Column (Ratio 3, Independent Scroll): Standard Widgets Grid (Weather, Stocks, 
-      Trends, Health, News, SmartWidgetContent) - 3 widgets per row
-    - Right Column (Ratio 3, Fixed): CalendarWidget (top) + TodoWidget (bottom)
-  ✓ Responsive scrolling: Middle column independently scrollable when widget count exceeds view
+    - Middle Column (Ratio 3, Scrollable): Widget Box with vertical scroll
+      • Standard Widgets: 1 widget per row (100% width, horizontal wide-card)
+      • Scrollbar always visible, theme-aware styling
+    - Right Column (Ratio 3, Fixed): CalendarWidget with integrated todo section
+  ✓ Responsive scrolling: Middle column independently scrollable
 
 [Other UX Features]
   ✓ Session management & logout
@@ -167,7 +168,7 @@ Target User:
     - Digest delivery deferred to future phase
   
   ✗ Mobile app (iOS/Android native)
-    - Extension-only service for v2.1
+    - Extension-only service for v2.2
   
   ✗ Voice/Audio input for DailyQuestion
     - Text-only responses in current release
@@ -181,6 +182,7 @@ Target User:
 2.3 DEFERRED / FUTURE-SCOPE (Phase 2+)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
+  ◐ Standalone TodoWidget (currently integrated into CalendarWidget)
   ◐ Google Fit integration (fitness/activity data)
   ◐ Emotional/sentiment analysis layer (opt-in toggle)
   ◐ Export capabilities (PDF, Markdown, CSV)
@@ -215,14 +217,14 @@ REQ-DI-001: Google OAuth Authentication
 REQ-DI-002: Google Calendar Event Retrieval
   Requirement:
     - Fetch today's and upcoming calendar events via Google Calendar API
-    - Events ingested as "scheduled items" (can be marked done in TODO list)
+    - Events ingested as "scheduled items" within CalendarWidget
     - Time zone-aware scheduling (user's local TZ)
     - Cache policy: 5-minute TTL with force-refresh on demand
 
   Acceptance Criteria:
-    - Calendar events appear in CalendarWidget + TodoWidget
+    - Calendar events appear in CalendarWidget's schedule section
     - Events sortable by start time
-    - Completed calendar events can be checked off (same UI as TODOs)
+    - Completed calendar events can be checked off
     - Failed API call falls back to mock data
 
 REQ-DI-003: Real-Time Weather Data Integration
@@ -299,82 +301,7 @@ REQ-DI-007: Edge Functions & API Orchestration
 
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-3.2 CHECKLIST SYSTEM & ACTIVITY TRACKING
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-REQ-CS-001: TODO List Management
-  Requirement:
-    - Maintain two TODO types:
-      1. General TODOs: User-created tasks, cleared daily (except pinned items)
-      2. Pinned Routines: Daily recurring tasks, auto-reset at midnight
-    - UI: Checkbox for marking complete, delete button, edit title on click
-    - State management: Zustand (useTodoStore)
-    - Persistence: Supabase todos table
-
-  Acceptance Criteria:
-    - New TODO created via TodoWidget input field
-    - Checkbox toggles completion state (visual diff: strikethrough)
-    - Pinned toggle available per TODO
-    - Completed TODOs persist until midnight reset (for journal synthesis)
-    - Pinned routine automatically recreates at 00:00
-
-REQ-CS-002: Calendar Event Sync as Actionable Items
-  Requirement:
-    - Google Calendar events ingested as schedulable items
-    - User can "check off" completed calendar events (same as TODO)
-    - Completion state: checkbox UI consistent with TODO list
-    - Events sorted by start time (chronological)
-
-  Acceptance Criteria:
-    - CalendarWidget + TodoWidget both show calendar events
-    - Calendar events have identical checkbox UI to TODOs
-    - Checked calendar events marked as "completed" in state
-    - Event completion persists until midnight journal generation
-
-REQ-CS-003: Selective Inclusion Logic (ONLY Checked Items)
-  Requirement:
-    - At midnight synthesis trigger:
-      • Query all TODOs where checked === true (past 24h window)
-      • Query all calendar events where completed === true (past 24h window)
-      • EXCLUDE unchecked items, canceled events, incomplete tasks
-    - Logic applies pre-AI generation (data collection phase)
-
-  Acceptance Criteria:
-    - TODO marked but not checked: NOT included in journal
-    - Calendar event attended but not checked off: NOT included in journal
-    - TODO checked at 23:30: Included in 00:00 synthesis
-    - Pinned routine checked: Included in journal (if done that day)
-
-REQ-CS-004: Daily Reset Logic at Midnight
-  Requirement:
-    - At 00:00 trigger:
-      • Flag all non-pinned TODOs for deletion in UI (or archive)
-      • Retain pinned routines + recreate them
-      • Retain calendar events (calendar is external source of truth)
-    - Reset applies after journal synthesis completes (no data loss)
-
-  Acceptance Criteria:
-    - Non-pinned TODO disappears from TodoWidget after midnight reset
-    - Pinned TODO appears again at 00:00 with checked === false
-    - Journal contains checked items from pre-midnight state
-    - Calendar events remain visible (not cleared)
-
-REQ-CS-005: Midnight Trigger Mechanism
-  Requirement:
-    - Client-side setInterval polling (check every 60 seconds if time === 00:00)
-    - Alternative: Service Worker or scheduled background task
-    - Timezone awareness (compare against user's local TZ, not UTC)
-    - Graceful handling if browser closed at midnight (trigger on next open)
-
-  Acceptance Criteria:
-    - Journal generated within 60 seconds of 00:00 (±1 min tolerance)
-    - Same trigger fires for both daily reset + journal synthesis
-    - If browser closed before trigger: Journal generated on next open
-    - Trigger does not fire multiple times per day (idempotency check)
-
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-3.3 PERSONAL RECORDS & DAILY QUESTION PROMPTS
+3.2 PERSONAL RECORDS & DAILY QUESTION PROMPTS
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 REQ-PR-001: Daily Question Widget (DiaryCard)
@@ -425,13 +352,13 @@ REQ-PR-003: Diary Modal & Historical Browsing
 
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-3.4 AUTOMATION & MIDNIGHT JOURNAL SYNTHESIS
+3.3 AUTOMATION & MIDNIGHT JOURNAL SYNTHESIS
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 REQ-AJ-001: Midnight Auto-Synthesis Orchestration
   Requirement:
     - Single automated trigger at 00:00 that:
-      1. Collects all checked TODOs (past 24h)
+      1. Collects all checked todos from CalendarWidget (past 24h)
       2. Collects all completed calendar events (past 24h)
       3. Retrieves today's daily question response + memo
       4. Fetches macro data snapshot (weather, stocks, trends)
@@ -545,74 +472,87 @@ REQ-AJ-006: Objective AI Tone Enforcement
 
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-3.5 WIDGET SYSTEM & CUSTOMIZATION
+3.4 WIDGET SYSTEM & CUSTOMIZATION
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-REQ-WS-001: Dashboard Layout Architecture (1:3:3 Ratio)
+REQ-WS-001: Dashboard Layout Architecture (1:3:3 Frame)
   Requirement:
-    - Implement 1:3:3 fixed-width layout with three distinct column zones:
-      1. **Left Column (Ratio 1 - Fixed Widgets)**:
-         • BriefingWidget: AI-generated 3-line brief with settings gear icon
-         • DiaryCard: Daily question prompt + response input
-         • Both widgets non-scrollable (always visible)
+    - Implement a strict 1:3:3 width-ratio layout using Flexbox with three column zones:
       
-      2. **Middle Column (Ratio 3 - Standard Widgets, Independent Scroll)**:
-         • Grid container for "Standard Widgets": WeatherWidget, StocksWidget, 
-           TrendsWidget, HealthWidget, NewsWidget, SmartWidgetContent
-         • Layout: 3 widgets per row (1-unit width each)
-         • **Feature**: Independently scrollable area when widgets exceed viewport height
-         • Background: Uses outer-space container for scroll containment
+      1. **Left Column (Ratio 1) - Pinned Sidebar**:
+         • BriefingWidget: AI-generated brief with expandable modal + settings gear
+         • DiaryCard: Daily Question prompt + user response input
+         • Behavior: `flex-shrink: 0`, no internal scroll, fixed height relative to viewport
+         • Min-width: 200px, Max-width: 280px (responsive constraint)
       
-      3. **Right Column (Ratio 3 - Fixed Widgets)**:
-         • CalendarWidget: Full-month calendar view (top, fixed height recommended: 60%)
-         • TodoWidget: Task list + calendar events with checkboxes (bottom, flexible)
-         • Both widgets non-scrollable (docked to right side)
+      2. **Middle Column (Ratio 3) - Widget Scroll Box**:
+         • Container: Dedicated scrollable area ("Widget Box") for Standard Widgets
+         • Widget Style: **1 widget per row** (100% width, horizontal wide-card format)
+         • Scrolling: `overflow-y: scroll` with **always-visible scrollbar**
+         • Scrollbar: Custom-styled, 8px width, theme-aware (light/dark)
+         • Height: Flex-based, fills remaining viewport height after TopNav header
+         • DnD: Vertical single-column drag-and-drop via @hello-pangea/dnd
+         • Visual Feedback: Light blue background tint on drag-over
+      
+      3. **Right Column (Ratio 3) - Pinned Sidebar**:
+         • CalendarWidget: Full-height calendar view with integrated todo section
+         • Behavior: `flex-shrink: 0`, no internal scroll, fixed height relative to viewport
+         • Min-width: 300px, Max-width: 500px (responsive constraint)
     
-    - Header: Fixed/sticky positioning (not part of scroll)
-    - Flex-based sizing (not absolutely fixed pixels, allows responsive scaling)
-    - DND enabled only for Middle Column widgets (others are fixed)
-    - State persistence: Reorder preferences saved to Supabase + localStorage
+    - TopNav Header: Sticky positioning, contains clock, search, QuickLinks, theme toggle
+    - Responsive: Maintains 1:3:3 ratio on desktop (1200px+); columns do not collapse
+    - State Persistence: Widget order saved to `priorityOrder` in Supabase + localStorage
+    - DnD Order = LLM Briefing Priority: Widget order in Middle Column defines AI briefing data priority
 
   Acceptance Criteria:
-    - Left/Right columns remain visible while Middle column scrolls
-    - Header stays fixed while body scrolls
-    - Middle column scroll does not affect Left/Right columns or Header
-    - Standard widgets draggable within Middle column only
-    - Fixed widgets cannot be repositioned
-    - Middle column scroll bar works smoothly (no jank)
-    - On page refresh, column positions restored from DB
+    - Left & Right columns remain pinned (no scroll) while Middle Column scrolls independently
+    - Middle Column scrollbar is always visible (not auto-hide)
+    - TopNav header stays fixed above the three-column layout
+    - Standard widgets stack vertically (1 per row, full-width horizontal cards)
+    - Drag-and-drop reorders widgets within Middle Column only
+    - Widget order persists across page refresh and login sessions
+    - Reordering widgets updates LLM briefing priority in real-time
+    - 1:3:3 ratio preserved at all supported viewport widths (≥1200px)
 
 REQ-WS-002: Widget Classification (Fixed vs. Standard)
   Requirement:
-    - Formally categorize widgets into two types:
+    - Categorize all widgets into two distinct types with different behaviors:
       
-      **Fixed Widgets** (Non-draggable, positioned layout):
-        1. BriefingWidget → Left Column (always visible, must-have)
-        2. DiaryCard → Left Column (always visible, must-have)
-        3. CalendarWidget → Right Column (always visible, must-have)
-        4. TodoWidget → Right Column (always visible, below calendar)
-        5. QuickLinks → Header (always visible, right side)
+      **Fixed Widgets** (Pinned, Non-draggable, Always Visible):
+        | Widget          | Location       | Position  | Notes                          |
+        |-----------------|----------------|-----------|--------------------------------|
+        | BriefingWidget  | Left Column    | Top       | AI briefing + modal trigger    |
+        | DiaryCard       | Left Column    | Bottom    | Daily Question input           |
+        | CalendarWidget  | Right Column   | Full      | Calendar + integrated todo     |
       
-      **Standard Widgets** (Draggable, Middle Column only):
-        1. WeatherWidget
-        2. StocksWidget
-        3. TrendsWidget
-        4. HealthWidget
-        5. NewsWidget
-        6. SmartWidgetContent
+      **Standard Widgets** (Draggable, Scrollable, Visibility Toggle):
+        | Widget             | Default Order | Description                      |
+        |--------------------|---------------|----------------------------------|
+        | WeatherWidget      | 1             | Current weather + forecast       |
+        | StocksWidget       | 2             | KOSPI, NASDAQ, USD/KRW indices   |
+        | TrendsWidget       | 3             | Trending topics from Tavily      |
+        | HealthWidget       | 4             | Health/fitness placeholder       |
+        | NewsWidget         | 5             | Top news headlines               |
+        | SmartWidgetContent | 6+            | AI-generated keyword content     |
     
-    - Fixed widgets cannot be hidden or reordered
-    - Standard widgets can be:
-      • Shown/hidden via SettingsModal
-      • Reordered via Drag-and-Drop within Middle Column
-      • Subject to Data Priority precedence (see REQ-US-006)
+    - Fixed Widget Rules:
+      • Cannot be hidden via Settings
+      • Cannot be dragged or reordered
+      • Always occupy their designated column/position
+    
+    - Standard Widget Rules:
+      • Can be shown/hidden via SettingsModal toggle
+      • Can be reordered via DnD in Middle Column (Widget Box)
+      • Order determines LLM briefing priority (1st widget = highest priority data)
+      • Hidden widgets excluded from scroll container height calculation
 
   Acceptance Criteria:
-    - Fixed widgets always render and occupy reserved space
-    - Standard widgets respect visibility toggles
-    - Attempt to drag Fixed widget → no DND interaction
-    - Standard widget hide → middle column updates, scroll adjusted
-    - Documentation clearly distinguishes the two categories
+    - Fixed widgets always render in their designated positions
+    - Standard widgets respect visibility toggles (hidden → removed from Widget Box)
+    - DnD only activates for Standard Widgets (Fixed widgets have no drag handle)
+    - Widget order persists to `priorityOrder` array in user_settings
+    - SmartWidgetContent supports multiple instances (one per keyword)
+    - Briefing AI uses widget order as data priority ranking
 
 REQ-WS-003: Widget Visibility Toggle (Settings)
   Requirement:
@@ -633,28 +573,26 @@ REQ-WS-003: Widget Visibility Toggle (Settings)
 
 REQ-WS-004: Pre-Built Widget Library
   Requirement:
-    - Maintain 11+ ready-to-use widgets:
+    - Maintain 9 ready-to-use widgets:
       **Fixed Widgets**:
         1. BriefingWidget: AI-generated 3-line morning brief + detail modal + settings gear
-        2. CalendarWidget: Full-month calendar view + today's schedule list
+        2. CalendarWidget: Full-month calendar view + today's schedule + integrated todo
         3. DiaryCard: Daily question prompt + response input field
-        4. TodoWidget: Task list + calendar events synced + checkbox UI
-        5. QuickLinks: Custom website bookmarks (header component)
       
       **Standard Widgets** (Middle Column):
-        6. WeatherWidget: Current weather + 3-day forecast
-        7. StocksWidget: Market indices + exchange rates
-        8. TrendsWidget: Trending topics + article counts
-        9. HealthWidget: Health summary (future expansion)
-        10. NewsWidget: News article snippets (Tavily-based)
-        11. SmartWidgetContent: AI-generated dynamic content (user keywords)
+        4. WeatherWidget: Current weather + 3-day forecast
+        5. StocksWidget: Market indices + exchange rates
+        6. TrendsWidget: Trending topics + article counts
+        7. HealthWidget: Health summary (future expansion)
+        8. NewsWidget: News article snippets (Tavily-based)
+        9. SmartWidgetContent: AI-generated dynamic content (user keywords)
 
   Acceptance Criteria:
     - All widgets render without errors
     - Each widget has consistent styling (WidgetCard wrapper)
     - Widgets responsive to theme toggle (dark/light)
     - Fixed widgets display correctly in Left/Right columns
-    - Standard widgets grid properly in Middle Column (3 per row)
+    - Standard widgets stack vertically in Middle Column (1 per row)
     - Accessibility: Buttons have aria-labels, keyboard navigation works
 
 REQ-WS-005: Smart Widget System
@@ -704,7 +642,7 @@ REQ-WS-006: First-Login Daily AI Briefing Modal
 
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-3.6 USER SETTINGS & PERSONALIZATION
+3.5 USER SETTINGS & PERSONALIZATION
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 REQ-US-001: Theme Customization
@@ -726,7 +664,7 @@ REQ-US-002: Clock Style Options
     - Supported styles:
       1. "digital": Large HH:MM:SS display (current time, TopNav center)
       2. "analog": Analog clock widget (moving hands, 12-hour dial)
-      3. "dateInfo": Full date+time (e.g., "2026년 03월 20일 07시 17분 21초")
+      3. "dateInfo": Full date+time (e.g., "2026년 03월 23일 04시 13분 19초")
     - Displayed in TopNav header
     - Selectable in SettingsModal Clock tab
 
@@ -751,22 +689,7 @@ REQ-US-003: AI Briefing Tone & Length Customization
     - Brief re-generates immediately after setting change
     - Existing display updates with new tone/length
 
-REQ-US-004: Pinned TODO Routines Management
-  Requirement:
-    - Add routines via SettingsModal Routines tab
-    - Define: Routine name + optional time
-    - Daily auto-reset: Recreates at 00:00 with checked === false
-    - User can check off during day, then re-appears next day
-    - Delete routine: Option to remove permanently
-
-  Acceptance Criteria:
-    - Routine created in SettingsModal → appears in TodoWidget
-    - Routine checked during day, checked box cleared at 00:00
-    - Routine survives daily reset (not deleted like regular TODOs)
-    - New routine appears immediately after creation
-    - Delete button removes routine permanently
-
-REQ-US-005: Smart Widget Keyword Configuration
+REQ-US-004: Smart Widget Keyword Configuration
   Requirement:
     - SettingsModal Smart Widget tab: Add/edit/delete keywords
     - Keywords: Comma-separated or one per line
@@ -781,7 +704,7 @@ REQ-US-005: Smart Widget Keyword Configuration
     - Content relevant to keywords (user confirmation in feedback)
     - Keyword changes apply to next content generation
 
-REQ-US-006: Data Priority Settings (Widget Ranking)
+REQ-US-005: Data Priority Settings (Widget Ranking)
   Requirement:
     - SettingsModal Data Priority tab: Drag-and-drop widget ranking interface
     - Configuration:
@@ -793,7 +716,7 @@ REQ-US-006: Data Priority Settings (Widget Ranking)
       • **AI Briefing Content Order**: Groq LLM prompt receives priority-ordered data
         (e.g., "Prioritize Stocks, then Weather, then Trends...")
       • **Dashboard Widget Rendering Order**: Standard widgets in Middle Column 
-        automatically render in priority order (top-left to bottom-right)
+        automatically render in priority order (top to bottom)
     
     - Idempotency:
       • Priority order persists across sessions
@@ -812,7 +735,7 @@ REQ-US-006: Data Priority Settings (Widget Ranking)
 
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-3.7 DATA PERSISTENCE & SECURITY
+3.6 DATA PERSISTENCE & SECURITY
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 REQ-DS-001: Supabase Database Schema
@@ -824,9 +747,10 @@ REQ-DS-001: Supabase Database Schema
           visibility_config (Standard widget toggles), priority_order (widget ranking),
           last_briefing_shown (timestamp for first-login modal), smart_widget_keywords
       • widget_layouts: user_id, layout_config (JSON), updated_at
-      • todos: user_id, title, checked, is_pinned, created_at, type("general"|"routine")
+      • todos: user_id, text, completed, is_fixed, created_at
       • diaries: user_id, date, question, response, memo, macro_data, personal_data, generated_entry, status
       • api_cache: key, data (JSON), ttl, created_at
+      • smart_keywords: user_id, keyword, created_at
     - RLS policies: All queries scoped to authenticated user
 
   Acceptance Criteria:
@@ -885,7 +809,7 @@ REQ-DS-004: API Key Security (Supabase Secrets)
 
 
 ================================================================================
-3.8 THEME & COLOR SYSTEM
+3.7 THEME & COLOR SYSTEM
 ================================================================================
 
 REQ-TS-001: Theme Color Specifications
@@ -896,12 +820,14 @@ REQ-TS-001: Theme Color Specifications
         • Page Background: #f4f3ee (morning-light-page)
         • Card Background: #f5e6d3 (morning-light-card)
         • Hover/Elevated: #b1ada1 (morning-light-hover)
+        • Muted Text: morning-light-muted
       
       **Dark Mode** (morning-dark-* prefix):
         • Page Background: #1a1915 (morning-dark-page)
         • Card Background: #252420 (morning-dark-card)
         • Card Secondary: #2d2b27 (morning-dark-cardSecondary)
         • Hover/Elevated: #38352f (morning-dark-hover)
+        • Muted Text: morning-dark-muted
     
     - Tailwind Configuration:
       • Merge strategy: Add custom colors to theme.extend.colors (NOT replace)
@@ -914,6 +840,7 @@ REQ-TS-001: Theme Color Specifications
       • Card backgrounds: bg-morning-light-card / bg-morning-dark-card
       • Hover states: hover:bg-morning-light-hover / hover:bg-morning-dark-hover
       • Supports Tailwind dark: mode (class-based dark mode toggle)
+      • useTheme() hook provides consistent theme classes
 
   Acceptance Criteria:
     - Light mode colors render correctly on toggle
@@ -995,7 +922,7 @@ Internal Dependencies:
 User Engagement:
   - Daily Active Users (DAU) tracking app opens
   - Average session duration: Target 5+ minutes
-  - Feature usage: % users checking off TODOs, responding to daily questions
+  - Feature usage: % users completing todos, responding to daily questions
   - Journal generation: % successful midnight syntheses
 
 Data Quality:
@@ -1010,5 +937,5 @@ Technical Health:
 
 
 ================================================================================
-END OF FUNCTIONAL REQUIREMENTS DOCUMENT
+END OF FUNCTIONAL REQUIREMENTS DOCUMENT (v2.2)
 ================================================================================

@@ -8,7 +8,6 @@ import { DEFAULT_PRIORITY_ORDER } from "../../constants";
 import BriefingWidget from "../widgets/BriefingWidget";
 import DiaryCard from "../widgets/DiaryCard";
 import CalendarWidget from "../widgets/CalendarWidget";
-import TodoWidget from "../widgets/TodoWidget";
 import WeatherWidget from "../widgets/WeatherWidget";
 import StocksWidget from "../widgets/StocksWidget";
 import TrendsWidget from "../widgets/TrendsWidget";
@@ -35,7 +34,7 @@ const SmartWidget = ({ keyword }) => <SmartWidgetContent keyword={keyword} />;
  * 
  * Left Column (1): Fixed - BriefingWidget, DiaryCard
  * Middle Column (3): Widget Scroll Box - Standard Widgets (1 per row, full-width)
- * Right Column (3): Fixed - CalendarWidget, TodoWidget
+ * Right Column (3): Fixed - CalendarWidget
  */
 const DashboardLayout = () => {
 	const { isDark } = useTheme();
@@ -138,14 +137,14 @@ const DashboardLayout = () => {
 			{/* ═══ LEFT COLUMN (Ratio 1) - Fixed Widgets ═══ */}
 			<aside 
 				className="flex flex-col gap-4 flex-shrink-0 overflow-hidden"
-				style={{ flex: "3 0 0", minWidth: "200px", maxWidth: "280px" }}
+				style={{ flex: "3 0 0", minWidth: "15%", maxWidth: "15%" }}
 			>
 				{/* BriefingWidget - Always visible (REQ-WS-002) */}
-				<div className="flex-[2] min-h-0">
+				<div className="flex-[1] min-h-0">
 					<BriefingWidget />
 				</div>
 				{/* DiaryCard - Always visible (REQ-WS-002) */}
-				<div className="flex-1 min-h-0">
+				<div className="flex-[1] min-h-0">
 					<DiaryCard />
 				</div>
 			</aside>
@@ -183,15 +182,11 @@ const DashboardLayout = () => {
 			{/* ═══ RIGHT COLUMN (Ratio 3) - Fixed Widgets ═══ */}
 			<aside 
 				className="flex flex-col gap-4 flex-shrink-0 overflow-hidden"
-				style={{ flex: "3 0 0", minWidth: "300px", maxWidth: "500px" }}
+				style={{ flex: "3 0 0", minWidth: "25%", maxWidth: "25%" }}
 			>
 				{/* CalendarWidget - Top (REQ-WS-001) */}
-				<div className="flex-[6] min-h-0 overflow-hidden">
+				<div className="flex-[7] min-h-0 overflow-hidden">
 					<CalendarWidget />
-				</div>
-				{/* TodoWidget - Bottom (REQ-WS-001) */}
-				<div className="flex-[4] min-h-0 overflow-hidden">
-					<TodoWidget />
 				</div>
 			</aside>
 
