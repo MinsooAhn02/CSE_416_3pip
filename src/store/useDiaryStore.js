@@ -13,14 +13,117 @@ import { supabase } from "../lib/supabase";
 const STORAGE_KEY = "mb_diary_entries";
 const ANSWERS_KEY = "mb_diary_answers";
 const ACTIVE_KEY = "mb_last_access_date";
+const PIN_KEY = "mb_diary_pin"; // 4-digit PIN stored locally
+const PIN_AUTH_SESSION_KEY = "mb_diary_pin_auth"; // Session-based PIN auth state
 
 const todayStr = () => new Date().toISOString().slice(0, 10);
 
+/**
+ * REFINEMENT #6: Mock Diary Data for Testing
+ * Provides realistic diary entries for specific dates to test:
+ * - Locked/unlocked UI states
+ * - Conditional rendering when diary exists
+ * - Empty state handling when diary is missing
+ */
+const MOCK_DIARY_ENTRIES = {
+	"2026-03-27": { // Today
+		diary: "Today was quite productive. I managed to complete all the calendar refinements and UI improvements. The team's feedback on the conditional diary layout was very positive. Looking forward to testing with users tomorrow.",
+		memo: "Remember to send the refined UI screenshots to stakeholders for final approval."
+	},
+	"2026-03-26": { // Yesterday
+		diary: "A good day for feature development. Implemented the save buttons for Events and Tasks panels. The clean lock UI looks much better without the blur effect. Testing the new date highlighting revealed some edge cases we need to handle.",
+		memo: "Follow up with backend team about Google Calendar API implementation timeline."
+	},
+	"2026-03-25": { // 2 days ago
+		diary: "Started working on the conditional diary panel feature. When there's no diary entry, the Events and Tasks panels should expand to fill the full width. This is a significant UX improvement. Also began addressing the clipping issues with the Add buttons.",
+		memo: "Test the 2-column layout thoroughly on mobile and tablet screens."
+	},
+};
+
+/**
+ * Load diary entries: merge mock data with stored data (stored data takes precedence)
+ */
+const getInitialEntries = () => {
+	const storedEntries = load(STORAGE_KEY, {});
+	return { ...MOCK_DIARY_ENTRIES, ...storedEntries }; // Stored entries override mock
+};
+
 export const useDiaryStore = create((set, get) => ({
 	/* ── 상태 ── */
-	entries: load(STORAGE_KEY, {}),             // { "2026-03-18": { diary: "...", memo: "..." } }
+	entries: getInitialEntries(),                // { "2026-03-18": { diary: "...", memo: "..." } }
 	diaryAnswers: load(ANSWERS_KEY, {}),        // { "2026-03-18": ["답변1", "답변2"] }
 	wasActiveToday: load(ACTIVE_KEY, "") === todayStr(),
+	
+	/* ── PIN Authentication State ── */
+	pinSet: !!load(PIN_KEY, null),              // Whether a PIN has been set by user
+	isPinAuthenticated: load(PIN_AUTH_SESSION_KEY, false), // Session-based auth state
+
+	/* ── PIN Management ── */
+	/**
+	 * Initialize PIN on first use (or reset)
+	 * @param {string} pin - 4-digit PIN
+	 */
+	setPIN: (pin) => {
+		if (!/^\d{4}$/.test(pin)) {
+			throw new Error("PIN must be exactly 4 digits");
+		}
+		save(PIN_KEY, pin);
+		set({ pinSet: true });
+	},
+
+	/**
+	 * Verify PIN and authenticate user
+	 * @param {string} pin - 4-digit PIN to verify
+	 * @returns {boolean} - true if PIN is correct
+	 */
+	verifyPIN: (pin) => {
+		let storedPin = load(PIN_KEY, null);
+		if (!storedPin) {
+			// If no PIN is set, set this as the initial PIN
+			get().setPIN(pin);
+			storedPin = pin; // Use the newly set PIN for comparison
+		}
+		
+		const isCorrect = storedPin === pin;
+		if (isCorrect) {
+			save(PIN_AUTH_SESSION_KEY, true);
+			set({ isPinAuthenticated: true });
+		}
+		return isCorrect;
+	},
+
+	/**
+	 * Clear PIN authentication for current session
+	 */
+	clearPinAuth: () => {
+		save(PIN_AUTH_SESSION_KEY, false);
+		set({ isPinAuthenticated: false });
+	},
+
+	/**
+	 * Check if PIN is authenticated in current session
+	 */
+	isPinAuthenticatedSession: () => {
+		return get().isPinAuthenticated;
+	},
+
+	/**
+	 * Reset PIN (for account recovery)
+	 */
+	resetPIN: () => {
+		save(PIN_KEY, null);
+		save(PIN_AUTH_SESSION_KEY, false);
+		set({ pinSet: false, isPinAuthenticated: false });
+	},
+
+	/**
+	 * Clear PIN auth session WITHOUT resetting the PIN itself
+	 * (Used when closing diary or switching dates)
+	 */
+	clearPinSession: () => {
+		save(PIN_AUTH_SESSION_KEY, false);
+		set({ isPinAuthenticated: false });
+	},
 
 	/* ── 접속 기록 ── */
 	markActive: () => {

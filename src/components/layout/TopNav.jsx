@@ -1,9 +1,10 @@
 import { useState, useEffect } from "react";
-import { User, Moon, Sun, Search } from "lucide-react";
+import { User, Moon, Sun, Search, BookOpen } from "lucide-react";
 import { useTheme } from "../../hooks/useTheme";
 import { useSettingsStore } from "../../store/useSettingsStore";
 import { useAuthStore } from "../../store/useAuthStore";
 import QuickLinks from "./QuickLinks";
+import DiaryListModal from "../modals/DiaryListModal";
 
 /* ── 아날로그 시계 컴포넌트 ── */
 const AnalogClock = ({ time, isDark }) => {
@@ -81,6 +82,7 @@ const TopNav = () => {
 
 	const [currentTime, setCurrentTime] = useState(new Date());
 	const [searchQuery, setSearchQuery] = useState("");
+	const [showDiaryList, setShowDiaryList] = useState(false);
 
 	useEffect(() => {
 		const t = setInterval(() => setCurrentTime(new Date()), 1000);
@@ -166,9 +168,20 @@ const TopNav = () => {
 				</form>
 			</div>
 
-			{/* Right — QuickLinks + Theme toggle */}
+			{/* Right — QuickLinks + Diary List + Theme toggle */}
 			<div className="flex items-center gap-2">
 				<QuickLinks />
+				<button
+					onClick={() => setShowDiaryList(true)}
+					className={`w-10 h-10 rounded-full flex items-center justify-center border transition-all ${
+						isDark
+							? "bg-[#2a2a2a] hover:bg-[#353535] border-[#3a3a3a]"
+							: "bg-white/50 hover:bg-white/80 border-gray-200"
+					}`}
+					title="View Diary List"
+				>
+					<BookOpen size={18} className="text-blue-500" />
+				</button>
 				<button
 					onClick={() => setTheme(isDark ? "light" : "dark")}
 					className={`w-10 h-10 rounded-full flex items-center justify-center border transition-all ${
@@ -180,6 +193,9 @@ const TopNav = () => {
 					{isDark ? <Moon size={18} /> : <Sun size={18} />}
 				</button>
 			</div>
+
+			{/* Diary List Modal */}
+			{showDiaryList && <DiaryListModal onClose={() => setShowDiaryList(false)} />}
 		</header>
 	);
 };

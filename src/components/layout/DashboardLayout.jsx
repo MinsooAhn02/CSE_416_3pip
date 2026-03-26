@@ -126,17 +126,26 @@ const DashboardLayout = () => {
 	const cardBg = isDark ? "bg-morning-dark-card" : "bg-morning-light-card";
 	const scrollBoxBg = isDark ? "bg-morning-dark-cardSecondary/50" : "bg-morning-light-card/30";
 
+	/* PHASE 13: CRITICAL FIXES */
+	/* #1: Removed fixed height to allow Calendar and DatePanelContainer to expand naturally */
+	/* #4: Shifted layout to the right with ml-[8%] and removed mx-auto */
+	/* - Layout is right-shifted instead of centered */
+	/* - Page scrolls to show full Diary section below Calendar */
 	return (
 		<div 
-			className="flex flex-row gap-4 pb-6 mt-2"
-			style={{ height: "calc(100vh - 200px)" }}
+			className="flex flex-row gap-4 pb-40 mt-2 h-auto items-start ml-[8%] max-w-[92vw]"
 		>
 			{/* ═══ LEFT SPACER (Ratio 1) ═══ */}
-			<div style={{ flex: "0.7 0 0" }} />
+			<div style={{ flex: "0.3 0 0" }} />
 
-			{/* ═══ LEFT COLUMN (Ratio 1) - Fixed Widgets ═══ */}
+			{/* ═══ LEFT COLUMN (Ratio 1) - Sticky Sidebar ═══ */}
+			{/* PHASE 19: Implemented sticky positioning for Left column */}
+			{/* - sticky top-4: Sticks to top with small offset */}
+			{/* - h-[calc(100vh-2rem)]: Takes full viewport height minus padding */}
+			{/* - overflow-y-auto: Internal scroll for content exceeding viewport */}
+			{/* - custom-scrollbar: Styled scrollbar for consistency */}
 			<aside 
-				className="flex flex-col gap-4 flex-shrink-0 overflow-hidden"
+				className="sticky top-4 flex flex-col gap-4 flex-shrink-0 h-[calc(100vh-2rem)] overflow-y-auto custom-scrollbar"
 				style={{ flex: "3 0 0", minWidth: "15%", maxWidth: "15%" }}
 			>
 				{/* BriefingWidget - Always visible (REQ-WS-002) */}
@@ -150,6 +159,9 @@ const DashboardLayout = () => {
 			</aside>
 
 			{/* ═══ MIDDLE COLUMN (Ratio 3) - Widget Scroll Box ═══ */}
+			{/* PHASE 11: Removed max-h constraint, now stretches with items-stretch */}
+			{/* - Middle column height now matches Calendar exactly */}
+			{/* - Internal overflow-y-auto for widget scrolling */}
 			<DragDropContext onDragEnd={handleMiddleDragEnd}>
 				<Droppable droppableId="widgetScrollBox" direction="vertical">
 					{(provided, snapshot) => (
@@ -158,8 +170,8 @@ const DashboardLayout = () => {
 							{...provided.droppableProps}
 							className={`
 								widget-scroll-box
-								flex-1 rounded-2xl transition-colors duration-200 
-								overflow-y-scroll
+								flex-1 rounded-2xl transition-colors duration-200
+								overflow-y-auto
 								${scrollBoxBg}
 								${snapshot.isDraggingOver ? (isDark ? "bg-blue-500/10" : "bg-blue-100/30") : ""}
 							`}
@@ -179,9 +191,14 @@ const DashboardLayout = () => {
 				</Droppable>
 			</DragDropContext>
 
-			{/* ═══ RIGHT COLUMN (Ratio 3) - Fixed Widgets ═══ */}
+			{/* ═══ RIGHT COLUMN (Ratio 3) - Sticky Sidebar ═══ */}
+			{/* PHASE 19: Implemented sticky positioning for Right column */}
+			{/* - sticky top-4: Sticks to top with small offset */}
+			{/* - h-[calc(100vh-2rem)]: Takes full viewport height minus padding */}
+			{/* - overflow-y-auto: Internal scroll for content exceeding viewport */}
+			{/* - custom-scrollbar: Styled scrollbar for consistency */}
 			<aside 
-				className="flex flex-col gap-4 flex-shrink-0 overflow-hidden"
+				className="sticky top-4 flex flex-col gap-4 flex-shrink-0 h-[calc(100vh-2rem)] overflow-y-auto custom-scrollbar"
 				style={{ flex: "3 0 0", minWidth: "25%", maxWidth: "25%" }}
 			>
 				{/* CalendarWidget - Top (REQ-WS-001) */}

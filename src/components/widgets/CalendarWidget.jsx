@@ -1,18 +1,10 @@
 import { useState, useEffect, useRef, useMemo } from "react";
-import {
-	Calendar,
-	MoreVertical,
-	ChevronLeft,
-	ChevronRight,
-	CheckCircle2,
-	X,
-	Plus,
-} from "lucide-react";
+import { Calendar, ArrowLeftRight, ChevronLeft, ChevronRight } from "lucide-react";
 import { useTheme } from "../../hooks/useTheme";
-import { useDataStore } from "../../store/useDataStore";
-import { useTodoStore } from "../../store/useTodoStore";
 import { useDiaryStore } from "../../store/useDiaryStore";
-import DiaryModal from "../modals/DiaryModal";
+import { useGoogleCalendarStore } from "../../store/useGoogleCalendarStore";
+import { useTodoStore } from "../../store/useTodoStore";
+import DatePanelContainer from "../layout/DatePanelContainer";
 
 const DAYS = ["일", "월", "화", "수", "목", "금", "토"];
 
@@ -22,49 +14,45 @@ const sameDay = (a, b) =>
 	a.getDate() === b.getDate();
 
 const CalendarWidget = () => {
-	const { isDark, cardCls, muted, inputCls } = useTheme();
+	const { isDark, cardCls, muted } = useTheme();
 	const [calView, setCalView] = useState("month");
-	const [menuOpen, setMenuOpen] = useState(false);
 	const [currentDate, setCurrentDate] = useState(new Date());
-	const [diaryDateStr, setDiaryDateStr] = useState(null); // 선택된 날짜 (DiaryModal용)
-	const menuRef = useRef(null);
+	const [selectedDateForPanels, setSelectedDateForPanels] = useState(null);
 
 	/* ── 외부 스토어 연결 ── */
-	const calEvents = useDataStore((s) => s.calEvents) || [];
 	const getDiaryDates = useDiaryStore((s) => s.getDiaryDates);
 	const diaryDates = useMemo(() => new Set(getDiaryDates()), [getDiaryDates]);
-	const {
-		todos,
-		newTodoText,
-		showAddTodo,
-		toggleTodo,
-		addTodo,
-		deleteTodo,
-		ensureDailyReset,
-		setNewTodoText,
-		setShowAddTodo,
-	} = useTodoStore();
+	const setSelectedDate = useGoogleCalendarStore((s) => s.setSelectedDate);
+	const { events = [], tasks = [] } = useGoogleCalendarStore();
+
+	/* PHASE 13: Helper to check if date has events (all dates, not just future) */
+	const hasEventsOnDate = (dateStr) => {
+		return events?.some(e => e.date === dateStr) || false;
+	};
+
+	/* PHASE 15: Helper to check if date has INCOMPLETE tasks (green dot shows only for incomplete) */
+	const hasTasksOnDate = (dateStr) => {
+		return tasks?.some(t => t.date === dateStr && !t.completed) || false;
+	};
 
 	const now = new Date();
 	const today = now.getDate();
 	const viewYear = currentDate.getFullYear();
 	const viewMonth = currentDate.getMonth();
 
-	/* 초기 로드 시 일일 리셋 확인 */
+	/* PHASE 14: Initialize calendar with all events/tasks on mount */
 	useEffect(() => {
-		ensureDailyReset?.();
-	}, [ensureDailyReset]);
+		useTodoStore.getState().ensureDailyReset?.();
+		useGoogleCalendarStore.getState().fetchEventsAndTasks?.();
+	}, []);
 
-	/* Close menu on outside click */
-	useEffect(() => {
-		if (!menuOpen) return;
-		const handler = (e) => {
-			if (menuRef.current && !menuRef.current.contains(e.target))
-				setMenuOpen(false);
-		};
-		document.addEventListener("mousedown", handler);
-		return () => document.removeEventListener("mousedown", handler);
-	}, [menuOpen]);
+	/* PHASE 16: Cycle through calendar views on button click */
+	const handleCycleView = () => {
+		const views = ["month", "week", "day"];
+		const currentIndex = views.indexOf(calView);
+		const nextIndex = (currentIndex + 1) % views.length;
+		setCalView(views[nextIndex]);
+	};
 
 	/* Month navigation */
 	const goToPrev = () => {
@@ -106,7 +94,7 @@ const CalendarWidget = () => {
 
 	return (
 		<div
-			className={`h-full rounded-2xl border p-5 shadow-sm transition-colors duration-300 ${cardCls}`}
+			className={`rounded-2xl border p-5 shadow-sm transition-colors duration-300 flex flex-col ${cardCls}`}
 		>
 			{/* Header */}
 			<div className="flex items-center justify-between mb-4">
@@ -137,47 +125,13 @@ const CalendarWidget = () => {
 						</>
 					)}
 
-					{/* Kebab menu */}
-					<div ref={menuRef} className="relative">
-						<button
-							onClick={() => setMenuOpen(!menuOpen)}
-							className={`p-1 rounded-full transition-colors ${isDark ? "hover:bg-[#353535]" : "hover:bg-gray-100"}`}
-						>
-							<MoreVertical size={18} />
-						</button>
-						{menuOpen && (
-							<div
-								className={`absolute right-0 mt-2 rounded-lg shadow-lg py-1 z-10 min-w-[80px] border ${
-									isDark
-										? "bg-[#2a2a2a] border-[#3a3a3a]"
-										: "bg-white border-gray-200"
-								}`}
-							>
-								{[
-									{ key: "day", label: "일" },
-									{ key: "week", label: "주" },
-									{ key: "month", label: "월" },
-								].map((v) => (
-									<button
-										key={v.key}
-										onClick={() => {
-											setCalView(v.key);
-											setMenuOpen(false);
-										}}
-										className={`w-full text-left px-4 py-2 text-sm transition-colors ${
-											calView === v.key
-												? "text-blue-500 font-medium"
-												: isDark
-													? "hover:bg-[#353535]"
-													: "hover:bg-gray-100"
-										}`}
-									>
-										{v.label}
-									</button>
-								))}
-							</div>
-						)}
-					</div>
+					{/* PHASE 16: View cycle button - cycles Month -> Week -> Day -> Month */}
+					<button
+						onClick={handleCycleView}
+						className={`p-1 rounded-full transition-colors title="Cycle view (Month → Week → Day)" ${isDark ? "hover:bg-[#353535]" : "hover:bg-gray-100"}`}
+					>
+						<ArrowLeftRight size={18} />
+					</button>
 				</div>
 			</div>
 
@@ -199,28 +153,59 @@ const CalendarWidget = () => {
 						const dateStr = `${viewYear}-${String(viewMonth + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 						const hasDiary = diaryDates.has(dateStr);
 						const isToday = day === today && isCurrentMonth;
+						const isSelected = selectedDateForPanels === dateStr;
 
 						return (
 							<div
 								key={i}
-								onClick={() => setDiaryDateStr(dateStr)}
-								className={`relative text-center py-2 text-sm rounded-full cursor-pointer transition-colors ${
+								onClick={() => {
+									setSelectedDateForPanels(dateStr);
+									setSelectedDate(dateStr); // Set in Google Calendar store
+								}}
+								className={`relative text-center py-2 text-sm rounded-full cursor-pointer transition-all ${
 									isToday
 										? "bg-blue-500 text-white font-bold"
 										: isDark
 											? "hover:bg-[#353535]"
 											: "hover:bg-gray-100"
+								} ${
+									isSelected && !isToday
+										? "border-2 border-blue-500"
+										: ""
+								} ${
+									isSelected && isToday
+										? "border-2 border-blue-300"
+										: ""
 								}`}
 							>
 								{day}
-								{/* 일기 있는 날짜에 점 표시 */}
-								{hasDiary && (
-									<span
-										className={`absolute bottom-0.5 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full ${
-											isToday ? "bg-white" : "bg-blue-500"
-										}`}
-									/>
-								)}
+								{/* PHASE 11: Multiple indicator dots - Diary (blue), Events (orange), Tasks (green) */}
+								<div className="absolute bottom-0.5 left-1/2 -translate-x-1/2 flex gap-1">
+									{hasDiary && (
+										<span
+											className={`w-1 h-1 rounded-full ${
+												isToday ? "bg-white" : "bg-blue-500"
+											}`}
+											title="Diary"
+										/>
+									)}
+									{hasEventsOnDate(dateStr) && (
+										<span
+											className={`w-1 h-1 rounded-full ${
+												isToday ? "bg-white" : "bg-orange-500"
+											}`}
+											title="Events"
+										/>
+									)}
+									{hasTasksOnDate(dateStr) && (
+										<span
+											className={`w-1 h-1 rounded-full ${
+												isToday ? "bg-white" : "bg-green-500"
+											}`}
+											title="Tasks"
+										/>
+									)}
+								</div>
 							</div>
 						);
 					})}
@@ -230,28 +215,74 @@ const CalendarWidget = () => {
 			{/* Week View */}
 			{calView === "week" && (
 				<div className="grid grid-cols-7 gap-2">
-					{weekDays.map((d, i) => (
-						<div
-							key={i}
-							className={`text-center p-4 rounded-lg border transition-colors ${
-								sameDay(d, now)
-									? "bg-blue-500 text-white border-blue-500"
-									: isDark
-										? "border-[#3a3a3a] hover:bg-[#353535]"
-										: "border-gray-200 hover:bg-gray-50"
-							}`}
-						>
-							<p className="text-xs">{DAYS[d.getDay()]}</p>
-							<p className="text-lg font-bold">{d.getDate()}</p>
-						</div>
-					))}
+					{weekDays.map((d, i) => {
+						const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+						const isSelected = selectedDateForPanels === dateStr;
+						const hasDiary = diaryDates.has(dateStr);
+						
+						return (
+							<div
+								key={i}
+								onClick={() => {
+									setSelectedDateForPanels(dateStr);
+									setSelectedDate(dateStr);
+								}}
+								className={`relative text-center p-4 rounded-lg border transition-colors cursor-pointer ${
+									sameDay(d, now)
+										? "bg-blue-500 text-white border-blue-500"
+										: isSelected
+										? isDark ? "bg-blue-500/30 border-blue-500" : "bg-blue-100 border-blue-500"
+										: isDark
+											? "border-[#3a3a3a] hover:bg-[#353535]"
+											: "border-gray-200 hover:bg-gray-50"
+								}`}
+							>
+								<p className="text-xs">{DAYS[d.getDay()]}</p>
+								<p className="text-lg font-bold">{d.getDate()}</p>
+								{/* PHASE 17: Dot indicators for Week view */}
+								<div className="absolute bottom-1 left-1/2 -translate-x-1/2 flex gap-0.5">
+									{hasDiary && (
+										<span
+											className={`w-1 h-1 rounded-full ${
+												sameDay(d, now) ? "bg-white" : "bg-blue-500"
+											}`}
+											title="Diary"
+										/>
+									)}
+									{hasEventsOnDate(dateStr) && (
+										<span
+											className={`w-1 h-1 rounded-full ${
+												sameDay(d, now) ? "bg-white" : "bg-orange-500"
+											}`}
+											title="Events"
+										/>
+									)}
+									{hasTasksOnDate(dateStr) && (
+										<span
+											className={`w-1 h-1 rounded-full ${
+												sameDay(d, now) ? "bg-white" : "bg-green-500"
+											}`}
+											title="Tasks"
+										/>
+									)}
+								</div>
+							</div>
+						);
+					})}
 				</div>
 			)}
 
 			{/* Day View */}
 			{calView === "day" && (
-				<div className="flex items-center justify-center py-6">
-					<div className="w-40 h-40 rounded-2xl bg-blue-500 text-white flex flex-col items-center justify-center shadow-lg">
+				<div className="flex justify-center items-start py-6">
+					<div 
+						onClick={() => {
+							const dateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+							setSelectedDateForPanels(dateStr);
+							setSelectedDate(dateStr);
+						}}
+						className="w-40 h-40 rounded-2xl bg-blue-500 text-white flex flex-col items-center justify-center shadow-lg cursor-pointer hover:bg-blue-600 transition-colors"
+					>
 						<p className="text-xs uppercase">{DAYS[now.getDay()]}요일</p>
 						<p className="text-6xl font-bold">{now.getDate()}</p>
 						<p className="text-sm">
@@ -261,133 +292,17 @@ const CalendarWidget = () => {
 				</div>
 			)}
 
-			{/* ── 하단 5:5 분할: 오늘의 일정 + AI Todo ── */}
-			<div className={`mt-4 pt-4 border-t ${isDark ? "border-[#3a3a3a]" : "border-gray-200"}`}>
-				<div className="flex gap-4">
-					{/* 왼쪽: 오늘의 일정 */}
-					<div className="flex-1 min-w-0">
-						<p className={`text-xs font-medium mb-2 ${muted}`}>오늘 일정</p>
-						<div className="space-y-2">
-							{calEvents.length === 0 ? (
-								<p className={`text-xs ${muted}`}>오늘 일정이 없습니다.</p>
-							) : (
-								calEvents.map((ev, i) => (
-									<div key={i} className="flex items-center gap-3">
-										<div
-											className="w-1 h-8 rounded-full flex-shrink-0"
-											style={{ backgroundColor: ev.color || "#4f46e5" }}
-										/>
-										<div className="flex-grow min-w-0">
-											<p className="text-xs font-medium truncate">
-												{ev.title || ev.summary}
-											</p>
-											<p className={`text-[10px] truncate ${muted}`}>
-												{ev.time || ""} {ev.location ? `· ${ev.location}` : ""}
-											</p>
-										</div>
-									</div>
-								))
-							)}
-						</div>
-					</div>
-
-					{/* 오른쪽: AI Todo (기존 TodoWidget 로직 인라인) */}
-					<div className="flex-1 min-w-0">
-						<p className={`text-xs font-medium mb-2 ${muted}`}>AI Todo</p>
-						<div className="space-y-2">
-							{todos.map((t) => (
-								<div key={t.id} className="flex items-center gap-2 group">
-									<button
-										onClick={() => toggleTodo(t.id)}
-										className={`w-4 h-4 rounded flex-shrink-0 flex items-center justify-center border transition-colors ${
-											t.completed
-												? "bg-blue-500 border-blue-500"
-												: isDark
-													? "border-white/30 hover:border-blue-400"
-													: "border-gray-300 hover:border-blue-400"
-										}`}
-									>
-										{t.completed && (
-											<CheckCircle2 size={10} className="text-white" />
-										)}
-									</button>
-									<span
-										className={`text-xs flex-grow truncate ${
-											t.completed ? "line-through opacity-40" : ""
-										}`}
-									>
-										{t.text}
-									</span>
-									{t.isFixed && (
-										<span
-											className={`text-[9px] px-1 py-0.5 rounded ${
-												isDark
-													? "bg-emerald-500/20 text-emerald-300"
-													: "bg-emerald-100 text-emerald-700"
-											}`}
-										>
-											루틴
-										</span>
-									)}
-									<button
-										onClick={() => deleteTodo(t.id)}
-										className="opacity-0 group-hover:opacity-60 hover:!opacity-100 transition-opacity"
-									>
-										<X size={12} />
-									</button>
-								</div>
-							))}
-
-							{/* Todo 추가 UI */}
-							{showAddTodo ? (
-								<div className="flex items-center gap-1 mt-1">
-									<input
-										type="text"
-										value={newTodoText}
-										onChange={(e) => setNewTodoText(e.target.value)}
-										onKeyDown={(e) => {
-											if (e.key === "Enter") {
-												e.preventDefault();
-												void addTodo();
-											}
-										}}
-										placeholder="할 일 입력..."
-										autoFocus
-										className={`flex-grow rounded-lg px-2 py-1 text-xs outline-none border focus:border-blue-400 ${inputCls}`}
-									/>
-									<button
-										onClick={() => void addTodo()}
-										className="text-blue-400 text-xs font-medium"
-									>
-										추가
-									</button>
-									<button
-										onClick={() => {
-											setShowAddTodo(false);
-											setNewTodoText("");
-										}}
-									>
-										<X size={14} className={muted} />
-									</button>
-								</div>
-							) : (
-								<button
-									onClick={() => setShowAddTodo(true)}
-									className="flex items-center gap-1 text-[10px] text-blue-400 mt-1 hover:underline"
-								>
-									<Plus size={12} /> 새 할 일
-								</button>
-							)}
-						</div>
-					</div>
-				</div>
-			</div>
-
-			{/* DiaryModal — 날짜 클릭 시 표시 */}
-			{diaryDateStr && (
-				<DiaryModal
-					dateStr={diaryDateStr}
-					onClose={() => setDiaryDateStr(null)}
+			{/*
+				CRITICAL FIX: Three-panel layout (Events, Tasks, Diary)
+				- Events and Tasks are IMMEDIATELY VISIBLE (no PIN block)
+				- Diary panel has its own internal PIN protection
+				- Diary List button is in TopNav (also PIN protected)
+				- Legacy UI section completely removed
+			*/}
+			{selectedDateForPanels && (
+				<DatePanelContainer
+					selectedDate={selectedDateForPanels}
+					onClose={() => setSelectedDateForPanels(null)}
 				/>
 			)}
 		</div>

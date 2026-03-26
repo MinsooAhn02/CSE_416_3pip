@@ -158,30 +158,38 @@ const FirstLoginBriefingModal = () => {
 
 	return (
 		<AnimatePresence>
-			{/* Background Overlay */}
+			{/* PHASE 10: Centered briefing overlay with flex centering */}
 			<motion.div
-				className="fixed inset-0 z-[70] bg-black/60 backdrop-blur-md"
+				className="fixed inset-0 z-[70] bg-black/60 backdrop-blur-md flex items-center justify-center"
 				onClick={dismissCountdown <= 0 ? handleDismiss : undefined}
 				initial={{ opacity: 0 }}
 				animate={{ opacity: 1 }}
 				exit={{ opacity: 0 }}
 				transition={{ duration: 0.3 }}
-			/>
-
-			{/* Modal Content */}
-			<motion.div
-				className={`fixed top-1/2 left-1/2 z-[71] w-full max-w-2xl max-h-[85vh] rounded-3xl border-2 shadow-2xl flex flex-col overflow-hidden ${
+			>
+				{/* Modal Content - Fixed height with internal scrolling */}
+				<motion.div
+					className={`relative z-[71] w-full max-w-2xl h-[600px] max-h-[80vh] rounded-3xl border-2 shadow-2xl flex flex-col overflow-hidden ${
 					isDark
 						? "bg-morning-dark-card border-morning-dark-hover text-morning-dark-text"
 						: "bg-morning-light-card border-morning-light-hover/50 text-morning-light-text"
 				}`}
-				style={{ transform: "translate(-50%, -50%)" }}
+
 				initial={{ opacity: 0, scale: 0.8, y: 20 }}
 				animate={{ opacity: 1, scale: 1, y: 0 }}
 				exit={{ opacity: 0, scale: 0.8, y: 20 }}
 				transition={{ type: "spring", damping: 25, stiffness: 300 }}
 				onClick={(e) => e.stopPropagation()}
 			>
+{/* PHASE 21: Close button - BYPASSES countdown, closes immediately */}
+			<button
+				onClick={() => dismissFirstLoginModal()}
+				className="absolute top-4 right-4 p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors rounded-full z-10 hover:bg-gray-200/10 dark:hover:bg-gray-700/10"
+				title="닫기"
+				>
+					<X size={20} />
+				</button>
+
 				{/* Header */}
 				<div className={`flex items-center justify-between p-6 border-b ${
 					isDark ? "border-morning-dark-hover" : "border-morning-light-hover/30"
@@ -195,36 +203,17 @@ const FirstLoginBriefingModal = () => {
 							<p className={`text-xs ${muted}`}>Good Morning Briefing</p>
 						</div>
 					</div>
-					<div className="flex items-center gap-2">
-						<button
-							onClick={handleRefresh}
-							disabled={isLoading}
-							className={`p-2 rounded-full transition-colors ${
-								isDark ? "hover:bg-morning-dark-hover" : "hover:bg-morning-light-hover/20"
-							} ${isLoading ? "opacity-50" : ""}`}
-							title="브리핑 새로고침"
-						>
-							<RefreshCw size={18} className={isLoading ? "animate-spin" : ""} />
-						</button>
-						<button
-							onClick={handleDismiss}
-							disabled={dismissCountdown > 0}
-							className={`p-2 rounded-full transition-colors ${
-								dismissCountdown > 0
-									? "opacity-30 cursor-not-allowed"
-									: isDark
-										? "hover:bg-morning-dark-hover"
-										: "hover:bg-morning-light-hover/20"
-							}`}
-							title={dismissCountdown > 0 ? `${dismissCountdown}초 후 닫기 가능` : "닫기"}
-						>
-							{dismissCountdown > 0 ? (
-								<span className="text-xs font-mono w-5 text-center">{dismissCountdown}</span>
-							) : (
-								<X size={18} />
-							)}
-						</button>
-					</div>
+				{/* PHASE 23: Repositioned Refresh button to avoid overlap with X close button */}
+				<button
+					onClick={handleRefresh}
+					disabled={isLoading}
+					className={`absolute top-4 right-14 p-2 rounded-full transition-colors ${
+						isDark ? "hover:bg-morning-dark-hover" : "hover:bg-morning-light-hover/20"
+					} ${isLoading ? "opacity-50" : ""}`}
+					title="브리핑 새로고침"
+				>
+					<RefreshCw size={18} className={isLoading ? "animate-spin" : ""} />
+				</button>
 				</div>
 
 				{/* Greeting Banner */}
@@ -297,6 +286,7 @@ const FirstLoginBriefingModal = () => {
 							: "오늘 하루 시작하기"}
 					</button>
 				</div>
+			</motion.div>
 			</motion.div>
 		</AnimatePresence>
 	);

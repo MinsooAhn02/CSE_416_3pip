@@ -83,7 +83,7 @@ const App = () => {
 
 	return (
 		<div
-			className={`min-h-screen w-full font-sans overflow-hidden relative transition-colors duration-300 ${
+			className={`min-h-screen w-full font-sans relative transition-colors duration-300 ${
 				isDark
 					? "bg-morning-dark-page text-morning-dark-text"
 					: "bg-morning-light-page text-morning-light-text"
