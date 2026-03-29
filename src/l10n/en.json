@@ -1,0 +1,187 @@
+{
+  "common": {
+    "save": "Save",
+    "cancel": "Cancel",
+    "close": "Close",
+    "delete": "Delete",
+    "edit": "Edit",
+    "add": "Add",
+    "search": "Search",
+    "loading": "Loading...",
+    "error": "Error",
+    "success": "Success",
+    "confirm": "Confirm",
+    "yes": "Yes",
+    "no": "No",
+    "more": "More",
+    "show_more": "{{count}} more",
+    "just_now": "Just now",
+    "minutes_ago": "{{count}}m ago",
+    "before_refresh": "Before refresh"
+  },
+  "nav": {
+    "search_placeholder": "Search or ask AI...",
+    "theme_toggle": "Toggle Theme",
+    "diary_list": "View Diary List",
+    "quicklinks": "Quick Links",
+    "edit_quicklinks": "Edit Quick Links",
+    "language": "Language",
+    "add_new_link": "Add New Link",
+    "link_name": "Name (e.g., GitHub)",
+    "link_url": "URL (e.g., github.com)",
+    "link_icon": "Icon (e.g., GH)"
+  },
+  "briefing": {
+    "title": "AI Briefing",
+    "subtitle": "Daily Briefing",
+    "today_briefing": "Today's AI Briefing",
+    "detailed_briefing": "Detailed Briefing",
+    "refresh": "Refresh Briefing",
+    "click_for_detail": "Click for detailed briefing",
+    "yesterday_memo_applied": "✨ Yesterday's memo has been applied to the briefing",
+    "last_updated": "Last updated",
+    "length_settings": "Briefing Length Settings",
+    "length_short": "Short (1 line)",
+    "length_medium": "Medium (3 lines)",
+    "length_long": "Long (5 lines)",
+    "loading_detail": "Loading detailed briefing..."
+  },
+  "calendar": {
+    "title": "Calendar",
+    "date_details": "Date Details",
+    "cycle_view": "Cycle View",
+    "days": ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"],
+    "days_full": ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
+  },
+  "events": {
+    "title": "Events",
+    "no_events": "No events for this date",
+    "add_event": "Add Event",
+    "edit_event": "Edit Event",
+    "delete_event": "Delete Event",
+    "event_title": "Event Title",
+    "event_time": "Time",
+    "event_description": "Description"
+  },
+  "tasks": {
+    "title": "Tasks",
+    "no_tasks": "No tasks for this date",
+    "add_task": "Add Task",
+    "edit_task": "Edit Task",
+    "delete_task": "Delete Task",
+    "task_title": "Task Title",
+    "mark_complete": "Mark as Complete",
+    "mark_incomplete": "Mark as Incomplete"
+  },
+  "diary": {
+    "title": "Diary",
+    "card_title": "Today's Story",
+    "question": "What was the happiest moment of your day?",
+    "placeholder": "Write about your day...",
+    "no_entry": "No diary entry for this date",
+    "write_diary": "Write Diary",
+    "edit_diary": "Edit Diary",
+    "diary_list": "Diary List",
+    "memo": "Memo",
+    "pin_required": "PIN Required",
+    "enter_pin": "Enter PIN to view diary"
+  },
+  "widgets": {
+    "weather": {
+      "title": "Current Weather",
+      "feels_like": "Feels like",
+      "humidity": "Humidity",
+      "wind": "Wind",
+      "precipitation": "Precipitation",
+      "air_quality": "Air Quality",
+      "loading": "Loading weather...",
+      "no_data": "No weather data available."
+    },
+    "stocks": {
+      "title": "Stocks/Exchange",
+      "change": "Change",
+      "volume": "Volume",
+      "symbol_settings": "Symbol Settings",
+      "select_symbols": "Select symbols (max 4)",
+      "custom_input": "Custom input (e.g., AAPL)",
+      "loading": "Loading stocks data...",
+      "no_data": "No stocks data available."
+    },
+    "trends": {
+      "title": "Live Trends",
+      "trending_now": "Trending Now",
+      "ai_summary": "AI Summary",
+      "hashtags": "Hashtags",
+      "sources": "Sources",
+      "loading": "Loading trends...",
+      "no_data": "No trends available."
+    },
+    "news": {
+      "title": "News",
+      "ai_summary": "AI Summary",
+      "news_list": "News List",
+      "read_more": "Read More",
+      "loading": "Loading news...",
+      "no_data": "No news available."
+    },
+    "health": {
+      "title": "Health (Google Fit)",
+      "steps": "Steps",
+      "sleep": "Sleep",
+      "water": "Water",
+      "cups": "cups",
+      "google_fit_notice": "⚠️ Will show real data when connected to Google Fit",
+      "loading": "Loading health data..."
+    },
+    "smart": {
+      "title": "Smart Widget",
+      "add_smart_widget": "Add Smart Widget",
+      "enter_keyword": "Enter keyword..."
+    }
+  },
+  "settings": {
+    "title": "Settings",
+    "general": "General",
+    "appearance": "Appearance",
+    "theme": "Theme",
+    "theme_light": "Light",
+    "theme_dark": "Dark",
+    "language": "Language",
+    "language_en": "English",
+    "language_ko": "Korean",
+    "clock_style": "Clock Style",
+    "clock_digital": "Digital",
+    "clock_analog": "Analog",
+    "clock_date": "Date Info",
+    "background": "Background Image",
+    "tone": "AI Tone",
+    "tone_friendly": "Friendly",
+    "tone_formal": "Formal",
+    "tone_humorous": "Humorous",
+    "notifications": "Notifications",
+    "privacy": "Privacy",
+    "pin_protection": "PIN Protection",
+    "set_pin": "Set PIN",
+    "change_pin": "Change PIN",
+    "logout": "Logout"
+  },
+  "auth": {
+    "login": "Login",
+    "logout": "Logout",
+    "login_with_google": "Login with Google",
+    "welcome": "Welcome",
+    "goodbye": "Goodbye"
+  },
+  "errors": {
+    "network_error": "Network error. Please try again.",
+    "auth_error": "Authentication failed.",
+    "load_error": "Failed to load data.",
+    "save_error": "Failed to save data."
+  },
+  "time": {
+    "greeting_morning": "Good morning! ☀️",
+    "greeting_afternoon": "Good afternoon! 🌤️",
+    "greeting_evening": "Good evening! 🌙",
+    "greeting_night": "Good night! 🌃"
+  }
+}

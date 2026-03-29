@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { Sparkles, RefreshCw, X, Settings } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { useTheme } from "../../hooks/useTheme";
 import { useSettingsStore } from "../../store/useSettingsStore";
 import { useDataStore } from "../../store/useDataStore";
@@ -46,20 +48,19 @@ const BriefingSkeleton = () => (
 
 const BriefingWidget = () => {
 	const { isDark, cardCls, muted, hoverCls } = useTheme();
+	const { t, i18n } = useTranslation();
 	const tone = useSettingsStore((s) => s.tone);
 	const bLen = useSettingsStore((s) => s.bLen) || "medium";
 	const setBLen = useSettingsStore((s) => s.setBLen);
 	const activeWidgetIds = useSettingsStore((s) => s.activeWidgetIds) || [];
 	const priorityOrder = useSettingsStore((s) => s.priorityOrder) || [];
 
-	// 데이터 스토어에서 컨텍스트 수집
 	const weather = useDataStore((s) => s.weather);
 	const stocks = useDataStore((s) => s.stocks);
 	const trends = useDataStore((s) => s.trends);
 	const calEvents = useDataStore((s) => s.calEvents);
 	const todos = useTodoStore((s) => s.todos);
 
-	// 전날 메모 가져오기
 	const getDiary = useDiaryStore((s) => s.getDiary);
 	const yesterdayMemo = useMemo(() => {
 		const yesterday = new Date();
@@ -68,21 +69,26 @@ const BriefingWidget = () => {
 		return getDiary(dateStr)?.memo || "";
 	}, [getDiary]);
 
-	// 상태 관리
-	const [detailedBriefing, setDetailedBriefing] = useState(null); // { summary, detail }
+	// Store briefings for all lengths: { short: {...}, medium: {...}, long: {...} }
+	const [briefingVersions, setBriefingVersions] = useState({
+		short: null,
+		medium: null,
+		long: null,
+	});
 	const [isLoading, setIsLoading] = useState(false);
 	const [isExpanded, setIsExpanded] = useState(false);
 	const [lastGenerated, setLastGenerated] = useState(null);
 	const [showLengthSettings, setShowLengthSettings] = useState(false);
 
-	// Length options (REQ-WS-006)
 	const lengthOptions = [
-		{ value: "short", label: "간략 (1줄)", lines: 1 },
-		{ value: "medium", label: "기본 (3줄)", lines: 3 },
-		{ value: "long", label: "상세 (5줄)", lines: 5 },
+		{ value: "short", label: t("briefing.length_short"), lines: 1 },
+		{ value: "medium", label: t("briefing.length_medium"), lines: 3 },
+		{ value: "long", label: t("briefing.length_long"), lines: 5 },
 	];
 
-	// 스크롤 잠금 및 Layout Shift 방지
+	// Get current line limit based on bLen
+	const currentLineLimit = lengthOptions.find(opt => opt.value === bLen)?.lines || 3;
+
 	useEffect(() => {
 		if (isExpanded) {
 			const scrollbarWidth =
@@ -96,8 +102,8 @@ const BriefingWidget = () => {
 		};
 	}, [isExpanded]);
 
-	// AI 상세 브리핑 생성
-	const generateNewBriefing = async () => {
+	// Generate briefings for ALL lengths (short, medium, long) in parallel
+	const generateAllBriefings = async () => {
 		setIsLoading(true);
 		try {
 			const context = {
@@ -109,16 +115,20 @@ const BriefingWidget = () => {
 				activeWidgetIds,
 				yesterdayMemo,
 			};
-			const result = await generateDetailedBriefing({ 
-				context, 
-				tone, 
-				length: bLen,
-				priorityOrder,  // REQ-US-006: Pass priority order to AI
+
+			// Generate all three versions in parallel
+			const [shortResult, mediumResult, longResult] = await Promise.all([
+				generateDetailedBriefing({ context, tone, length: "short", priorityOrder }),
+				generateDetailedBriefing({ context, tone, length: "medium", priorityOrder }),
+				generateDetailedBriefing({ context, tone, length: "long", priorityOrder }),
+			]);
+
+			setBriefingVersions({
+				short: shortResult,
+				medium: mediumResult,
+				long: longResult,
 			});
-			if (result) {
-				setDetailedBriefing(result);
-				setLastGenerated(new Date());
-			}
+			setLastGenerated(new Date());
 		} catch (e) {
 			console.warn("Briefing generation failed:", e?.message);
 		} finally {
@@ -126,74 +136,79 @@ const BriefingWidget = () => {
 		}
 	};
 
-	// 초기 로드 시 브리핑 생성 (하이브리드: 최초 1회)
-	useEffect(() => {
-		if (!detailedBriefing && !isLoading) {
-			generateNewBriefing();
-		}
-	}, [tone, bLen]);
+	// Check if any briefing version exists
+	const hasBriefings = briefingVersions.short || briefingVersions.medium || briefingVersions.long;
 
-	// 폴백: AI 생성 실패 시 mock 데이터 사용
+	useEffect(() => {
+		if (!hasBriefings && !isLoading) {
+			generateAllBriefings();
+		}
+	}, [tone]);
+
+	// Get the current briefing based on selected length
+	const currentBriefing = briefingVersions[bLen];
+
 	const displayBriefing = useMemo(() => {
-		if (detailedBriefing) {
+		if (currentBriefing) {
 			return {
-				summary: detailedBriefing.summary || "오늘의 AI 브리핑",
-				detail: detailedBriefing.detail || "",
+				summary: currentBriefing.summary || t("briefing.today_briefing"),
+				detail: currentBriefing.detail || "",
 			};
 		}
 		return mockBriefings[tone] || mockBriefings.friendly;
-	}, [detailedBriefing, tone]);
+	}, [currentBriefing, tone, t]);
 
-	// 요약 텍스트 줄 분리
-	const summaryLines = (displayBriefing.summary || "")
-		.split("\n")
-		.map((line) => line.trim())
-		.filter(Boolean);
+	// Split summary into sentences (by . ! ?) for line limiting
+	const splitIntoSentences = (text) => {
+		if (!text) return [];
+		// Split by sentence endings, keeping the punctuation
+		return text
+			.split(/(?<=[.!?])\s+/)
+			.map((s) => s.trim())
+			.filter(Boolean);
+	};
 
-	// 상세 텍스트 줄 분리
+	// All sentences from summary
+	const allSentences = splitIntoSentences(displayBriefing.summary);
+	
+	// Limit sentences for widget card based on selected length (1, 3, or 5)
+	const summaryLines = allSentences.slice(0, currentLineLimit);
+
 	const detailLines = (displayBriefing.detail || "")
 		.split("\n")
 		.map((line) => line.trim())
 		.filter(Boolean);
 
-	// 시간대별 인사말
 	const greeting = useMemo(() => getTimeGreeting(), []);
 
-	// 새로고침 버튼 클릭 핸들러
 	const handleRefresh = (e) => {
 		e.stopPropagation();
-		generateNewBriefing();
+		generateAllBriefings();
 	};
 
-	// 위젯 클릭 핸들러
 	const handleWidgetClick = () => {
 		if (!isLoading) {
 			setIsExpanded(true);
 		}
 	};
 
-	// 상세 창 닫기
 	const handleClose = () => {
 		setIsExpanded(false);
 	};
 
-	// Gear icon click handler
 	const handleGearClick = (e) => {
 		e.stopPropagation();
 		setShowLengthSettings(!showLengthSettings);
 	};
 
-	// Length change handler
 	const handleLengthChange = (newLength) => {
 		setBLen(newLength);
 		setShowLengthSettings(false);
-		// Regenerate briefing with new length
-		setTimeout(generateNewBriefing, 100);
+		// No need to regenerate - we already have all versions prepared
 	};
 
 	return (
 		<>
-			{/* 위젯 카드 - 클릭 시 상세 창 열림 */}
 			<div
 				onClick={handleWidgetClick}
 				className={`h-full rounded-2xl border p-5 shadow-sm transition-colors duration-300 cursor-pointer hover:shadow-md ${cardCls}`}
@@ -201,22 +216,20 @@ const BriefingWidget = () => {
 				<div className="flex items-center justify-between mb-4">
 					<div className="flex items-center gap-2">
 						<Sparkles size={18} className="text-blue-500" />
-						<h2 className="font-bold text-sm">AI 브리핑</h2>
+						<h2 className="font-bold text-sm">{t("briefing.title")}</h2>
 					</div>
 					<div className="flex items-center gap-1">
-						{/* Gear Icon for Length Settings (REQ-WS-006) */}
 						<div className="relative">
 							<button
 								onClick={handleGearClick}
 								className={`p-1.5 rounded-full transition-colors ${
 									isDark ? "hover:bg-morning-dark-hover" : "hover:bg-morning-light-hover/30"
 								}`}
-								title="브리핑 길이 설정"
+								title={t("briefing.length_settings")}
 							>
 								<Settings size={14} />
 							</button>
 							
-							{/* Length Settings Dropdown */}
 							<AnimatePresence>
 								{showLengthSettings && (
 									<motion.div
@@ -256,7 +269,7 @@ const BriefingWidget = () => {
 							className={`p-1.5 rounded-full transition-colors ${
 								isDark ? "hover:bg-morning-dark-hover" : "hover:bg-morning-light-hover/30"
 							} ${isLoading ? "opacity-50" : ""}`}
-							title="브리핑 새로고침"
+							title={t("briefing.refresh")}
 						>
 							<RefreshCw size={14} className={isLoading ? "animate-spin" : ""} />
 						</button>
@@ -264,13 +277,13 @@ const BriefingWidget = () => {
 				</div>
 
 				<p className={`text-xs uppercase tracking-widest mb-3 ${muted}`}>
-					Daily Briefing
+					{t("briefing.subtitle")}
 				</p>
 
-				<p className="text-sm font-medium mb-3">오늘의 AI 브리핑</p>
+				<p className="text-sm font-medium mb-3">{t("briefing.today_briefing")}</p>
 
 				<div className="space-y-2">
-					{isLoading && !detailedBriefing ? (
+					{isLoading && !hasBriefings ? (
 						<div className="space-y-2">
 							<SkeletonLine width="90%" />
 							<SkeletonLine width="100%" />
@@ -285,165 +298,158 @@ const BriefingWidget = () => {
 					)}
 				</div>
 
-				{/* 전날 메모 반영 표시 */}
 				{yesterdayMemo && (
 					<p className={`mt-3 text-[10px] ${muted}`}>
-						✨ 어제 메모가 브리핑에 반영되었습니다
+						{t("briefing.yesterday_memo_applied")}
 					</p>
 				)}
 
-				{/* 클릭 안내 */}
 				<p className={`mt-4 text-[10px] ${muted} text-center`}>
-					클릭하여 상세 브리핑 확인
+					{t("briefing.click_for_detail")}
 				</p>
 			</div>
 
-			{/* Close length settings when clicking outside */}
-			{showLengthSettings && (
+			{showLengthSettings && createPortal(
 				<div 
-					className="fixed inset-0 z-40" 
+					className="fixed inset-0 z-[9998]" 
 					onClick={() => setShowLengthSettings(false)}
-				/>
+				/>,
+				document.body
 			)}
 
-			{/* 상세 브리핑 모달 */}
-			<AnimatePresence>
-				{isExpanded && (
-					<>
-						{/* 배경 오버레이 */}
-						<motion.div
-							className="fixed inset-0 z-[60] bg-black/50 backdrop-blur-md"
-							onClick={handleClose}
-							initial={{ opacity: 0 }}
-							animate={{ opacity: 1 }}
-							exit={{ opacity: 0 }}
-							transition={{ duration: 0.2 }}
-						/>
+			{createPortal(
+				<AnimatePresence>
+					{isExpanded && (
+						<>
+							<motion.div
+								className="fixed inset-0 z-[9999] bg-black/50 backdrop-blur-md"
+								onClick={handleClose}
+								initial={{ opacity: 0 }}
+								animate={{ opacity: 1 }}
+								exit={{ opacity: 0 }}
+								transition={{ duration: 0.2 }}
+							/>
 
-						{/* 상세 창 본체 */}
-						<motion.div
-							className={`fixed top-1/2 left-1/2 z-[61] w-full max-w-2xl max-h-[80vh] rounded-2xl border shadow-2xl flex flex-col overflow-hidden ${
-								isDark
-									? "bg-morning-dark-card border-morning-dark-hover text-morning-dark-text"
-									: "bg-morning-light-card border-morning-light-hover/30 text-morning-light-text"
-							}`}
-							style={{ x: "-50%", y: "-50%" }}
-							initial={{ opacity: 0, scale: 0.5 }}
-							animate={{ opacity: 1, scale: 1 }}
-							exit={{ opacity: 0, scale: 0.5 }}
-							transition={{ type: "spring", damping: 25, stiffness: 300 }}
-							onClick={(e) => e.stopPropagation()}
-						>
-							{/* 헤더 */}
-							<div className={`flex items-center justify-between p-5 border-b ${
-								isDark ? "border-morning-dark-hover" : "border-morning-light-hover/30"
-							}`}>
-								<div className="flex items-center gap-3">
-									<Sparkles size={22} className="text-blue-500" />
-									<h3 className="font-bold text-base">상세 브리핑</h3>
-								</div>
-								<div className="flex items-center gap-2">
-									<button
-										onClick={handleRefresh}
-										disabled={isLoading}
-										className={`p-2 rounded-full transition-colors ${
-											isDark ? "hover:bg-morning-dark-hover" : "hover:bg-morning-light-hover/30"
-										} ${isLoading ? "opacity-50" : ""}`}
-										title="브리핑 새로고침"
-									>
-										<RefreshCw
-											size={16}
-											className={isLoading ? "animate-spin" : ""}
-										/>
-									</button>
-									<button
-										onClick={handleClose}
-										className={`p-2 rounded-full transition-colors ${
-											isDark ? "hover:bg-morning-dark-hover" : "hover:bg-morning-light-hover/30"
-										}`}
-									>
-										<X size={18} />
-									</button>
-								</div>
-							</div>
-
-							{/* 시간대별 인사말 */}
-							<div
-								className={`px-5 py-4 border-b ${
+							<motion.div
+								className={`fixed top-1/2 left-1/2 z-[10000] w-full max-w-2xl max-h-[80vh] rounded-2xl border shadow-2xl flex flex-col overflow-hidden ${
 									isDark
-										? "border-morning-dark-hover bg-morning-dark-cardSecondary"
-										: "border-morning-light-hover/30 bg-blue-50/30"
+										? "bg-morning-dark-card border-morning-dark-hover text-morning-dark-text"
+										: "bg-morning-light-card border-morning-light-hover/30 text-morning-light-text"
 								}`}
+								style={{ x: "-50%", y: "-50%" }}
+								initial={{ opacity: 0, scale: 0.5 }}
+								animate={{ opacity: 1, scale: 1 }}
+								exit={{ opacity: 0, scale: 0.5 }}
+								transition={{ type: "spring", damping: 25, stiffness: 300 }}
+								onClick={(e) => e.stopPropagation()}
 							>
-								<p
-									className={`text-sm leading-relaxed ${
-										isDark ? "text-blue-300" : "text-blue-700"
+								<div className={`flex items-center justify-between p-5 border-b ${
+									isDark ? "border-morning-dark-hover" : "border-morning-light-hover/30"
+								}`}>
+									<div className="flex items-center gap-3">
+										<Sparkles size={22} className="text-blue-500" />
+										<h3 className="font-bold text-base">{t("briefing.detailed_briefing")}</h3>
+									</div>
+									<div className="flex items-center gap-2">
+										<button
+											onClick={handleRefresh}
+											disabled={isLoading}
+											className={`p-2 rounded-full transition-colors ${
+												isDark ? "hover:bg-morning-dark-hover" : "hover:bg-morning-light-hover/30"
+											} ${isLoading ? "opacity-50" : ""}`}
+											title={t("briefing.refresh")}
+										>
+											<RefreshCw
+												size={16}
+												className={isLoading ? "animate-spin" : ""}
+											/>
+										</button>
+										<button
+											onClick={handleClose}
+											className={`p-2 rounded-full transition-colors ${
+												isDark ? "hover:bg-morning-dark-hover" : "hover:bg-morning-light-hover/30"
+											}`}
+										>
+											<X size={18} />
+										</button>
+									</div>
+								</div>
+
+								<div
+									className={`px-5 py-4 border-b ${
+										isDark
+											? "border-morning-dark-hover bg-morning-dark-cardSecondary"
+											: "border-morning-light-hover/30 bg-blue-50/30"
 									}`}
 								>
-									{greeting}
-								</p>
-							</div>
-
-							{/* 상세 브리핑 콘텐츠 */}
-							<div className="flex-1 overflow-y-auto p-5 space-y-4">
-								<AnimatePresence mode="wait">
-									{isLoading ? (
-										<BriefingSkeleton key="skeleton" />
-									) : (
-										<motion.div
-											key="content"
-											className="space-y-3"
-											initial={{ opacity: 0 }}
-											animate={{ opacity: 1 }}
-											exit={{ opacity: 0 }}
-											transition={{ duration: 0.3 }}
-										>
-											{detailLines.length > 0 ? (
-												detailLines.map((line, idx) => (
-													<p
-														key={idx}
-														className={`text-sm leading-relaxed ${muted}`}
-													>
-														{line}
-													</p>
-												))
-											) : (
-												<p className={`text-sm ${muted}`}>
-													상세 브리핑을 불러오는 중입니다...
-												</p>
-											)}
-										</motion.div>
-									)}
-								</AnimatePresence>
-
-								{/* 전날 메모 반영 표시 */}
-								{yesterdayMemo && (
-									<div
-										className={`mt-4 p-3 rounded-lg ${
-											isDark ? "bg-morning-dark-cardSecondary" : "bg-morning-light-hover/10"
+									<p
+										className={`text-sm leading-relaxed ${
+											isDark ? "text-blue-300" : "text-blue-700"
 										}`}
 									>
-										<p className={`text-xs ${muted}`}>
-											✨ 어제 메모가 브리핑에 반영되었습니다
-										</p>
-									</div>
-								)}
-
-								{/* 마지막 생성 시간 */}
-								{lastGenerated && (
-									<p className={`text-[10px] ${muted} text-right`}>
-										마지막 업데이트:{" "}
-										{lastGenerated.toLocaleTimeString("ko-KR", {
-											hour: "2-digit",
-											minute: "2-digit",
-										})}
+										{greeting}
 									</p>
-								)}
-							</div>
-						</motion.div>
-					</>
-				)}
-			</AnimatePresence>
+								</div>
+
+								<div className="flex-1 overflow-y-auto p-5 space-y-4">
+									<AnimatePresence mode="wait">
+										{isLoading ? (
+											<BriefingSkeleton key="skeleton" />
+										) : (
+											<motion.div
+												key="content"
+												className="space-y-3"
+												initial={{ opacity: 0 }}
+												animate={{ opacity: 1 }}
+												exit={{ opacity: 0 }}
+												transition={{ duration: 0.3 }}
+											>
+												{detailLines.length > 0 ? (
+													detailLines.map((line, idx) => (
+														<p
+															key={idx}
+															className={`text-sm leading-relaxed ${muted}`}
+														>
+															{line}
+														</p>
+													))
+												) : (
+													<p className={`text-sm ${muted}`}>
+														{t("briefing.loading_detail")}
+													</p>
+												)}
+											</motion.div>
+										)}
+									</AnimatePresence>
+
+									{yesterdayMemo && (
+										<div
+											className={`mt-4 p-3 rounded-lg ${
+												isDark ? "bg-morning-dark-cardSecondary" : "bg-morning-light-hover/10"
+											}`}
+										>
+											<p className={`text-xs ${muted}`}>
+												{t("briefing.yesterday_memo_applied")}
+											</p>
+										</div>
+									)}
+
+									{lastGenerated && (
+										<p className={`text-[10px] ${muted} text-right`}>
+											{t("briefing.last_updated")}:{" "}
+											{lastGenerated.toLocaleTimeString(i18n.language === "ko" ? "ko-KR" : "en-US", {
+												hour: "2-digit",
+												minute: "2-digit",
+											})}
+										</p>
+									)}
+								</div>
+							</motion.div>
+						</>
+					)}
+				</AnimatePresence>,
+				document.body
+			)}
 		</>
 	);
 };

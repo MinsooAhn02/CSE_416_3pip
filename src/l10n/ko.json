@@ -1,0 +1,187 @@
+{
+  "common": {
+    "save": "저장",
+    "cancel": "취소",
+    "close": "닫기",
+    "delete": "삭제",
+    "edit": "편집",
+    "add": "추가",
+    "search": "검색",
+    "loading": "로딩 중...",
+    "error": "오류",
+    "success": "성공",
+    "confirm": "확인",
+    "yes": "예",
+    "no": "아니오",
+    "more": "더 보기",
+    "show_more": "{{count}}건 더 보기",
+    "just_now": "방금 갱신",
+    "minutes_ago": "{{count}}분 전",
+    "before_refresh": "갱신 전"
+  },
+  "nav": {
+    "search_placeholder": "검색하거나 AI에게 물어보세요...",
+    "theme_toggle": "테마 전환",
+    "diary_list": "일기 목록 보기",
+    "quicklinks": "즐겨찾기",
+    "edit_quicklinks": "즐겨찾기 편집",
+    "language": "언어",
+    "add_new_link": "새 링크 추가",
+    "link_name": "이름 (예: 깃허브)",
+    "link_url": "URL (예: github.com)",
+    "link_icon": "아이콘 (예: GH)"
+  },
+  "briefing": {
+    "title": "AI 브리핑",
+    "subtitle": "Daily Briefing",
+    "today_briefing": "오늘의 AI 브리핑",
+    "detailed_briefing": "상세 브리핑",
+    "refresh": "브리핑 새로고침",
+    "click_for_detail": "클릭하여 상세 브리핑 확인",
+    "yesterday_memo_applied": "✨ 어제 메모가 브리핑에 반영되었습니다",
+    "last_updated": "마지막 업데이트",
+    "length_settings": "브리핑 길이 설정",
+    "length_short": "간략 (1줄)",
+    "length_medium": "기본 (3줄)",
+    "length_long": "상세 (5줄)",
+    "loading_detail": "상세 브리핑을 불러오는 중입니다..."
+  },
+  "calendar": {
+    "title": "캘린더",
+    "date_details": "날짜 상세",
+    "cycle_view": "뷰 전환",
+    "days": ["일", "월", "화", "수", "목", "금", "토"],
+    "days_full": ["일요일", "월요일", "화요일", "수요일", "목요일", "금요일", "토요일"]
+  },
+  "events": {
+    "title": "일정",
+    "no_events": "이 날짜에 일정이 없습니다",
+    "add_event": "일정 추가",
+    "edit_event": "일정 편집",
+    "delete_event": "일정 삭제",
+    "event_title": "일정 제목",
+    "event_time": "시간",
+    "event_description": "설명"
+  },
+  "tasks": {
+    "title": "할 일",
+    "no_tasks": "이 날짜에 할 일이 없습니다",
+    "add_task": "할 일 추가",
+    "edit_task": "할 일 편집",
+    "delete_task": "할 일 삭제",
+    "task_title": "할 일 제목",
+    "mark_complete": "완료로 표시",
+    "mark_incomplete": "미완료로 표시"
+  },
+  "diary": {
+    "title": "일기",
+    "card_title": "오늘의 이야기",
+    "question": "오늘 가장 기분 좋았던 순간은 언제인가요?",
+    "placeholder": "오늘의 이야기를 적어보세요...",
+    "no_entry": "이 날짜에 일기가 없습니다",
+    "write_diary": "일기 작성",
+    "edit_diary": "일기 편집",
+    "diary_list": "일기 목록",
+    "memo": "메모",
+    "pin_required": "PIN 필요",
+    "enter_pin": "일기를 보려면 PIN을 입력하세요"
+  },
+  "widgets": {
+    "weather": {
+      "title": "현재 날씨",
+      "feels_like": "체감온도",
+      "humidity": "습도",
+      "wind": "바람",
+      "precipitation": "강수",
+      "air_quality": "대기질",
+      "loading": "날씨 정보를 불러오는 중...",
+      "no_data": "표시할 날씨 정보가 없습니다."
+    },
+    "stocks": {
+      "title": "주식/환율",
+      "change": "변동",
+      "volume": "거래량",
+      "symbol_settings": "심볼 설정",
+      "select_symbols": "표시 심볼 선택 (최대 4개)",
+      "custom_input": "직접 입력 (예: AAPL)",
+      "loading": "주식/환율 데이터를 불러오는 중...",
+      "no_data": "표시할 주식/환율 데이터가 없습니다."
+    },
+    "trends": {
+      "title": "실시간 트렌드",
+      "trending_now": "지금 인기",
+      "ai_summary": "AI 요약",
+      "hashtags": "해시태그",
+      "sources": "출처",
+      "loading": "트렌드 데이터를 불러오는 중...",
+      "no_data": "표시할 트렌드가 없습니다."
+    },
+    "news": {
+      "title": "뉴스",
+      "ai_summary": "AI 요약",
+      "news_list": "뉴스 목록",
+      "read_more": "더 보기",
+      "loading": "뉴스를 불러오는 중...",
+      "no_data": "표시할 뉴스가 없습니다."
+    },
+    "health": {
+      "title": "건강 (Google Fit)",
+      "steps": "걸음",
+      "sleep": "수면",
+      "water": "물",
+      "cups": "잔",
+      "google_fit_notice": "⚠️ Google Fit 연동 시 실제 데이터로 대체됩니다",
+      "loading": "건강 데이터 로딩 중..."
+    },
+    "smart": {
+      "title": "스마트 위젯",
+      "add_smart_widget": "스마트 위젯 추가",
+      "enter_keyword": "키워드 입력..."
+    }
+  },
+  "settings": {
+    "title": "설정",
+    "general": "일반",
+    "appearance": "외관",
+    "theme": "테마",
+    "theme_light": "라이트",
+    "theme_dark": "다크",
+    "language": "언어",
+    "language_en": "영어",
+    "language_ko": "한국어",
+    "clock_style": "시계 스타일",
+    "clock_digital": "디지털",
+    "clock_analog": "아날로그",
+    "clock_date": "날짜 정보",
+    "background": "배경 이미지",
+    "tone": "AI 어조",
+    "tone_friendly": "친근함",
+    "tone_formal": "격식",
+    "tone_humorous": "유머러스",
+    "notifications": "알림",
+    "privacy": "개인정보",
+    "pin_protection": "PIN 보호",
+    "set_pin": "PIN 설정",
+    "change_pin": "PIN 변경",
+    "logout": "로그아웃"
+  },
+  "auth": {
+    "login": "로그인",
+    "logout": "로그아웃",
+    "login_with_google": "Google로 로그인",
+    "welcome": "환영합니다",
+    "goodbye": "안녕히 가세요"
+  },
+  "errors": {
+    "network_error": "네트워크 오류입니다. 다시 시도해주세요.",
+    "auth_error": "인증에 실패했습니다.",
+    "load_error": "데이터를 불러오지 못했습니다.",
+    "save_error": "데이터를 저장하지 못했습니다."
+  },
+  "time": {
+    "greeting_morning": "좋은 아침이에요! ☀️",
+    "greeting_afternoon": "좋은 오후예요! 🌤️",
+    "greeting_evening": "좋은 저녁이에요! 🌙",
+    "greeting_night": "좋은 밤 되세요! 🌃"
+  }
+}

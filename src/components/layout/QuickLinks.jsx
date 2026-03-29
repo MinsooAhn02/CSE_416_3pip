@@ -1,11 +1,13 @@
 import { useState, useRef, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { Globe, MoreHorizontal, X, Plus, Trash2 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { useTheme } from "../../hooks/useTheme";
 import { useQuickLinksStore } from "../../store/useQuickLinksStore";
 
 const QuickLinks = () => {
 	const { isDark, cardCls, inputCls } = useTheme();
+	const { t } = useTranslation();
 	const { links, showEditor, setShowEditor, addLink, removeLink, updateLink } =
 		useQuickLinksStore();
 
@@ -85,7 +87,7 @@ const QuickLinks = () => {
 						setShowEditor(!showEditor);
 					}}
 					className={btnCls}
-					title="즐겨찾기 편집"
+					title={t("nav.edit_quicklinks")}
 				>
 					<MoreHorizontal size={16} className="opacity-60" />
 				</button>
@@ -107,7 +109,7 @@ const QuickLinks = () => {
 			</div>
 
 			{/* 메인 지구본 아이콘 (항상 표시) */}
-			<button className={btnCls} title="즐겨찾기">
+			<button className={btnCls} title={t("nav.quicklinks")}>
 				<Globe size={18} className="opacity-60" />
 			</button>
 
@@ -126,7 +128,7 @@ const QuickLinks = () => {
 					}}
 				>
 					<div className="flex items-center justify-between mb-3 ">
-						<h3 className="text-sm font-bold">즐겨찾기 편집</h3>
+						<h3 className="text-sm font-bold">{t("nav.edit_quicklinks")}</h3>
 						<button onClick={() => setShowEditor(false)}>
 							<X size={16} className="opacity-60 hover:opacity-100" />
 						</button>
@@ -163,20 +165,20 @@ const QuickLinks = () => {
 
 					{/* Add new link */}
 					<div className={`border-t pt-3 ${isDark ? "border-[#444444]" : "border-gray-200"}`}>
-						<p className="text-xs font-medium mb-2 opacity-70">새 링크 추가</p>
+						<p className="text-xs font-medium mb-2 opacity-70">{t("nav.add_new_link")}</p>
 						<div className="space-y-2">
 							<input
 								type="text"
 								value={newName}
 								onChange={(e) => setNewName(e.target.value)}
-								placeholder="이름 (예: 깃허브)"
+								placeholder={t("nav.link_name")}
 								className={`w-full rounded-lg px-3 py-1.5 text-xs outline-none border focus:border-blue-400 ${inputCls}`}
 							/>
 							<input
 								type="text"
 								value={newUrl}
 								onChange={(e) => setNewUrl(e.target.value)}
-								placeholder="URL (예: github.com)"
+								placeholder={t("nav.link_url")}
 								className={`w-full rounded-lg px-3 py-1.5 text-xs outline-none border focus:border-blue-400 ${inputCls}`}
 							/>
 							<div className="flex gap-2 items-center h-8">
@@ -184,7 +186,7 @@ const QuickLinks = () => {
 									type="text"
 									value={newIcon}
 									onChange={(e) => setNewIcon(e.target.value)}
-									placeholder="아이콘 (예: GH)"
+									placeholder={t("nav.link_icon")}
 									className={`flex-1 h-8 w-4 rounded-lg px-3 py-0 text-xs outline-none border focus:border-blue-400 ${inputCls}`}
 								/>
 								<input
@@ -197,7 +199,7 @@ const QuickLinks = () => {
 									onClick={handleAdd}
 									className="h-8 bg-blue-500 hover:bg-blue-400 text-white px-3 py-0 rounded-lg text-xs font-bold flex items-center justify-center gap-1"
 								>
-									<Plus size={12} /> 추가
+									<Plus size={12} /> {t("common.add")}
 								</button>
 							</div>
 						</div>

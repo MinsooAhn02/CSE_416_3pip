@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
-import { User, Moon, Sun, Search, BookOpen } from "lucide-react";
+import { User, Moon, Sun, Search, BookOpen, Languages } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { useTheme } from "../../hooks/useTheme";
 import { useSettingsStore } from "../../store/useSettingsStore";
 import { useAuthStore } from "../../store/useAuthStore";
@@ -75,6 +76,7 @@ const AnalogClock = ({ time, isDark }) => {
 
 const TopNav = () => {
 	const { isDark, inputCls } = useTheme();
+	const { t, i18n } = useTranslation();
 	const setTheme = useSettingsStore((s) => s.setTheme);
 	const clockStyle = useSettingsStore((s) => s.clockStyle);
 	const is12Hour = useSettingsStore((s) => s.is12Hour);
@@ -83,6 +85,13 @@ const TopNav = () => {
 	const [currentTime, setCurrentTime] = useState(new Date());
 	const [searchQuery, setSearchQuery] = useState("");
 	const [showDiaryList, setShowDiaryList] = useState(false);
+
+	// Language toggle handler
+	const handleLanguageToggle = () => {
+		const newLang = i18n.language === 'ko' ? 'en' : 'ko';
+		i18n.changeLanguage(newLang);
+		localStorage.setItem('language', newLang);
+	};
 
 	useEffect(() => {
 		const t = setInterval(() => setCurrentTime(new Date()), 1000);
@@ -162,7 +171,7 @@ const TopNav = () => {
 						type="text"
 						value={searchQuery}
 						onChange={(e) => setSearchQuery(e.target.value)}
-						placeholder="검색하거나 AI에게 물어보세요..."
+						placeholder={t("nav.search_placeholder")}
 						className={`w-full h-14 backdrop-blur-xl rounded-full pl-16 pr-12 text-base outline-none focus:ring-4 focus:ring-blue-500/20 transition-all shadow-lg border ${inputCls}`}
 					/>
 				</form>
@@ -178,10 +187,27 @@ const TopNav = () => {
 							? "bg-[#2a2a2a] hover:bg-[#353535] border-[#3a3a3a]"
 							: "bg-white/50 hover:bg-white/80 border-gray-200"
 					}`}
-					title="View Diary List"
+					title={t("nav.diary_list")}
 				>
 					<BookOpen size={18} className="text-blue-500" />
 				</button>
+
+				{/* Language Toggle Button */}
+				<button
+					onClick={handleLanguageToggle}
+					className={`w-10 h-10 rounded-full flex items-center justify-center border transition-all relative ${
+						isDark
+							? "bg-[#2a2a2a] hover:bg-[#353535] border-[#3a3a3a]"
+							: "bg-white/50 hover:bg-white/80 border-gray-200"
+					}`}
+					title={t("nav.language")}
+				>
+					<Languages size={18} className="text-green-500" />
+					<span className="absolute -bottom-0.5 -right-0.5 text-[8px] font-bold bg-green-500 text-white px-1 rounded">
+						{i18n.language?.toUpperCase()}
+					</span>
+				</button>
+
 				<button
 					onClick={() => setTheme(isDark ? "light" : "dark")}
 					className={`w-10 h-10 rounded-full flex items-center justify-center border transition-all ${
@@ -189,6 +215,7 @@ const TopNav = () => {
 							? "bg-[#2a2a2a] hover:bg-[#353535] border-[#3a3a3a]"
 							: "bg-white/50 hover:bg-white/80 border-gray-200"
 					}`}
+					title={t("nav.theme_toggle")}
 				>
 					{isDark ? <Moon size={18} /> : <Sun size={18} />}
 				</button>

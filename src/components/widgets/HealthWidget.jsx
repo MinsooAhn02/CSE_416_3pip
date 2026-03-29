@@ -1,18 +1,20 @@
 import { Activity } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { useTheme } from "../../hooks/useTheme";
 import { useDataStore } from "../../store/useDataStore";
 import WidgetCard from "../common/WidgetCard";
 
 const HealthWidget = () => {
 	const { isDark, muted } = useTheme();
+	const { t } = useTranslation();
 	const healthData = useDataStore((s) => s.healthData);
 
 	return (
-		<WidgetCard title="건강 (Google Fit)" icon={Activity} widgetId="health">
+		<WidgetCard title={t("widgets.health.title")} icon={Activity} widgetId="health">
 			{healthData ? (
 				<div className="space-y-3">
 					<div className="flex justify-between items-center">
-						<span className="text-xs">🚶 걸음</span>
+						<span className="text-xs">🚶 {t("widgets.health.steps")}</span>
 						<span className="text-xs font-bold">
 							{healthData.steps.toLocaleString()} /{" "}
 							{healthData.stepsGoal.toLocaleString()}
@@ -29,7 +31,7 @@ const HealthWidget = () => {
 						/>
 					</div>
 					<div className="flex justify-between items-center">
-						<span className="text-xs">😴 수면</span>
+						<span className="text-xs">😴 {t("widgets.health.sleep")}</span>
 						<span className="text-xs font-bold">
 							{healthData.sleep}h / {healthData.sleepGoal}h
 						</span>
@@ -63,15 +65,15 @@ const HealthWidget = () => {
 							<p className="text-lg font-bold">
 								💧 {healthData.water}/{healthData.waterGoal}
 							</p>
-							<p className={`text-[10px] ${muted}`}>잔</p>
+							<p className={`text-[10px] ${muted}`}>{t("widgets.health.cups")}</p>
 						</div>
 					</div>
 					<p className={`text-[10px] text-center mt-1 ${muted}`}>
-						⚠️ Google Fit 연동 시 실제 데이터로 대체됩니다
+						{t("widgets.health.google_fit_notice")}
 					</p>
 				</div>
 			) : (
-				<p className="text-sm opacity-50">건강 데이터 로딩 중...</p>
+				<p className="text-sm opacity-50">{t("widgets.health.loading")}</p>
 			)}
 		</WidgetCard>
 	);

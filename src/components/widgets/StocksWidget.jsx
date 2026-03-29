@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { TrendingUp, RefreshCw, Settings } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { useTheme } from "../../hooks/useTheme";
 import { useDataStore } from "../../store/useDataStore";
 import { useSettingsStore } from "../../store/useSettingsStore";
@@ -12,14 +13,9 @@ const STOCK_OPTIONS = [
 	{ id: "USDKRW", label: "USD/KRW" },
 ];
 
-const formatLastUpdated = (minutes) => {
-	if (minutes == null) return "갱신 전";
-	if (minutes <= 0) return "방금 갱신";
-	return `${minutes}분 전`;
-};
-
 const StocksWidget = () => {
 	const { isDark } = useTheme();
+	const { t } = useTranslation();
 	const [showSettings, setShowSettings] = useState(false);
 	const [customSymbol, setCustomSymbol] = useState("");
 	const stocks = useDataStore((s) => s.stocks);
@@ -30,6 +26,12 @@ const StocksWidget = () => {
 	const getLastUpdatedMinutes = useDataStore((s) => s.getLastUpdatedMinutes);
 	const stockSymbols = useSettingsStore((s) => s.stockSymbols);
 	const setStockSymbols = useSettingsStore((s) => s.setStockSymbols);
+
+	const formatLastUpdated = (minutes) => {
+		if (minutes == null) return t("common.before_refresh");
+		if (minutes <= 0) return t("common.just_now");
+		return t("common.minutes_ago", { count: minutes });
+	};
 
 	const lastUpdatedText = formatLastUpdated(getLastUpdatedMinutes("stocks"));
 	const selectedSet = useMemo(() => new Set(stockSymbols), [stockSymbols]);
@@ -62,7 +64,7 @@ const StocksWidget = () => {
 
 	return (
 		<WidgetCard
-			title="주식/환율"
+			title={t("widgets.stocks.title")}
 			icon={TrendingUp}
 			widgetId="stocks"
 			headerMeta={lastUpdatedText}
@@ -74,7 +76,7 @@ const StocksWidget = () => {
 				<button
 					onClick={() => setShowSettings((v) => !v)}
 					className={`p-1 rounded-md ${isDark ? "hover:bg-[#333333]" : "hover:bg-gray-100"}`}
-					title="심볼 설정"
+					title={t("widgets.stocks.symbol_settings")}
 				>
 					<Settings size={13} className="opacity-70" />
 				</button>
@@ -87,7 +89,7 @@ const StocksWidget = () => {
 					}`}
 				>
 					<p className="text-[11px] mb-2 opacity-70">
-						표시 심볼 선택 (최대 4개)
+						{t("widgets.stocks.select_symbols")}
 					</p>
 					<div className="grid grid-cols-2 gap-2">
 						{STOCK_OPTIONS.map((opt) => (
@@ -117,7 +119,7 @@ const StocksWidget = () => {
 									void addCustomSymbol();
 								}
 							}}
-							placeholder="직접 입력 (예: AAPL)"
+							placeholder={t("widgets.stocks.custom_input")}
 							className={`flex-grow text-xs rounded-md px-2 py-1.5 border outline-none ${
 								isDark
 									? "bg-white/5 border-white/20"
@@ -128,7 +130,7 @@ const StocksWidget = () => {
 							onClick={() => void addCustomSymbol()}
 							className="text-xs px-2 py-1.5 rounded-md border border-blue-400 text-blue-400"
 						>
-							추가
+							{t("common.add")}
 						</button>
 					</div>
 				</div>
@@ -136,11 +138,9 @@ const StocksWidget = () => {
 
 			{error && <p className="text-[11px] text-red-400 mb-2">{error}</p>}
 			{loading ? (
-				<p className="text-sm opacity-60">주식/환율 데이터를 불러오는 중...</p>
+				<p className="text-sm opacity-60">{t("widgets.stocks.loading")}</p>
 			) : stocks.length === 0 ? (
-				<p className="text-sm opacity-60">
-					표시할 주식/환율 데이터가 없습니다.
-				</p>
+				<p className="text-sm opacity-60">{t("widgets.stocks.no_data")}</p>
 			) : (
 				<div className="grid grid-cols-2 gap-2">
 					{stocks.map((s, i) => (
@@ -168,7 +168,7 @@ const StocksWidget = () => {
 
 			<details className="mt-3">
 				<summary className="text-[11px] opacity-70 cursor-pointer">
-					원본 API 데이터 (stocks)
+					Raw API Data (stocks)
 				</summary>
 				<pre
 					className={`mt-2 text-[10px] leading-relaxed p-2 rounded-lg overflow-auto max-h-48 ${

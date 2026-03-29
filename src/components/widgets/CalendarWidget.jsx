@@ -1,12 +1,11 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { Calendar, ArrowLeftRight, ChevronLeft, ChevronRight } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { useTheme } from "../../hooks/useTheme";
 import { useDiaryStore } from "../../store/useDiaryStore";
 import { useGoogleCalendarStore } from "../../store/useGoogleCalendarStore";
 import { useTodoStore } from "../../store/useTodoStore";
 import DatePanelContainer from "../layout/DatePanelContainer";
-
-const DAYS = ["일", "월", "화", "수", "목", "금", "토"];
 
 const sameDay = (a, b) =>
 	a.getFullYear() === b.getFullYear() &&
@@ -15,9 +14,12 @@ const sameDay = (a, b) =>
 
 const CalendarWidget = () => {
 	const { isDark, cardCls, muted } = useTheme();
+	const { t, i18n } = useTranslation();
 	const [calView, setCalView] = useState("month");
 	const [currentDate, setCurrentDate] = useState(new Date());
 	const [selectedDateForPanels, setSelectedDateForPanels] = useState(null);
+
+	const DAYS = t("calendar.days", { returnObjects: true });
 
 	/* ── 외부 스토어 연결 ── */
 	const getDiaryDates = useDiaryStore((s) => s.getDiaryDates);
@@ -25,12 +27,10 @@ const CalendarWidget = () => {
 	const setSelectedDate = useGoogleCalendarStore((s) => s.setSelectedDate);
 	const { events = [], tasks = [] } = useGoogleCalendarStore();
 
-	/* PHASE 13: Helper to check if date has events (all dates, not just future) */
 	const hasEventsOnDate = (dateStr) => {
 		return events?.some(e => e.date === dateStr) || false;
 	};
 
-	/* PHASE 15: Helper to check if date has INCOMPLETE tasks (green dot shows only for incomplete) */
 	const hasTasksOnDate = (dateStr) => {
 		return tasks?.some(t => t.date === dateStr && !t.completed) || false;
 	};
@@ -40,13 +40,11 @@ const CalendarWidget = () => {
 	const viewYear = currentDate.getFullYear();
 	const viewMonth = currentDate.getMonth();
 
-	/* PHASE 14: Initialize calendar with all events/tasks on mount */
 	useEffect(() => {
 		useTodoStore.getState().ensureDailyReset?.();
 		useGoogleCalendarStore.getState().fetchEventsAndTasks?.();
 	}, []);
 
-	/* PHASE 16: Cycle through calendar views on button click */
 	const handleCycleView = () => {
 		const views = ["month", "week", "day"];
 		const currentIndex = views.indexOf(calView);
@@ -54,7 +52,6 @@ const CalendarWidget = () => {
 		setCalView(views[nextIndex]);
 	};
 
-	/* Month navigation */
 	const goToPrev = () => {
 		setCurrentDate(new Date(viewYear, viewMonth - 1, 1));
 	};
@@ -62,7 +59,6 @@ const CalendarWidget = () => {
 		setCurrentDate(new Date(viewYear, viewMonth + 1, 1));
 	};
 
-	/* Month view cells */
 	const cells = useMemo(() => {
 		const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
 		const firstDayOfWeek = new Date(viewYear, viewMonth, 1).getDay();
@@ -73,7 +69,6 @@ const CalendarWidget = () => {
 		return arr;
 	}, [viewYear, viewMonth]);
 
-	/* Week view days */
 	const weekDays = useMemo(() => {
 		const start = new Date(now);
 		start.setDate(now.getDate() - now.getDay());
@@ -87,10 +82,12 @@ const CalendarWidget = () => {
 	const isCurrentMonth =
 		viewYear === now.getFullYear() && viewMonth === now.getMonth();
 
-	const monthLabel = currentDate.toLocaleDateString("ko-KR", {
+	const monthLabel = currentDate.toLocaleDateString(i18n.language === "ko" ? "ko-KR" : "en-US", {
 		year: "numeric",
 		month: "long",
 	});
+
+	const dayFullNames = t("calendar.days_full", { returnObjects: true });
 
 	return (
 		<div
@@ -100,7 +97,7 @@ const CalendarWidget = () => {
 			<div className="flex items-center justify-between mb-4">
 				<div className="flex items-center gap-2">
 					<Calendar size={18} className="text-blue-500" />
-					<h2 className="font-bold text-sm">캘린더</h2>
+					<h2 className="font-bold text-sm">{t("calendar.title")}</h2>
 				</div>
 
 				<div className="flex items-center gap-2">
@@ -125,10 +122,10 @@ const CalendarWidget = () => {
 						</>
 					)}
 
-					{/* PHASE 16: View cycle button - cycles Month -> Week -> Day -> Month */}
 					<button
 						onClick={handleCycleView}
-						className={`p-1 rounded-full transition-colors title="Cycle view (Month → Week → Day)" ${isDark ? "hover:bg-[#353535]" : "hover:bg-gray-100"}`}
+						className={`p-1 rounded-full transition-colors ${isDark ? "hover:bg-[#353535]" : "hover:bg-gray-100"}`}
+						title={t("calendar.cycle_view")}
 					>
 						<ArrowLeftRight size={18} />
 					</button>
@@ -160,7 +157,7 @@ const CalendarWidget = () => {
 								key={i}
 								onClick={() => {
 									setSelectedDateForPanels(dateStr);
-									setSelectedDate(dateStr); // Set in Google Calendar store
+									setSelectedDate(dateStr);
 								}}
 								className={`relative text-center py-2 text-sm rounded-full cursor-pointer transition-all ${
 									isToday
@@ -179,14 +176,13 @@ const CalendarWidget = () => {
 								}`}
 							>
 								{day}
-								{/* PHASE 11: Multiple indicator dots - Diary (blue), Events (orange), Tasks (green) */}
 								<div className="absolute bottom-0.5 left-1/2 -translate-x-1/2 flex gap-1">
 									{hasDiary && (
 										<span
 											className={`w-1 h-1 rounded-full ${
 												isToday ? "bg-white" : "bg-blue-500"
 											}`}
-											title="Diary"
+											title={t("diary.title")}
 										/>
 									)}
 									{hasEventsOnDate(dateStr) && (
@@ -194,7 +190,7 @@ const CalendarWidget = () => {
 											className={`w-1 h-1 rounded-full ${
 												isToday ? "bg-white" : "bg-orange-500"
 											}`}
-											title="Events"
+											title={t("events.title")}
 										/>
 									)}
 									{hasTasksOnDate(dateStr) && (
@@ -202,7 +198,7 @@ const CalendarWidget = () => {
 											className={`w-1 h-1 rounded-full ${
 												isToday ? "bg-white" : "bg-green-500"
 											}`}
-											title="Tasks"
+											title={t("tasks.title")}
 										/>
 									)}
 								</div>
@@ -239,14 +235,13 @@ const CalendarWidget = () => {
 							>
 								<p className="text-xs">{DAYS[d.getDay()]}</p>
 								<p className="text-lg font-bold">{d.getDate()}</p>
-								{/* PHASE 17: Dot indicators for Week view */}
 								<div className="absolute bottom-1 left-1/2 -translate-x-1/2 flex gap-0.5">
 									{hasDiary && (
 										<span
 											className={`w-1 h-1 rounded-full ${
 												sameDay(d, now) ? "bg-white" : "bg-blue-500"
 											}`}
-											title="Diary"
+											title={t("diary.title")}
 										/>
 									)}
 									{hasEventsOnDate(dateStr) && (
@@ -254,7 +249,7 @@ const CalendarWidget = () => {
 											className={`w-1 h-1 rounded-full ${
 												sameDay(d, now) ? "bg-white" : "bg-orange-500"
 											}`}
-											title="Events"
+											title={t("events.title")}
 										/>
 									)}
 									{hasTasksOnDate(dateStr) && (
@@ -262,7 +257,7 @@ const CalendarWidget = () => {
 											className={`w-1 h-1 rounded-full ${
 												sameDay(d, now) ? "bg-white" : "bg-green-500"
 											}`}
-											title="Tasks"
+											title={t("tasks.title")}
 										/>
 									)}
 								</div>
@@ -283,22 +278,15 @@ const CalendarWidget = () => {
 						}}
 						className="w-40 h-40 rounded-2xl bg-blue-500 text-white flex flex-col items-center justify-center shadow-lg cursor-pointer hover:bg-blue-600 transition-colors"
 					>
-						<p className="text-xs uppercase">{DAYS[now.getDay()]}요일</p>
+						<p className="text-xs uppercase">{dayFullNames[now.getDay()]}</p>
 						<p className="text-6xl font-bold">{now.getDate()}</p>
 						<p className="text-sm">
-							{now.toLocaleDateString("ko-KR", { month: "long" })}
+							{now.toLocaleDateString(i18n.language === "ko" ? "ko-KR" : "en-US", { month: "long" })}
 						</p>
 					</div>
 				</div>
 			)}
 
-			{/*
-				CRITICAL FIX: Three-panel layout (Events, Tasks, Diary)
-				- Events and Tasks are IMMEDIATELY VISIBLE (no PIN block)
-				- Diary panel has its own internal PIN protection
-				- Diary List button is in TopNav (also PIN protected)
-				- Legacy UI section completely removed
-			*/}
 			{selectedDateForPanels && (
 				<DatePanelContainer
 					selectedDate={selectedDateForPanels}

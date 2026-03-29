@@ -144,8 +144,9 @@ const DashboardLayout = () => {
 			{/* - h-[calc(100vh-2rem)]: Takes full viewport height minus padding */}
 			{/* - overflow-y-auto: Internal scroll for content exceeding viewport */}
 			{/* - custom-scrollbar: Styled scrollbar for consistency */}
+			{/* - z-10: Lower z-index so modals (z-9999+) appear above */}
 			<aside 
-				className="sticky top-4 flex flex-col gap-4 flex-shrink-0 h-[calc(100vh-2rem)] overflow-y-auto custom-scrollbar"
+				className="sticky top-4 z-10 flex flex-col gap-4 flex-shrink-0 h-[calc(100vh-2rem)] overflow-y-auto custom-scrollbar"
 				style={{ flex: "3 0 0", minWidth: "15%", maxWidth: "15%" }}
 			>
 				{/* BriefingWidget - Always visible (REQ-WS-002) */}
@@ -197,12 +198,16 @@ const DashboardLayout = () => {
 			{/* - h-[calc(100vh-2rem)]: Takes full viewport height minus padding */}
 			{/* - overflow-y-auto: Internal scroll for content exceeding viewport */}
 			{/* - custom-scrollbar: Styled scrollbar for consistency */}
+			{/* - z-10: Lower z-index so modals (z-9999+) appear above */}
 			<aside 
-				className="sticky top-4 flex flex-col gap-4 flex-shrink-0 h-[calc(100vh-2rem)] overflow-y-auto custom-scrollbar"
+				className="sticky top-4 z-10 flex flex-col gap-4 flex-shrink-0 h-[calc(100vh-2rem)] overflow-y-auto custom-scrollbar"
 				style={{ flex: "3 0 0", minWidth: "25%", maxWidth: "25%" }}
 			>
 				{/* CalendarWidget - Top (REQ-WS-001) */}
-				<div className="flex-[7] min-h-0 overflow-hidden">
+				{/* PHASE 20: Removed overflow-hidden to allow DatePanelContainer to expand naturally */}
+				{/* - min-h-0 allows flex child to shrink below content size */}
+				{/* - Parent aside handles overflow scrolling */}
+				<div className="min-h-0">
 					<CalendarWidget />
 				</div>
 			</aside>

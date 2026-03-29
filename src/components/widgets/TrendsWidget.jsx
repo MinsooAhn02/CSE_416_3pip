@@ -1,18 +1,14 @@
 import { useState } from "react";
 import { TrendingUp, ExternalLink, RefreshCw } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { useTheme } from "../../hooks/useTheme";
 import { useDataStore } from "../../store/useDataStore";
 import WidgetCard from "../common/WidgetCard";
 import NewsDetailModal from "../modals/NewsDetailModal";
 
-const formatLastUpdated = (minutes) => {
-	if (minutes == null) return "갱신 전";
-	if (minutes <= 0) return "방금 갱신";
-	return `${minutes}분 전`;
-};
-
 const TrendsWidget = () => {
 	const { isDark } = useTheme();
+	const { t } = useTranslation();
 	const trends = useDataStore((s) => s.trends);
 	const trendsAnswer = useDataStore((s) => s.trendsAnswer);
 	const trendsResults = useDataStore((s) => s.trendsResults);
@@ -20,15 +16,21 @@ const TrendsWidget = () => {
 	const error = useDataStore((s) => s.errors.trends);
 	const fetchTrends = useDataStore((s) => s.fetchTrends);
 	const getLastUpdatedMinutes = useDataStore((s) => s.getLastUpdatedMinutes);
+
+	const formatLastUpdated = (minutes) => {
+		if (minutes == null) return t("common.before_refresh");
+		if (minutes <= 0) return t("common.just_now");
+		return t("common.minutes_ago", { count: minutes });
+	};
+
 	const lastUpdatedText = formatLastUpdated(getLastUpdatedMinutes("trends"));
 
-	/* 뉴스 모달 상태 */
 	const [showNewsModal, setShowNewsModal] = useState(false);
 
 	return (
 		<>
 			<WidgetCard
-				title="실시간 트렌드"
+				title={t("widgets.trends.title")}
 				icon={TrendingUp}
 				widgetId="trends"
 				headerMeta={lastUpdatedText}
@@ -38,19 +40,17 @@ const TrendsWidget = () => {
 			>
 				{error && <p className="text-[11px] text-red-400 mb-2">{error}</p>}
 				{loading ? (
-					<p className="text-sm opacity-60">트렌드 데이터를 불러오는 중...</p>
+					<p className="text-sm opacity-60">{t("widgets.trends.loading")}</p>
 				) : trends.length === 0 ? (
-					<p className="text-sm opacity-60">표시할 트렌드가 없습니다.</p>
+					<p className="text-sm opacity-60">{t("widgets.trends.no_data")}</p>
 				) : (
 					<div className="space-y-3">
-						{/* AI 요약 */}
 						{trendsAnswer && (
 							<p className={`text-xs leading-relaxed ${isDark ? "opacity-80" : "text-slate-600"}`}>
 								{trendsAnswer}
 							</p>
 						)}
 
-						{/* 해시태그 */}
 						<div className="flex flex-wrap gap-2">
 							{trends.map((tag, i) => (
 								<span
@@ -64,11 +64,10 @@ const TrendsWidget = () => {
 							))}
 						</div>
 
-						{/* 출처 목록 — 클릭 시 뉴스 모달 열기 */}
 						{trendsResults && trendsResults.length > 0 && (
 							<div className="space-y-1.5">
 								<p className={`text-[11px] font-medium ${isDark ? "opacity-60" : "text-slate-500"}`}>
-									출처
+									{t("widgets.trends.sources")}
 								</p>
 								{trendsResults.slice(0, 3).map((r, i) => (
 									<button
@@ -91,7 +90,7 @@ const TrendsWidget = () => {
 										onClick={() => setShowNewsModal(true)}
 										className="text-[10px] text-blue-400 hover:underline mt-1"
 									>
-										+{trendsResults.length - 3}건 더 보기
+										{t("common.show_more", { count: trendsResults.length - 3 })}
 									</button>
 								)}
 							</div>
@@ -100,7 +99,6 @@ const TrendsWidget = () => {
 				)}
 			</WidgetCard>
 
-			{/* 뉴스 상세 모달 */}
 			{showNewsModal && (
 				<NewsDetailModal
 					results={trendsResults || []}
