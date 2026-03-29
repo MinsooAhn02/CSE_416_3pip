@@ -1,0 +1,336 @@
+# MorningBriefing.AI — Functional Requirements
+
+> **"Turn information into clarity, Turn your day into a story"**  
+> Version: 1.0 | Date: March 26, 2026
+
+---
+
+## Table of Contents
+
+1. [Product Overview](#1-product-overview)
+2. [Scope](#2-scope)
+3. [Functional Requirements](#3-functional-requirements)
+   - [3.1 Briefing](#31-briefing)
+   - [3.2 Journaling & Daily Question](#32-journaling--daily-question)
+   - [3.3 Calendar & Todo Management](#33-calendar--todo-management)
+   - [3.4 Widget System & Dashboard](#34-widget-system--dashboard)
+   - [3.5 User Settings & Personalization](#35-user-settings--personalization)
+   - [3.6 Data Persistence & Caching](#36-data-persistence--caching)
+4. [Use Cases](#4-use-cases)
+5. [UI Layout](#5-ui-layout)
+6. [Non-Functional Requirements](#6-non-functional-requirements)
+7. [Tech Stack](#7-tech-stack)
+
+---
+
+## 1. Product Overview
+
+**MorningBriefing.AI** is a desktop web app that consolidates the morning information-gathering routine into a single dashboard. It delivers AI-generated briefings and automates daily journal creation — with zero manual entry required.
+
+### Core Features
+
+- **Custom AI Morning Briefing** — Personalized daily summary generated from weather, financial indices, trending news, and Google Calendar events on each dashboard load. Tone (formal / casual) and length (short / medium / long) are user-configurable.
+- **Interactive Daily Journaling (DiaryCard)** — A rotating daily reflection prompt; the user's response is automatically included in that day's diary.
+- **Integrated Calendar & To-Do Management** — Synced with Google Calendar. Only user-checked items are recorded in the diary.
+- **Automated Midnight Journal Generation** — At 00:00, the system collects all day's data and generates a structured diary entry with `[Macro Events]` and `[Personal Records]` sections.
+
+### Target Users
+
+| Type | Description |
+|------|-------------|
+| **Primary** | Office workers / students who want to reduce daily information overhead |
+| **Secondary** | Users interested in passive, automated life-logging in diary format |
+
+---
+
+## 2. Scope
+
+### In Scope
+
+- Desktop web browser (Chrome 85+, Edge 85+), viewport ≥ 1200px
+- Google OAuth + Google Calendar integration (read-only sync)
+- Real-time macro data: weather, KOSPI / NASDAQ / S&P500 / USD-KRW, trending news
+- AI briefing and midnight journal synthesis via Groq LLM
+- Widget-based dashboard with drag-and-drop reordering
+- Per-user data isolation via Supabase RLS
+
+### Out of Scope
+
+- Mobile app (iOS / Android)
+- Social sharing or multi-user collaboration
+- Emotional / sentiment analysis in journal entries
+- Fitness tracker integration (Google Fit)
+- Email / push notification delivery
+- Voice input for DiaryCard
+
+---
+
+## 3. Functional Requirements
+
+### 3.1 Briefing
+
+- The system shall generate a personalized AI morning briefing on each dashboard load, combining current weather, financial indices, trending news, and the user's Google Calendar events.
+- The user can configure briefing **tone** (formal / casual) and **length** (short / medium / long) in Settings.
+- The system shall automatically display a full expanded briefing modal on the user's **first** dashboard open each calendar day after 00:00. This triggers only once per day.
+- The user can disable the automatic daily briefing modal in Settings; the BriefingWidget remains accessible at all times.
+- The system shall generate **Smart Widget** content using Groq LLM based on up to 5 user-defined keywords, refreshed on demand with a 20-minute minimum cache TTL.
+
+---
+
+### 3.2 Journaling & Daily Question
+
+- The system shall display a new rotating reflection question in the DiaryCard each day at 00:00, with no repeated question within a **30-day window**.
+- The user can type a free-form response and optional memo note in the DiaryCard; the response **auto-saves on blur**.
+- The user can view and edit the **current day's** diary entry; past entries are **read-only** after the calendar day ends.
+- The system shall trigger **Midnight Synthesis** at 00:00, collecting:
+  - Checked todos
+  - Completed calendar events
+  - Daily question response and memo
+  - Macro data snapshot (weather, stocks, news)
+- The system shall call Groq LLM to generate a structured, **factual** journal entry. Emotional or sentiment language is strictly excluded.
+- The system shall show a **journal preview modal** after generation. If dismissed without action, the entry auto-saves after 30 seconds. Only one synthesis runs per calendar day.
+
+---
+
+### 3.3 Calendar & Todo Management
+
+- The system shall sync Google Calendar events into the CalendarWidget via Google OAuth, displayed in chronological order with timezone support.
+- The user can **check off** calendar events and todos as completed; only checked items are included in the nightly journal synthesis.
+- The user can **create, edit, and delete** custom to-do items in the CalendarWidget's integrated todo section.
+
+---
+
+### 3.4 Widget System & Dashboard
+
+- The system shall render the dashboard in a **1:3:3 column ratio** (left: BriefingWidget + DiaryCard / center: scrollable Standard Widgets / right: CalendarWidget) on viewports ≥ 1200px.
+- The user can **reorder Standard Widgets** in the center column via drag-and-drop; the order is persisted to Supabase and affects AI briefing content priority.
+- The user can **toggle visibility** of any Standard Widget in Settings.
+  - Fixed Widgets (BriefingWidget, DiaryCard, CalendarWidget) are always visible and cannot be hidden or reordered.
+- The system shall display real-time data with the following cache TTLs:
+
+| Widget | Data Source | Cache TTL |
+|--------|-------------|-----------|
+| WeatherWidget | Weather API | 10 min |
+| StocksWidget | Twelve Data (KOSPI / NASDAQ / S&P500 / USD-KRW) | 5 min |
+| TrendsWidget / NewsWidget | Tavily Search | 20 min |
+
+---
+
+### 3.5 User Settings & Personalization
+
+- The user can toggle between **dark mode and light mode** from the TopNav or Settings; the selection is saved across sessions.
+- The user can choose a **clock display style**: digital (HH:MM:SS), analog, or full date-info format.
+- The user can set a **custom data priority ranking** for Standard Widgets via drag-and-drop in Settings, which controls both dashboard widget order and AI briefing content priority.
+
+---
+
+### 3.6 Data Persistence & Caching
+
+- The system shall persist all user data (settings, todos, diary entries, widget layouts) to **Supabase** with Row-Level Security enforcing per-user data isolation.
+- The system shall use a **multi-layer cache** (Supabase server-side + localStorage client-side) and fall back to mock data on API failure. The user can force-refresh any data source.
+- All third-party API keys shall be stored in **Supabase Secrets Manager only**. No keys shall be exposed in the frontend bundle or browser console.
+
+---
+
+## 4. Use Cases
+
+### UC-01: Read the Morning Briefing
+
+| | |
+|---|---|
+| **Actor** | Registered User |
+| **Priority** | Essential |
+
+**Main Flow:**
+1. User opens the MorningBriefing.AI dashboard.
+2. On first open since midnight (if modal is enabled), the system displays the full AI briefing modal (10–15 lines).
+3. User reads the briefing: weather, market data, major news, today's schedule.
+4. User closes the modal and checks the 3-line summary in BriefingWidget.
+5. User scrolls the center column for detail in WeatherWidget, StocksWidget, TrendsWidget.
+
+**Extensions:**
+- If API calls fail → cached or mock data is used; briefing generation continues with available data.
+- If auto-modal is disabled in Settings → modal does not appear; user accesses it manually via the BriefingWidget detail icon.
+
+---
+
+### UC-02: Respond to the Daily Journaling Question
+
+| | |
+|---|---|
+| **Actor** | Registered User |
+| **Priority** | Essential |
+
+**Main Flow:**
+1. User sees the DiaryCard with today's reflection question in the left column.
+2. User clicks the text field and types their answer.
+3. System auto-saves the response to Supabase on blur.
+4. User optionally adds a note in the Memo field.
+5. At 00:00, the system includes both response and memo in the `[Personal Records]` section of the generated journal.
+
+**Extensions:**
+- If Supabase write fails → system retries up to 3 times, then saves to localStorage with a non-blocking error notice.
+- If no answer is recorded before 00:00 → journal entry notes `"No daily reflection recorded."`
+
+---
+
+### UC-03: Manage Tasks and Calendar Events
+
+| | |
+|---|---|
+| **Actor** | Registered User |
+| **Priority** | Essential |
+
+**Main Flow:**
+1. User checks today's Google Calendar events in the CalendarWidget.
+2. After completing an event, user checks the checkbox next to it.
+3. User types a new item in the Todo field and presses Enter.
+4. User checks off completed todos.
+5. System stores all completion statuses in Supabase in real time. Only checked items are included in the day's journal.
+
+**Extensions:**
+- If Google Calendar API is unavailable → last cached events (up to 5-min TTL) are shown; user is warned that data may be outdated.
+- If user deselects an item before midnight → it is removed from the synthesis scope.
+
+---
+
+### UC-04: Automatic Midnight Journal Generation *(System)*
+
+| | |
+|---|---|
+| **Actor** | System (Automated Process) |
+| **Priority** | Essential |
+
+**Main Flow:**
+1. At 00:00, the system starts the Midnight Synthesis process.
+2. System collects all checked/completed calendar events from the past 24 hours.
+3. System retrieves the daily question response and memo.
+4. System takes a macro data snapshot (weather, stocks, top news).
+5. System sends a structured context payload to Groq LLM requesting a fact-based journal entry.
+6. Groq returns a journal (~300–500 words) with `[Macro Events]` and `[Personal Records]` sections.
+7. System displays a preview modal; user can review, edit, or confirm.
+8. Entry is saved to Supabase as `completed` or `user_edited`.
+
+**Extensions:**
+- If browser is closed at 00:00 → Synthesis runs on next session open; modal appears on dashboard load.
+- If Groq times out (>30s) → system retries once; if still failing, raw data is saved as a draft and user is notified.
+- If user closes modal without confirming → entry auto-saves after 30 seconds.
+
+---
+
+### UC-05: Review Past Journal Entries
+
+| | |
+|---|---|
+| **Actor** | Registered User |
+| **Priority** | Expected |
+
+**Main Flow:**
+1. User clicks the History icon on the DiaryCard.
+2. Diary Modal opens, showing the current date's entry by default.
+3. User uses the date selector to navigate to a previous date.
+4. System retrieves and displays the selected date's question, response, memo, and generated journal.
+5. Past entries are **read-only**; only the current day's entry is editable.
+
+**Extensions:**
+- If no entry exists for the selected date → modal shows `"No record found for this date."`
+- If user attempts to edit a past entry → edit controls are disabled with a tooltip explaining that past entries are locked.
+
+---
+
+## 5. UI Layout
+
+The main screen is the **Mainboard** — the single primary view. It uses a fixed TopNav and a three-column body layout at a **1:3:3 width ratio**. All widths are maintained at viewports ≥ 1200px.
+
+### TopNav Header
+
+| Zone | Content |
+|------|---------|
+| Left | User profile icon |
+| Center | Clock (digital / analog / full date — user choice) + search placeholder |
+| Right | QuickLinks (user-defined bookmarks) + dark/light theme toggle |
+
+### Left Column — Fixed Sidebar (ratio 1)
+
+- **BriefingWidget** (top): 3-line AI brief. Gear icon → tone/length settings. Detail icon → full briefing modal.
+- **DiaryCard** (bottom): Today's reflection question + text input. Memo field + history icon → Diary Modal.
+
+### Center Column — Scrollable Widget Box (ratio 3)
+
+- Standard Widgets stacked vertically, full width, one per row. Always-visible scrollbar.
+- Widgets: `WeatherWidget` `StocksWidget` `TrendsWidget` `HealthWidget` `NewsWidget` `SmartWidgetContent`
+- All reorderable via drag-and-drop.
+
+### Right Column — Fixed Sidebar (ratio 3)
+
+- **CalendarWidget**: Full-month calendar with month navigation → today's schedule list with checkboxes → integrated Todo section with add-item input.
+
+### Modals
+
+| Modal | Trigger | Notes |
+|-------|---------|-------|
+| Daily Briefing Modal | Auto on first daily open | 10–15 line AI analysis. Dismissible. |
+| Journal Preview Modal | After midnight synthesis | Shows `[Macro Events]` + `[Personal Records]`. Editable before confirm. |
+| Diary History Modal | History icon on DiaryCard | Date picker. Current day editable; past entries read-only. |
+| Settings Modal | Settings icon / TopNav | Tabs: Theme, Clock, AI Briefing, Smart Widget Keywords, Widget Visibility, Data Priority. |
+
+---
+
+## 6. Non-Functional Requirements
+
+### Performance
+
+- Dashboard full load: **< 2 seconds** on a 4G network
+- Per-widget data render: **< 500ms** after data arrives
+- AI features (briefing, journal generation): **< 10 seconds** with loading indicator
+- Drag-and-drop interactions: **60 FPS** on standard laptops
+
+### Scalability
+
+- Support **≥ 10,000 concurrent users** without degradation
+- Backend must be **stateless** to allow horizontal scaling
+
+### Availability & Reliability
+
+- System uptime: **≥ 99.5%**
+- External API failure → graceful fallback to cached or mock data (no crash)
+- Failed requests → **auto-retry up to 3 times** before fallback
+
+### Security
+
+- All client-server communication over **HTTPS**
+- Supabase RLS enforces **per-user data isolation**
+- All third-party API keys stored **server-side only** — never exposed in frontend bundle or browser console
+
+### Accessibility
+
+- **WCAG 2.1 Level AA** compliance
+- Text contrast ratio: **≥ 4.5:1**
+- Full **keyboard navigation** (Tab / Enter / Space) — no mouse required
+
+### Platform & Compatibility
+
+- Chrome 85+ and Edge 85+ (latest versions)
+- Desktop only — viewport **≥ 1200px**
+
+---
+
+## 7. Tech Stack
+
+| Layer | Technology |
+|-------|------------|
+| Frontend | React 18 + Vite |
+| Styling | Tailwind CSS |
+| State Management | Zustand |
+| Drag-and-Drop | @hello-pangea/dnd |
+| Animations | framer-motion |
+| Icons | Lucide React |
+| Backend / DB | Supabase (Auth, Database, Edge Functions) |
+| AI / LLM | Groq API |
+| Stock Data | Twelve Data API |
+| News / Trends | Tavily Search API |
+| Calendar | Google Calendar API (OAuth) |
+
+---
+
+*MorningBriefing.AI — CSE 416 Project | Team: Minsoo Ahn · Sungmin Choo · Dahyun Kwon*
