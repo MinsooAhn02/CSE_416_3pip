@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { Sparkles, RefreshCw, X, Settings } from "lucide-react";
@@ -79,6 +79,8 @@ const BriefingWidget = () => {
 	const [isExpanded, setIsExpanded] = useState(false);
 	const [lastGenerated, setLastGenerated] = useState(null);
 	const [showLengthSettings, setShowLengthSettings] = useState(false);
+	const [dropdownPos, setDropdownPos] = useState({ top: 0, right: 0 });
+	const settingsBtnRef = useRef(null);
 
 	const lengthOptions = [
 		{ value: "short", label: t("briefing.length_short"), lines: 1 },
@@ -88,6 +90,17 @@ const BriefingWidget = () => {
 
 	// Get current line limit based on bLen
 	const currentLineLimit = lengthOptions.find(opt => opt.value === bLen)?.lines || 3;
+
+	// Update dropdown position when settings button is clicked
+	useEffect(() => {
+		if (showLengthSettings && settingsBtnRef.current) {
+			const rect = settingsBtnRef.current.getBoundingClientRect();
+			setDropdownPos({
+				top: rect.bottom + 4,
+				right: window.innerWidth - rect.right,
+			});
+		}
+	}, [showLengthSettings]);
 
 	useEffect(() => {
 		if (isExpanded) {
@@ -211,7 +224,7 @@ const BriefingWidget = () => {
 		<>
 			<div
 				onClick={handleWidgetClick}
-				className={`h-full rounded-2xl border p-5 shadow-sm transition-colors duration-300 cursor-pointer hover:shadow-md ${cardCls}`}
+				className={`rounded-2xl border p-5 shadow-sm transition-colors duration-300 cursor-pointer hover:shadow-md ${cardCls}`}
 			>
 				<div className="flex items-center justify-between mb-4">
 					<div className="flex items-center gap-2">
@@ -221,6 +234,7 @@ const BriefingWidget = () => {
 					<div className="flex items-center gap-1">
 						<div className="relative">
 							<button
+								ref={settingsBtnRef}
 								onClick={handleGearClick}
 								className={`p-1.5 rounded-full transition-colors ${
 									isDark ? "hover:bg-morning-dark-hover" : "hover:bg-morning-light-hover/30"
@@ -230,17 +244,21 @@ const BriefingWidget = () => {
 								<Settings size={14} />
 							</button>
 							
-							<AnimatePresence>
-								{showLengthSettings && (
+							{showLengthSettings && createPortal(
+								<AnimatePresence>
 									<motion.div
 										initial={{ opacity: 0, y: -10 }}
 										animate={{ opacity: 1, y: 0 }}
 										exit={{ opacity: 0, y: -10 }}
-										className={`absolute right-0 top-8 z-50 rounded-lg border shadow-lg min-w-[140px] ${
+										className={`fixed rounded-lg border shadow-lg min-w-[140px] z-[9999] ${
 											isDark
 												? "bg-morning-dark-card border-morning-dark-hover"
 												: "bg-white border-morning-light-hover/30"
 										}`}
+										style={{
+											top: dropdownPos.top,
+											right: dropdownPos.right,
+										}}
 										onClick={(e) => e.stopPropagation()}
 									>
 										{lengthOptions.map((opt) => (
@@ -259,8 +277,9 @@ const BriefingWidget = () => {
 											</button>
 										))}
 									</motion.div>
-								)}
-							</AnimatePresence>
+								</AnimatePresence>,
+								document.body
+							)}
 						</div>
 						
 						<button

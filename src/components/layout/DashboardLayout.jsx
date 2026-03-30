@@ -150,11 +150,11 @@ const DashboardLayout = () => {
 				style={{ flex: "3 0 0", minWidth: "15%", maxWidth: "15%" }}
 			>
 				{/* BriefingWidget - Always visible (REQ-WS-002) */}
-				<div className="flex-[1] min-h-0">
+				<div className="flex-none">
 					<BriefingWidget />
 				</div>
 				{/* DiaryCard - Always visible (REQ-WS-002) */}
-				<div className="flex-[1] min-h-0">
+				<div className="flex-1 min-h-0">
 					<DiaryCard />
 				</div>
 			</aside>

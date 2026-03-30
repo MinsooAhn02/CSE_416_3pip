@@ -369,6 +369,14 @@ export async function generateDetailedBriefing({ tone, length, context, priority
 		priorityOrder: priorityOrder || [],
 	};
 
+	// Map length to actual line counts for summary
+	const lengthConfig = {
+		short: { summaryLines: 1, detailLines: "5~7" },
+		medium: { summaryLines: 3, detailLines: "10~12" },
+		long: { summaryLines: 5, detailLines: "15~20" },
+	};
+	const config = lengthConfig[length] || lengthConfig.medium;
+
 	const prompt = [
 		"당신은 사용자의 시간대별 대시보드 브리핑 AI입니다.",
 		`톤: ${tone}`,
@@ -382,10 +390,10 @@ export async function generateDetailedBriefing({ tone, length, context, priority
 		"",
 		"=== 작업 지시 ===",
 		"다음 JSON 형식으로 정확히 응답하세요:",
-		'{ "summary": "3줄 요약 (각 줄은 \\n으로 구분)", "detail": "10~15줄 상세 브리핑 (각 줄은 \\n으로 구분)" }',
+		`{ "summary": "${config.summaryLines}줄 요약 (각 문장은 마침표로 끝남)", "detail": "${config.detailLines}줄 상세 브리핑 (각 줄은 \\n으로 구분)" }`,
 		"",
-		"- summary: 핵심 정보를 3줄로 간결하게 요약",
-		"- detail: 날씨, 일정, 트렌드, 증시, 주요 뉴스를 자연스럽게 포함한 상세 브리핑",
+		`- summary: 핵심 정보를 정확히 ${config.summaryLines}개의 문장으로 요약 (각 문장은 마침표로 끝나는 완전한 문장)`,
+		`- detail: 날씨, 일정, 트렌드, 증시, 주요 뉴스를 자연스럽게 포함한 ${config.detailLines}줄 상세 브리핑`,
 		"- 공식적이고 정중한 어체 사용",
 		"- JSON만 반환하고 다른 텍스트는 작성하지 마세요.",
 		"",
@@ -404,7 +412,7 @@ export async function generateDetailedBriefing({ tone, length, context, priority
 		system: [
 			"당신은 개인화된 브리핑 작성기입니다.",
 			"반드시 유효한 JSON 형식으로만 응답하세요.",
-			"summary는 정확히 3줄, detail은 10~15줄로 작성하세요.",
+			`summary는 정확히 ${config.summaryLines}개의 완전한 문장, detail은 ${config.detailLines}줄로 작성하세요.`,
 			"공식적이고 정중한 한국어를 사용하세요.",
 		].join("\n"),
 	});
