@@ -1,0 +1,161 @@
+================================================================================
+Role: Senior React Developer (Zustand Expert)
+Task: useDataStore 내 데이터 Fetching 무한 로딩 방지 & 캐시 최적화
+================================================================================
+
+## 현재 상황 분석
+
+현재 useDataStore는:
+- Global 30분 접속시간 기반 캐싱: isCacheStale()로 30분 이상 지나면 모든 데이터 새로 호출
+- 타임스탬프 추적: 각 데이터별 lastFetchedAt 상태 + markFetched() 함수 보유
+- 문제: 로그인 후 fetchAll()이 모든 위젯을 동시에 loading: true로 세팅하여 무한 로딩 스피너 표시
+
+## 목표
+로그인 시 한 번의 fetchAll() 만 수행하고, 이후 자동 새로고침 없이 사용자의 위젯별 수동 새로고침 시에만 데이터 갱신
+
+================================================================================
+## Requirements
+================================================================================
+
+### 1. 접속 시 1회 fetch 메커니즘 구현
+
+현재 코드:
+```
+fetchAll: async () => {
+  const shouldForceRefresh = isCacheStale(); // 30분 이상이면 true
+  // 모든 위젯이 동시에 새로 fetch
+}
+```
+
+변경 사항:
+- isCacheStale() 로직을 제거하거나 flag로 전환
+- fetchAll()에 skipFetch (또는 useExistingCache) 옵션 추가
+  * 로그인 직후: DB에서 유효한 캐시가 있으면 loading 상태 없이 즉시 UI 표시
+  * 캐시가 없으면: loading: true 설정 후 fetch
+  * Result: 첫 접속 시에도 스피너 없이 빠른 화면 표시 가능
+
+---
+
+### 2. 위젯별 개별 새로고침 지원
+
+현재: 위젯별 새로고침 버튼이 있지만, force=true 실행 로직 명시 필요
+
+추가 구현:
+- 각 fetch 함수 (fetchWeather, fetchStocks 등) 호출 시:
+  * force=true: 캐시 무시, 즉시 API 호출
+  * force=false (기본값):
+    - 캐시가 있으면 API 호출 생략 (현재 코드는 이미 구현됨)
+    - 로딩 상태 최소화 (불필요한 loading: true 설정 방지)
+
+---
+
+### 3. 캐시 무효화 조건 명문화
+
+각 fetch 함수 시작 부분에 다음 체크 추가:
+
+```
+if (!force && 캐시가_유효하면) {
+  // ✅ 캐시된 데이터 즉시 반환
+  set({ weather: dbCached });
+  set({ loading: { ...s.loading, weather: false } }); // ← 로딩 상태 설정 없음
+  return;
+}
+```
+
+캐시 유효성 판단:
+- DB api_cache 테이블에서 fetched_at 기준
+- 30분 이내: 유효 → 사용
+- 30분 초과: 무효 → API 호출 필요
+
+---
+
+### 4. 초기 로딩 최적화 (App.jsx)
+
+```
+useEffect(() => {
+  if (!isLoggedIn) return;
+  const init = async () => {
+    await Promise.all([/*hydrate*/]);
+    
+    // ✅ 변경: fetchAll()에 캐시 우선 옵션 전달
+    await fetchAll({ useExistingCache: true });
+  };
+  init();
+}, [isLoggedIn, fetchAll]);
+```
+
+Effect:
+- 로그인 후: 캐시 있으면 0ms - 50ms 내 화면 표시
+- 캐시 없으면: 로딩 스피너 표시 후 fetch
+
+---
+
+### 5. 실제 데이터 우선 (Mock 폴백)
+
+현재 코드:
+```
+const mock = await mockFetchWeather();
+set({ weather: cached("weather", mock) }); // localStorage fallback
+```
+
+✅ 이미 올바르게 구현됨:
+- 캐시(DB) → 캐시(localStorage) → Mock 순서
+- 실제 데이터가 있으면 mock 무시
+
+================================================================================
+## 구현 체크리스트
+================================================================================
+
+□ fetchAll() 서명 변경
+  - 매개변수 추가: fetchAll(options = { useExistingCache: false })
+  
+□ 각 fetch 함수 시작 부분 개선
+  ```
+  fetchWeather: async (lat, lon, userId, force = false) => {
+    // ✅ NEW: force=false && 캐시 유효 → 즉시 반환 (loading 상태 X)
+    if (!force) {
+      const cached = await readApiCache("weather_...", userId);
+      if (cached) {
+        set({ weather: cached });
+        return; // ← loading 상태 변경 없음
+      }
+    }
+    
+    // ✅ 캐시 없으면 여기서 loading: true
+    set({ loading: { ...s.loading, weather: true } });
+    // ... fetch logic ...
+  }
+  ```
+
+□ App.jsx에서 fetchAll() 호출 최적화
+  ```
+  await fetchAll({ useExistingCache: true });
+  ```
+
+□ 옵션: 위젯별 새로고침 버튼에서 force=true 명시
+  ```
+  onRefresh={() => store.fetchWeather(lat, lon, userId, true)}
+  ```
+
+================================================================================
+## 예상 효과
+================================================================================
+
+| 상황 | 현재 | 개선 후 |
+|------|------|--------|
+| 로그인 직후 (캐시 O) | 스피너 표시 30초 | UI 즉시 표시 (0.05초) |
+| 자동 새로고침 | 30분마다 전체 API 호출 | 0회 (수동만) |
+| 위젯 새로고침 | force=true 옵션 적용 | 각 위젯별 독립 제어 |
+| Edge Function 비용 | 높음 (불필요한 호출) | 최소화 |
+
+================================================================================
+## 기존 구조 유지 사항
+================================================================================
+
+✅ 유지:
+- lastFetchedAt, markFetched(), getLastUpdatedMinutes() 상태
+- DB api_cache 테이블 활용
+- Mock fallback 로직
+- isCacheStale() 제거 대신 필요시에만 사용 (예: Settings에서 "모든 데이터 새로고침" 버튼)
+
+================================================================================

@@ -1,0 +1,110 @@
+================================================================================
+2026-04-04 useDataStore 캐시 최적화 & 무한 로딩 방지 Fix
+================================================================================
+
+## 문제점 (Before)
+- 로그인 직후 fetchAll()이 모든 위젯을 동시에 loading: true로 세팅
+- 캐시가 있어도 스피너가 표시되는 무한 로딩 현상 발생
+- 30분 접속시간 기반으로 불필요한 전체 API 재호출
+
+================================================================================
+## 수정된 파일
+================================================================================
+
+### 1. src/store/useDataStore.js
+
+#### (A) fetchAll() 서명 변경
+- 변경 전: fetchAll: async () => { ... }
+- 변경 후: fetchAll: async (options = {}) => { ... }
+
+새 옵션:
+  - useExistingCache: true  → 캐시 우선 (force=false, 로그인 직후)
+  - useExistingCache: false → 기존 30분 stale 체크 적용 (기본값)
+
+#### (B) 개별 fetch 함수들 캐시 로직 최적화
+
+수정된 함수:
+  - fetchWeather
+  - fetchStocks  
+  - fetchTrends
+  - fetchNews
+  - fetchRestaurants
+
+변경 내용 (모든 함수 동일 패턴):
+
+[변경 전]
+```javascript
+fetchWeather: async (...) => {
+  set({ loading: { ...s.loading, weather: true } });  // ← 먼저 로딩 설정
+  try {
+    if (!force) {
+      const dbCached = await readApiCache(...);
+      if (dbCached) {
+        set({ weather: dbCached });
+        return;
+      }
+    }
+    // API 호출...
+  }
+}
+```
+
+[변경 후]
+```javascript
+fetchWeather: async (...) => {
+  // ✅ 캐시 우선 확인 (loading 상태 설정 전)
+  if (!force) {
+    const dbCached = await readApiCache(...);
+    if (dbCached) {
+      set({ weather: dbCached });
+      return;  // ← loading 상태 변경 없이 즉시 반환
+    }
+  }
+  
+  // ✅ 캐시 없을 때만 loading: true
+  set({ loading: { ...s.loading, weather: true } });
+  try {
+    // API 호출...
+  }
+}
+```
+
+--------------------------------------------------------------------------------
+
+### 2. src/App.jsx
+
+#### 초기 로딩 최적화
+
+[변경 전]
+```javascript
+fetchAll();
+```
+
+[변경 후]
+```javascript
+// ✅ 캐시 우선: 로그인 직후 캐시가 있으면 스피너 없이 즉시 UI 표시
+await fetchAll({ useExistingCache: true });
+```
+
+================================================================================
+## 예상 효과
+================================================================================
+
+| 상황                    | Before              | After                    |
+|------------------------|---------------------|--------------------------|
+| 로그인 직후 (캐시 O)    | 스피너 표시 30초     | UI 즉시 표시 (0.05초)    |
+| 자동 새로고침           | 30분마다 전체 API    | 0회 (수동만)             |
+| 위젯 새로고침           | force=true          | 각 위젯별 독립 제어       |
+| Edge Function 비용     | 높음 (불필요한 호출) | 최소화                   |
+
+================================================================================
+## 유지된 기존 기능
+================================================================================
+
+✅ lastFetchedAt, markFetched(), getLastUpdatedMinutes() 상태
+✅ DB api_cache 테이블 활용
+✅ Mock fallback 로직
+✅ isCacheStale() 함수 (Settings에서 "모든 데이터 새로고침" 버튼용)
+✅ 30분 캐시 유효 기간 (CACHE_THRESHOLD_MS)
+
+================================================================================

@@ -346,24 +346,25 @@ export const useDataStore = create((set, get) => ({
 	   - 실패 시 mock fallback
 	   ══════════════════════════════════════════ */
 	fetchWeather: async (lat = 37.5665, lon = 126.978, userId, force = false) => {
+		const cacheKey = `weather_${lat}_${lon}`;
+
+		// ✅ 캐시 우선 확인 (force=true면 수동 새로고침 → 캐시 무시)
+		if (!force) {
+			const dbCached = await readApiCache(cacheKey, userId, false);
+			if (dbCached) {
+				set({ weather: dbCached });
+				cacheIt("weather", dbCached);
+				get().markFetched("weather");
+				return; // ← loading 상태 변경 없음
+			}
+		}
+
+		// ✅ 캐시 없으면 여기서 loading: true
 		set((s) => ({
 			loading: { ...s.loading, weather: true },
 			errors: { ...s.errors, weather: null },
 		}));
 		try {
-			const cacheKey = `weather_${lat}_${lon}`;
-
-			// 캐시 확인 (force=true면 수동 새로고침 → 캐시 무시)
-			if (!force) {
-				const dbCached = await readApiCache(cacheKey, userId, false);
-				if (dbCached) {
-
-					set({ weather: dbCached });
-					cacheIt("weather", dbCached);
-					get().markFetched("weather");
-					return;
-				}
-			}
 
 
 			// Groq LLM 날씨 추정
@@ -443,24 +444,26 @@ export const useDataStore = create((set, get) => ({
 	   사용자 선택 심볼을 파라미터로 전달
 	   ══════════════════════════════════════════ */
 	fetchStocks: async (symbols = defaultStockSymbols, userId, force = false) => {
+		const normalizedSymbols = normalizeStockSymbols(symbols);
+		const cacheKey = `stocks_${normalizedSymbols.join("_")}`;
+
+		// ✅ 캐시 우선 확인
+		if (!force) {
+			const dbCached = await readApiCache(cacheKey, userId, false);
+			if (dbCached && hasMeaningfulStockValues(dbCached)) {
+				set({ stocks: dbCached });
+				cacheIt("stocks", dbCached);
+				get().markFetched("stocks");
+				return; // ← loading 상태 변경 없음
+			}
+		}
+
+		// ✅ 캐시 없으면 여기서 loading: true
 		set((s) => ({
 			loading: { ...s.loading, stocks: true },
 			errors: { ...s.errors, stocks: null },
 		}));
 		try {
-			const normalizedSymbols = normalizeStockSymbols(symbols);
-			const cacheKey = `stocks_${normalizedSymbols.join("_")}`;
-
-			if (!force) {
-				const dbCached = await readApiCache(cacheKey, userId, false);
-				if (dbCached && hasMeaningfulStockValues(dbCached)) {
-
-					set({ stocks: dbCached });
-					cacheIt("stocks", dbCached);
-					get().markFetched("stocks");
-					return;
-				}
-			}
 
 
 			const edge = await invokeEdgeDetailed("stocks", {
@@ -520,27 +523,29 @@ export const useDataStore = create((set, get) => ({
 	   trendsResults: 출처 배열 [{title, url, content}, ...]
 	   ══════════════════════════════════════════ */
 	fetchTrends: async (userId, force = false) => {
+		const cacheKey = "trends_full";
+
+		// ✅ 캐시 우선 확인
+		if (!force) {
+			const dbCached = await readApiCache(cacheKey, userId, false);
+			if (dbCached && dbCached.trends) {
+				set({
+					trends: dbCached.trends,
+					trendsAnswer: dbCached.answer ?? null,
+					trendsResults: dbCached.results ?? [],
+				});
+				cacheIt("trends", dbCached);
+				get().markFetched("trends");
+				return; // ← loading 상태 변경 없음
+			}
+		}
+
+		// ✅ 캐시 없으면 여기서 loading: true
 		set((s) => ({
 			loading: { ...s.loading, trends: true },
 			errors: { ...s.errors, trends: null },
 		}));
 		try {
-			const cacheKey = "trends_full";
-
-			if (!force) {
-				const dbCached = await readApiCache(cacheKey, userId, false);
-				if (dbCached && dbCached.trends) {
-
-					set({
-						trends: dbCached.trends,
-						trendsAnswer: dbCached.answer ?? null,
-						trendsResults: dbCached.results ?? [],
-					});
-					cacheIt("trends", dbCached);
-					get().markFetched("trends");
-					return;
-				}
-			}
 
 
 			const edge = await invokeEdgeDetailed("tavily", {
@@ -608,26 +613,29 @@ export const useDataStore = create((set, get) => ({
 	   newsResults: 뉴스 기사 배열 [{title, url, content}, ...]
 	   ══════════════════════════════════════════ */
 	fetchNews: async (userId, force = false) => {
+		const cacheKey = "news_full";
+
+		// ✅ 캐시 우선 확인
+		if (!force) {
+			const dbCached = await readApiCache(cacheKey, userId, false);
+			if (dbCached && dbCached.results) {
+				set({
+					news: dbCached.news ?? [],
+					newsAnswer: dbCached.answer ?? null,
+					newsResults: dbCached.results ?? [],
+				});
+				cacheIt("news", dbCached);
+				get().markFetched("news");
+				return; // ← loading 상태 변경 없음
+			}
+		}
+
+		// ✅ 캐시 없으면 여기서 loading: true
 		set((s) => ({
 			loading: { ...s.loading, news: true },
 			errors: { ...s.errors, news: null },
 		}));
 		try {
-			const cacheKey = "news_full";
-
-			if (!force) {
-				const dbCached = await readApiCache(cacheKey, userId, false);
-				if (dbCached && dbCached.results) {
-					set({
-						news: dbCached.news ?? [],
-						newsAnswer: dbCached.answer ?? null,
-						newsResults: dbCached.results ?? [],
-					});
-					cacheIt("news", dbCached);
-					get().markFetched("news");
-					return;
-				}
-			}
 
 			const edge = await invokeEdgeDetailed("tavily", {
 				query: "대한민국 최신 뉴스 헤드라인 주요 뉴스 속보 10개",
@@ -691,18 +699,21 @@ export const useDataStore = create((set, get) => ({
 		userId,
 		force = false,
 	) => {
+		const cacheKey = `restaurants_${query}_${lat}_${lon}`;
+
+		// ✅ 캐시 우선 확인
+		if (!force) {
+			const dbCached = await readApiCache(cacheKey, userId, false);
+			if (dbCached) {
+				set({ restaurants: dbCached });
+				cacheIt("restaurants", dbCached);
+				return; // ← loading 상태 변경 없음
+			}
+		}
+
+		// ✅ 캐시 없으면 여기서 loading: true
 		set((s) => ({ loading: { ...s.loading, restaurants: true } }));
 		try {
-			const cacheKey = `restaurants_${query}_${lat}_${lon}`;
-
-			if (!force) {
-				const dbCached = await readApiCache(cacheKey, userId, false);
-				if (dbCached) {
-					set({ restaurants: dbCached });
-					cacheIt("restaurants", dbCached);
-					return;
-				}
-			}
 
 			const data = await invokeEdge("kakao-places", {
 				query,
@@ -855,15 +866,23 @@ export const useDataStore = create((set, get) => ({
 	},
 
 	/* ══════════════════════════════════════════
-	   전체 fetch (접속 시간 기반 30분 캐싱)
+	   전체 fetch (캐시 우선 최적화)
 
-	   1) 접속 시 Δt > 30분 → 모든 API 즉시 호출 (auto-refresh)
-	   2) Δt ≤ 30분 → 캐시 사용 (API 호출 생략)
-	   3) 위젯별 수동 새로고침 → force=true로 시간제한 없이 호출
+	   옵션:
+	   - useExistingCache: true → 캐시 있으면 API 호출 생략 (로그인 직후)
+	   - useExistingCache: false (기본값) → 기존 동작 (30분 stale 체크)
+
+	   1) useExistingCache=true → force=false로 모든 fetch 호출 (캐시 우선)
+	   2) useExistingCache=false → isCacheStale() 결과에 따라 force 결정
+	   3) 위젯별 수동 새로고침 → 개별 fetch 함수에서 force=true로 직접 호출
 	   ══════════════════════════════════════════ */
-	fetchAll: async () => {
+	fetchAll: async (options = {}) => {
+		const { useExistingCache = false } = options;
 		const store = get();
-		const shouldForceRefresh = isCacheStale();
+
+		// useExistingCache=true면 항상 캐시 우선 (force=false)
+		// useExistingCache=false면 기존 30분 stale 체크 적용
+		const shouldForceRefresh = useExistingCache ? false : isCacheStale();
 
 		let userId = null;
 		let visibleWidgets = Object.keys(DEFAULT_VIS).filter(

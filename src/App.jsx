@@ -54,7 +54,8 @@ const App = () => {
 			} catch (e) {
 				console.warn("Hydrate failed:", e?.message);
 			}
-			fetchAll();
+			// ✅ 캐시 우선: 로그인 직후 캐시가 있으면 스피너 없이 즉시 UI 표시
+			await fetchAll({ useExistingCache: true });
 			generateAiTodoOnLoad();
 		};
 		init();
