@@ -38,7 +38,7 @@ export const useAuthStore = create((set, get) => ({
 	},
 
 	logout: async () => {
-		if (supabase) await supabase.auth.signOut();
+		// Clear state immediately for responsive UI
 		set({
 			isLoggedIn: false,
 			user: null,
@@ -47,6 +47,18 @@ export const useAuthStore = create((set, get) => ({
 		});
 		save("mb_login", false);
 		save("mb_onboarded", false);
+
+		// Then sign out from Supabase
+		if (supabase) {
+			try {
+				const { error } = await supabase.auth.signOut();
+				if (error) {
+					console.error("Supabase logout error:", error.message);
+				}
+			} catch (e) {
+				console.error("Logout failed:", e);
+			}
+		}
 	},
 
 	/* Supabase Auth 상태 변경 시 호출 */

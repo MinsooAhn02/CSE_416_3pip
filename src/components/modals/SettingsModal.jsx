@@ -24,6 +24,43 @@ import { WIDGET_LIST, STANDARD_WIDGETS, DEFAULT_PRIORITY_ORDER } from "../../con
 import { save } from "../../utils/storage";
 import Toggle from "../common/Toggle";
 
+// Logout button with loading state and error handling
+const LogoutButton = ({ logout, setShowSettings, isDark }) => {
+	const [isLoggingOut, setIsLoggingOut] = useState(false);
+	const [error, setError] = useState(null);
+
+	const handleLogout = async () => {
+		setIsLoggingOut(true);
+		setError(null);
+		try {
+			await logout();
+			setShowSettings(false);
+		} catch (e) {
+			console.error("Logout failed:", e);
+			setError("로그아웃 실패. 다시 시도해주세요.");
+			setIsLoggingOut(false);
+		}
+	};
+
+	return (
+		<div className="space-y-1">
+			<button
+				onClick={handleLogout}
+				disabled={isLoggingOut}
+				className={`w-full p-3 rounded-xl text-sm text-left bg-red-500/10 text-red-400 hover:bg-red-500/20 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed`}
+			>
+				{isLoggingOut ? (
+					<RefreshCw size={16} className="animate-spin" />
+				) : (
+					<LogOut size={16} />
+				)}
+				{isLoggingOut ? "로그아웃 중..." : "로그아웃"}
+			</button>
+			{error && <p className="text-xs text-red-400 px-1">{error}</p>}
+		</div>
+	);
+};
+
 const SettingsModal = () => {
 	const { isDark, muted, inputCls } = useTheme();
 	const {
@@ -523,15 +560,7 @@ const SettingsModal = () => {
 								>
 									🔄 온보딩 다시하기
 								</button>
-								<button
-									onClick={async () => {
-										await logout();
-										setShowSettings(false);
-									}}
-									className="w-full p-3 rounded-xl text-sm text-left bg-red-500/10 text-red-400 hover:bg-red-500/20 flex items-center gap-2"
-								>
-									<LogOut size={16} /> 로그아웃
-								</button>
+								<LogoutButton logout={logout} setShowSettings={setShowSettings} isDark={isDark} />
 							</div>
 						)}
 						{settingsTab === "priority" && (
