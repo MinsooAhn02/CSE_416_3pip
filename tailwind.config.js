@@ -5,22 +5,25 @@ export default {
 	theme: {
 		extend: {
 			colors: {
-				// Morning Theme - Light Mode (REQ-TS-001)
+				// Global palette theme (eye-comfort, clearly separated light/dark)
 				"morning-light": {
-					page: "#f4f3ee",
-					card: "#f5e6d3",
-					hover: "#b1ada1",
-					text: "#1a1915",
-					muted: "#6b6860",
+					page: "#F7F3E9",
+					card: "#FFFDF8",
+					cardSecondary: "#F1EBDD",
+					hover: "#E6DECD",
+					accent: "#5D7FCB",
+					text: "#2F2A22",
+					muted: "rgba(47, 42, 34, 0.62)",
 				},
-				// Morning Theme - Dark Mode (REQ-TS-001)
+				// Dark mode tuned for readability without harsh contrast
 				"morning-dark": {
-					page: "#1a1915",
-					card: "#252420",
-					cardSecondary: "#2d2b27",
-					hover: "#38352f",
-					text: "#f4f3ee",
-					muted: "#9a9590",
+					page: "#1A1B1E",
+					card: "#25272C",
+					cardSecondary: "#2F3238",
+					hover: "#3A3D45",
+					accent: "#84A0CF",
+					text: "#ECE8DF",
+					muted: "rgba(236, 232, 223, 0.66)",
 				},
 			},
 		},

@@ -19,6 +19,13 @@
     "minutes_ago": "{{count}}m ago",
     "before_refresh": "Before refresh"
   },
+  "toast": {
+    "settings_saved": "Settings saved",
+    "widget_added": "Widget added",
+    "widget_exists": "Keyword already added",
+    "widget_invalid": "Please enter a keyword",
+    "widget_add_failed": "Failed to add widget"
+  },
   "nav": {
     "search_placeholder": "Search or ask AI...",
     "theme_toggle": "Toggle Theme",

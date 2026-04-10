@@ -6,6 +6,7 @@ import { useDataStore } from "../../store/useDataStore";
 import { useSettingsStore } from "../../store/useSettingsStore";
 import WidgetCard from "../common/WidgetCard";
 
+
 const STOCK_OPTIONS = [
 	{ id: "KOSPI", label: "KOSPI" },
 	{ id: "NASDAQ", label: "NASDAQ" },
@@ -14,14 +15,14 @@ const STOCK_OPTIONS = [
 ];
 
 const StocksWidget = () => {
-	const { isDark } = useTheme();
+	const { isDark, hoverCls, secondaryBgCls, borderCls } = useTheme();
 	const { t } = useTranslation();
 	const [showSettings, setShowSettings] = useState(false);
 	const [customSymbol, setCustomSymbol] = useState("");
 	const stocks = useDataStore((s) => s.stocks);
 	const loading = useDataStore((s) => s.loading.stocks);
 	const error = useDataStore((s) => s.errors.stocks);
-	const rawStocks = useDataStore((s) => s.rawData.stocks);
+	const apiStatus = useDataStore((s) => s.apiStatus.stocks ?? null);
 	const fetchStocks = useDataStore((s) => s.fetchStocks);
 	const getLastUpdatedMinutes = useDataStore((s) => s.getLastUpdatedMinutes);
 	const stockSymbols = useSettingsStore((s) => s.stockSymbols);
@@ -71,11 +72,13 @@ const StocksWidget = () => {
 			onRefresh={() => fetchStocks(stockSymbols, undefined, true)}
 			refreshing={!!loading}
 			refreshIcon={RefreshCw}
+			apiStatus={apiStatus}
+			apiError={error}
 		>
 			<div className="flex justify-end mb-2">
 				<button
 					onClick={() => setShowSettings((v) => !v)}
-					className={`p-1 rounded-md ${isDark ? "hover:bg-[#333333]" : "hover:bg-gray-100"}`}
+					className={`p-1 rounded-md ${hoverCls}`}
 					title={t("widgets.stocks.symbol_settings")}
 				>
 					<Settings size={13} className="opacity-70" />
@@ -85,7 +88,7 @@ const StocksWidget = () => {
 			{showSettings && (
 				<div
 					className={`mb-3 p-2 rounded-lg border ${
-						isDark ? "border-[#3a3a3a] bg-[#333333]" : "border-gray-200 bg-gray-50"
+						`${borderCls} ${secondaryBgCls}`
 					}`}
 				>
 					<p className="text-[11px] mb-2 opacity-70">
@@ -136,17 +139,14 @@ const StocksWidget = () => {
 				</div>
 			)}
 
-			{error && <p className="text-[11px] text-red-400 mb-2">{error}</p>}
 			{loading ? (
 				<p className="text-sm opacity-60">{t("widgets.stocks.loading")}</p>
-			) : stocks.length === 0 ? (
-				<p className="text-sm opacity-60">{t("widgets.stocks.no_data")}</p>
-			) : (
+			) : stocks.length > 0 ? (
 				<div className="grid grid-cols-2 gap-2">
 					{stocks.map((s, i) => (
 						<div
 							key={i}
-							className={`p-3 rounded-xl ${isDark ? "bg-[#333333]" : "bg-gray-50"}`}
+							className={`p-3 rounded-xl ${secondaryBgCls}`}
 						>
 							<div className="flex justify-between items-center mb-1">
 								<span
@@ -164,20 +164,11 @@ const StocksWidget = () => {
 						</div>
 					))}
 				</div>
+			) : error ? (
+				<p className="text-[11px] text-red-400">{error}</p>
+			) : (
+				<p className="text-[11px] text-red-400">{t("widgets.stocks.no_data")}</p>
 			)}
-
-			<details className="mt-3">
-				<summary className="text-[11px] opacity-70 cursor-pointer">
-					Raw API Data (stocks)
-				</summary>
-				<pre
-					className={`mt-2 text-[10px] leading-relaxed p-2 rounded-lg overflow-auto max-h-48 ${
-						isDark ? "bg-[#222222]" : "bg-gray-100"
-					}`}
-				>
-					{JSON.stringify(rawStocks ?? stocks, null, 2)}
-				</pre>
-			</details>
 		</WidgetCard>
 	);
 };

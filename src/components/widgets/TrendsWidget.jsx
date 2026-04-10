@@ -7,13 +7,14 @@ import WidgetCard from "../common/WidgetCard";
 import NewsDetailModal from "../modals/NewsDetailModal";
 
 const TrendsWidget = () => {
-	const { isDark } = useTheme();
+	const { isDark, hoverCls, secondaryBgCls, borderCls } = useTheme();
 	const { t } = useTranslation();
 	const trends = useDataStore((s) => s.trends);
 	const trendsAnswer = useDataStore((s) => s.trendsAnswer);
 	const trendsResults = useDataStore((s) => s.trendsResults);
 	const loading = useDataStore((s) => s.loading.trends);
 	const error = useDataStore((s) => s.errors.trends);
+	const apiStatus = useDataStore((s) => s.apiStatus.trends ?? null);
 	const fetchTrends = useDataStore((s) => s.fetchTrends);
 	const getLastUpdatedMinutes = useDataStore((s) => s.getLastUpdatedMinutes);
 
@@ -37,13 +38,12 @@ const TrendsWidget = () => {
 				onRefresh={() => fetchTrends(undefined, true)}
 				refreshing={!!loading}
 				refreshIcon={RefreshCw}
+				apiStatus={apiStatus}
+				apiError={error}
 			>
-				{error && <p className="text-[11px] text-red-400 mb-2">{error}</p>}
 				{loading ? (
 					<p className="text-sm opacity-60">{t("widgets.trends.loading")}</p>
-				) : trends.length === 0 ? (
-					<p className="text-sm opacity-60">{t("widgets.trends.no_data")}</p>
-				) : (
+				) : trends.length > 0 ? (
 					<div className="space-y-3">
 						{trendsAnswer && (
 							<p className={`text-xs leading-relaxed ${isDark ? "opacity-80" : "text-slate-600"}`}>
@@ -56,7 +56,7 @@ const TrendsWidget = () => {
 								<span
 									key={i}
 									className={`text-xs px-3 py-1.5 rounded-lg border ${
-										isDark ? "bg-[#333333] border-[#3a3a3a]" : "bg-gray-50 border-gray-200"
+										`${secondaryBgCls} ${borderCls}`
 									}`}
 								>
 									{tag}
@@ -74,9 +74,7 @@ const TrendsWidget = () => {
 										key={i}
 										onClick={() => setShowNewsModal(true)}
 										className={`w-full flex items-start gap-1.5 p-1.5 rounded-md text-xs transition-colors text-left ${
-											isDark
-												? "hover:bg-[#333333]"
-												: "hover:bg-gray-50"
+											hoverCls
 										}`}
 									>
 										<ExternalLink size={11} className="mt-0.5 shrink-0 opacity-40" />
@@ -96,6 +94,10 @@ const TrendsWidget = () => {
 							</div>
 						)}
 					</div>
+				) : error ? (
+					<p className="text-[11px] text-red-400">{error}</p>
+				) : (
+					<p className="text-[11px] text-red-400">{t("widgets.trends.no_data")}</p>
 				)}
 			</WidgetCard>
 

@@ -8,14 +8,17 @@ import { useDiaryStore } from "../../store/useDiaryStore";
  * @param {{ onSuccess: () => void, onCancel?: () => void, isFirstTime?: boolean }} props
  */
 const PINModal = ({ onSuccess, onCancel, isFirstTime = false }) => {
-	const { isDark } = useTheme();
+	const { isDark, cardCls, inputCls, hoverCls, secondaryBgCls, borderCls } =
+		useTheme();
 	const { verifyPIN, pinSet } = useDiaryStore();
 
 	const [pin, setPin] = useState("");
 	const [confirmPin, setConfirmPin] = useState("");
 	const [error, setError] = useState("");
 	const [isLoading, setIsLoading] = useState(false);
-	const [stage, setStage] = useState(isFirstTime && !pinSet ? "setup" : "verify");
+	const [stage, setStage] = useState(
+		isFirstTime && !pinSet ? "setup" : "verify",
+	);
 
 	/* Handle PIN digit input */
 	const handlePinChange = (value) => {
@@ -96,7 +99,7 @@ const PINModal = ({ onSuccess, onCancel, isFirstTime = false }) => {
 
 	return (
 		<div
-			className="fixed inset-0 z-[100] flex items-center justify-center p-4"
+			className="fixed inset-0 z-[21000] flex items-center justify-center p-4"
 			onClick={onCancel}
 		>
 			{/* Backdrop */}
@@ -105,22 +108,24 @@ const PINModal = ({ onSuccess, onCancel, isFirstTime = false }) => {
 			{/* Modal Content */}
 			<div
 				className={`relative z-10 w-full max-w-sm rounded-2xl border shadow-2xl p-6 flex flex-col gap-4 ${
-					isDark
-						? "bg-[#1e1e1e] border-[#3a3a3a] text-white"
-						: "bg-white border-gray-200 text-slate-800"
+					cardCls
 				}`}
 				onClick={(e) => e.stopPropagation()}
 			>
 				{/* Header */}
 				<div className="flex items-center gap-3">
-					<div className={`p-2 rounded-lg ${isDark ? "bg-blue-500/20" : "bg-blue-100"}`}>
+					<div
+						className={`p-2 rounded-lg ${isDark ? "bg-blue-500/20" : "bg-blue-100"}`}
+					>
 						<Lock size={20} className="text-blue-500" />
 					</div>
 					<div>
 						<h2 className="font-bold text-lg">
 							{stage === "setup" ? "Set up PIN" : "Verify PIN"}
 						</h2>
-						<p className={`text-xs ${isDark ? "text-gray-400" : "text-gray-600"}`}>
+						<p
+							className={`text-xs ${isDark ? "text-gray-400" : "text-gray-600"}`}
+						>
 							{stage === "setup"
 								? "Create a 4-digit PIN to protect your diary"
 								: "Enter your 4-digit PIN to access diary"}
@@ -130,7 +135,7 @@ const PINModal = ({ onSuccess, onCancel, isFirstTime = false }) => {
 						<button
 							onClick={onCancel}
 							className={`ml-auto p-1 rounded-full transition-colors ${
-								isDark ? "hover:bg-[#353535]" : "hover:bg-gray-100"
+								hoverCls
 							}`}
 						>
 							<X size={18} />
@@ -142,7 +147,9 @@ const PINModal = ({ onSuccess, onCancel, isFirstTime = false }) => {
 				<div className="space-y-4">
 					{/* First PIN Input */}
 					<div>
-						<label className={`text-xs font-medium block mb-2 ${isDark ? "opacity-70" : "text-gray-600"}`}>
+						<label
+							className={`text-xs font-medium block mb-2 ${isDark ? "opacity-70" : "text-gray-600"}`}
+						>
 							{stage === "setup" ? "Create PIN" : "Enter PIN"}
 						</label>
 						<input
@@ -153,14 +160,14 @@ const PINModal = ({ onSuccess, onCancel, isFirstTime = false }) => {
 							value={pin}
 							onChange={(e) => handlePinChange(e.target.value)}
 							className={`w-full text-2xl text-center font-mono font-bold tracking-widest rounded-lg p-3 outline-none border transition-all focus:ring-2 focus:ring-blue-500/30 ${
-								isDark
-									? "bg-[#2a2a2a] border-[#3a3a3a] text-white placeholder:text-neutral-600"
-									: "bg-gray-50 border-gray-200 text-slate-800 placeholder:text-gray-400"
+								inputCls
 							}`}
 							disabled={isLoading}
 							autoFocus
 						/>
-						<p className={`text-xs mt-1 ${pin.length === 4 ? "text-green-500" : isDark ? "text-gray-500" : "text-gray-400"}`}>
+						<p
+							className={`text-xs mt-1 ${pin.length === 4 ? "text-green-500" : isDark ? "text-gray-500" : "text-gray-400"}`}
+						>
 							{pin.length}/4 digits
 						</p>
 					</div>
@@ -168,7 +175,9 @@ const PINModal = ({ onSuccess, onCancel, isFirstTime = false }) => {
 					{/* Confirm PIN (Setup stage only) */}
 					{stage === "setup" && (
 						<div>
-							<label className={`text-xs font-medium block mb-2 ${isDark ? "opacity-70" : "text-gray-600"}`}>
+							<label
+								className={`text-xs font-medium block mb-2 ${isDark ? "opacity-70" : "text-gray-600"}`}
+							>
 								Confirm PIN
 							</label>
 							<input
@@ -179,13 +188,13 @@ const PINModal = ({ onSuccess, onCancel, isFirstTime = false }) => {
 								value={confirmPin}
 								onChange={(e) => handleConfirmPinChange(e.target.value)}
 								className={`w-full text-2xl text-center font-mono font-bold tracking-widest rounded-lg p-3 outline-none border transition-all focus:ring-2 focus:ring-blue-500/30 ${
-									isDark
-										? "bg-[#2a2a2a] border-[#3a3a3a] text-white placeholder:text-neutral-600"
-										: "bg-gray-50 border-gray-200 text-slate-800 placeholder:text-gray-400"
+									inputCls
 								}`}
 								disabled={isLoading}
 							/>
-							<p className={`text-xs mt-1 ${confirmPin.length === 4 ? "text-green-500" : isDark ? "text-gray-500" : "text-gray-400"}`}>
+							<p
+								className={`text-xs mt-1 ${confirmPin.length === 4 ? "text-green-500" : isDark ? "text-gray-500" : "text-gray-400"}`}
+							>
 								{confirmPin.length}/4 digits
 							</p>
 						</div>
@@ -194,7 +203,10 @@ const PINModal = ({ onSuccess, onCancel, isFirstTime = false }) => {
 					{/* Error Message */}
 					{error && (
 						<div className="flex items-start gap-2 p-3 rounded-lg bg-red-500/10 border border-red-500/20">
-							<AlertCircle size={16} className="text-red-500 mt-0.5 flex-shrink-0" />
+							<AlertCircle
+								size={16}
+								className="text-red-500 mt-0.5 flex-shrink-0"
+							/>
 							<p className="text-xs text-red-500">{error}</p>
 						</div>
 					)}
@@ -211,7 +223,7 @@ const PINModal = ({ onSuccess, onCancel, isFirstTime = false }) => {
 							isLoading ||
 							pin.length !== 4 ||
 							(stage === "setup" && confirmPin.length !== 4)
-								? `${isDark ? "bg-[#2a2a2a] text-gray-500" : "bg-gray-100 text-gray-400"} cursor-not-allowed`
+								? `${secondaryBgCls} text-morning-dark-muted cursor-not-allowed`
 								: `${isDark ? "bg-blue-600 hover:bg-blue-700 text-white" : "bg-blue-500 hover:bg-blue-600 text-white"}`
 						}`}
 					>
@@ -227,7 +239,9 @@ const PINModal = ({ onSuccess, onCancel, isFirstTime = false }) => {
 				</div>
 
 				{/* Footer Info */}
-				<p className={`text-xs text-center ${isDark ? "text-gray-500" : "text-gray-600"}`}>
+				<p
+					className={`text-xs text-center ${isDark ? "text-gray-500" : "text-gray-600"}`}
+				>
 					{stage === "setup"
 						? "You can change your PIN later in settings"
 						: "Your PIN protects sensitive diary content"}

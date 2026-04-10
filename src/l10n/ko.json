@@ -19,6 +19,13 @@
     "minutes_ago": "{{count}}분 전",
     "before_refresh": "갱신 전"
   },
+  "toast": {
+    "settings_saved": "설정이 저장되었습니다",
+    "widget_added": "위젯이 추가되었습니다",
+    "widget_exists": "이미 추가된 키워드입니다",
+    "widget_invalid": "키워드를 입력해주세요",
+    "widget_add_failed": "위젯 추가에 실패했습니다"
+  },
   "nav": {
     "search_placeholder": "검색하거나 AI에게 물어보세요...",
     "theme_toggle": "테마 전환",

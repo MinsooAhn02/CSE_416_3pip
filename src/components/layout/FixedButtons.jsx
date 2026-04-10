@@ -5,7 +5,7 @@ import { useSettingsStore } from "../../store/useSettingsStore";
 import { useWidgetStore } from "../../store/useWidgetStore";
 
 const FixedButtons = () => {
-	const { isDark, inputCls, muted } = useTheme();
+	const { isDark, inputCls, muted, cardCls } = useTheme();
 	const setShowSettings = useSettingsStore((s) => s.setShowSettings);
 	const newKeyword = useWidgetStore((s) => s.newKeyword);
 	const setNewKeyword = useWidgetStore((s) => s.setNewKeyword);
@@ -44,9 +44,7 @@ const FixedButtons = () => {
 				{showPopup && (
 					<div
 						className={`absolute bottom-0 right-14 w-72 backdrop-blur-xl border rounded-2xl p-4 shadow-2xl ${
-							isDark
-								? "bg-[#2a2a2a]/90 border-white/10"
-								: "bg-white/90 border-gray-200"
+							cardCls
 						}`}
 					>
 						<div className="flex items-center gap-2 mb-3">

@@ -1,4 +1,5 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
+import { Toaster } from "react-hot-toast";
 import { useAuthStore } from "./store/useAuthStore";
 import { useSettingsStore } from "./store/useSettingsStore";
 import { useWidgetStore } from "./store/useWidgetStore";
@@ -23,10 +24,12 @@ import FirstLoginBriefingModal from "./components/modals/FirstLoginBriefingModal
 
 const App = () => {
 	const isLoggedIn = useAuthStore((s) => s.isLoggedIn);
+	const user = useAuthStore((s) => s.user);
 	const handleAuthChange = useAuthStore((s) => s.handleAuthChange);
 	const { isDark } = useTheme();
 	const fetchAll = useDataStore((s) => s.fetchAll);
 	const bgImage = useSettingsStore((s) => s.bgImage);
+	const initDoneRef = useRef(false);
 
 	// Use the new midnight trigger hook (REQ-CS-005, REQ-AJ-001)
 	useMidnightTrigger(isLoggedIn);
@@ -40,9 +43,18 @@ const App = () => {
 		return () => subscription?.unsubscribe();
 	}, [handleAuthChange]);
 
-	// Hydrate stores & fetch data on login
+	// 로그인 or 자동 로그인 시 초기 데이터 로드
+	// user?.id 의존성: 자동 로그인 시 Supabase 세션 복원 후 user가 세팅되면 실행
 	useEffect(() => {
-		if (!isLoggedIn) return;
+		if (!isLoggedIn || !user?.id) {
+			// 로그아웃 시 다음 로그인을 위해 초기화
+			if (!isLoggedIn) initDoneRef.current = false;
+			return;
+		}
+		// 같은 세션에서 중복 실행 방지
+		if (initDoneRef.current) return;
+		initDoneRef.current = true;
+
 		const init = async () => {
 			try {
 				await Promise.all([
@@ -54,11 +66,25 @@ const App = () => {
 			} catch (e) {
 				console.warn("Hydrate failed:", e?.message);
 			}
-			// ✅ 캐시 우선: 로그인 직후 캐시가 있으면 스피너 없이 즉시 UI 표시
+			// 캐시 우선: 1시간 이내 캐시 있으면 API 호출 없이 즉시 표시
 			await fetchAll({ useExistingCache: true });
 			generateAiTodoOnLoad();
 		};
 		init();
+	}, [isLoggedIn, user?.id, fetchAll]);
+
+	// 탭이 다시 포커스될 때 캐시 만료(1시간) 확인 → 자동 갱신
+	useEffect(() => {
+		if (!isLoggedIn) return;
+		const handleVisibility = () => {
+			if (document.visibilityState !== "visible") return;
+			if (!useAuthStore.getState().user?.id) return;
+			// useExistingCache: true → readApiCache가 1시간 TTL로 판단
+			// 만료됐으면 자동으로 API 재호출, 아니면 캐시 사용
+			fetchAll({ useExistingCache: true });
+		};
+		document.addEventListener("visibilitychange", handleVisibility);
+		return () => document.removeEventListener("visibilitychange", handleVisibility);
 	}, [isLoggedIn, fetchAll]);
 
 	/**
@@ -107,6 +133,38 @@ const App = () => {
 			<SettingsModal />
 			<BriefSettingsModal />
 			<FirstLoginBriefingModal />
+
+			{/* Global Toast Notifications */}
+			<Toaster
+				position="bottom-center"
+				toastOptions={{
+					duration: 2000,
+					style: {
+						background: isDark ? "#25272C" : "#FFFDF8",
+						color: isDark ? "#ECE8DF" : "#2F2A22",
+						border: `1px solid ${isDark ? "#3A3D45" : "#E6DECD"}`,
+						fontSize: "13px",
+						fontWeight: 500,
+						padding: "10px 14px",
+						borderRadius: "12px",
+						boxShadow: isDark
+							? "0 8px 24px rgba(0,0,0,0.45)"
+							: "0 8px 24px rgba(47,42,34,0.12)",
+					},
+					success: {
+						iconTheme: {
+							primary: isDark ? "#84A0CF" : "#5D7FCB",
+							secondary: isDark ? "#25272C" : "#FFFDF8",
+						},
+					},
+					error: {
+						iconTheme: {
+							primary: "#ef4444",
+							secondary: isDark ? "#25272C" : "#FFFDF8",
+						},
+					},
+				}}
+			/>
 		</div>
 	);
 };

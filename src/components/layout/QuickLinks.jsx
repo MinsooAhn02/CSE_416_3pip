@@ -6,7 +6,7 @@ import { useTheme } from "../../hooks/useTheme";
 import { useQuickLinksStore } from "../../store/useQuickLinksStore";
 
 const QuickLinks = () => {
-	const { isDark, cardCls, inputCls } = useTheme();
+	const { isDark, cardCls, inputCls, navBtnCls, secondaryBgCls, borderCls } = useTheme();
 	const { t } = useTranslation();
 	const { links, showEditor, setShowEditor, addLink, removeLink, updateLink } =
 		useQuickLinksStore();
@@ -59,11 +59,7 @@ const QuickLinks = () => {
 		setNewColor("#4285F4");
 	};
 
-	const btnCls = `w-10 h-10 rounded-full flex items-center justify-center border transition-all cursor-pointer ${
-		isDark
-			? "bg-[#2a2a2a] hover:bg-[#353535] border-[#3a3a3a]"
-			: "bg-white/50 hover:bg-white/80 border-gray-200"
-	}`;
+	const btnCls = `w-10 h-10 rounded-full flex items-center justify-center border transition-all cursor-pointer ${navBtnCls}`;
 
 	return (
 		<div
@@ -118,9 +114,7 @@ const QuickLinks = () => {
 				<div
 					ref={editorRef}
 					className={`fixed w-80 rounded-2xl shadow-2xl border p-4 z-[10001] ${
-						isDark
-							? "bg-[#2a2a2a] border-[#3a3a3a] text-white"
-							: "bg-white border-gray-200 text-slate-800"
+						cardCls
 					}`}
 					style={{
 						top: `${editorPos.top}px`,
@@ -140,7 +134,7 @@ const QuickLinks = () => {
 							<div
 								key={link.id}
 								className={`flex items-center gap-2 p-2 rounded-lg ${
-									isDark ? "bg-[#333333]" : "bg-gray-50"
+									secondaryBgCls
 								}`}
 							>
 								<div
@@ -164,7 +158,7 @@ const QuickLinks = () => {
 					</div>
 
 					{/* Add new link */}
-					<div className={`border-t pt-3 ${isDark ? "border-[#444444]" : "border-gray-200"}`}>
+					<div className={`border-t pt-3 ${borderCls}`}>
 						<p className="text-xs font-medium mb-2 opacity-70">{t("nav.add_new_link")}</p>
 						<div className="space-y-2">
 							<input

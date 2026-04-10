@@ -69,13 +69,15 @@ const AnalogClock = ({ time, isDark }) => {
 				}}
 			/>
 			{/* Center dot */}
-			<div className={`absolute w-2 h-2 ${handColor} rounded-full top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2`} />
+			<div
+				className={`absolute w-2 h-2 ${handColor} rounded-full top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2`}
+			/>
 		</div>
 	);
 };
 
 const TopNav = () => {
-	const { isDark, inputCls } = useTheme();
+	const { isDark, inputCls, navBtnCls } = useTheme();
 	const { t, i18n } = useTranslation();
 	const setTheme = useSettingsStore((s) => s.setTheme);
 	const clockStyle = useSettingsStore((s) => s.clockStyle);
@@ -88,9 +90,9 @@ const TopNav = () => {
 
 	// Language toggle handler
 	const handleLanguageToggle = () => {
-		const newLang = i18n.language === 'ko' ? 'en' : 'ko';
+		const newLang = i18n.language === "ko" ? "en" : "ko";
 		i18n.changeLanguage(newLang);
-		localStorage.setItem('language', newLang);
+		localStorage.setItem("language", newLang);
 	};
 
 	useEffect(() => {
@@ -118,7 +120,7 @@ const TopNav = () => {
 	};
 
 	return (
-		<header className="relative z-10 flex items-center justify-between px-12 pt-10 pb-14">
+		<header className="relative z-10 flex items-center justify-between px-10 pt-6 pb-6">
 			{/* Left — Avatar with user profile */}
 			<div className="flex items-center gap-3">
 				{user?.avatarUrl ? (
@@ -138,7 +140,9 @@ const TopNav = () => {
 							{user.displayName}
 						</p>
 						{user.email && (
-							<p className={`text-xs truncate max-w-[120px] ${isDark ? "opacity-50" : "text-gray-500"}`}>
+							<p
+								className={`text-xs truncate max-w-[120px] ${isDark ? "opacity-50" : "text-gray-500"}`}
+							>
 								{user.email}
 							</p>
 						)}
@@ -147,7 +151,7 @@ const TopNav = () => {
 			</div>
 
 			{/* Center — Clock + Search */}
-			<div className="flex flex-col items-center gap-12 flex-1">
+			<div className="flex flex-col items-center gap-7 flex-1">
 				{/* 환경설정에서 선택한 시계 스타일 반영 */}
 				{clockStyle === "analog" ? (
 					<AnalogClock time={currentTime} isDark={isDark} />
@@ -156,15 +160,18 @@ const TopNav = () => {
 						{detailedTimeStr}
 					</h1>
 				) : (
-					<h1 className="text-6xl font-light tracking-tighter drop-shadow-lg">
+					<h1 className="text-7xl font-light tracking-tighter drop-shadow-lg">
 						{timeStr}
 					</h1>
 				)}
-				<form onSubmit={handleSearch} className="w-1/2 max-w-5xl relative group">
+				<form
+					onSubmit={handleSearch}
+					className="w-[42%] max-w-3xl relative group"
+				>
 					<div className="absolute inset-y-0 left-4 flex items-center pointer-events-none z-10">
 						<Search
 							className={`${isDark ? "text-white/50" : "text-gray-500"} group-focus-within:text-blue-400 transition-colors`}
-							size={20}
+							size={18}
 						/>
 					</div>
 					<input
@@ -172,7 +179,7 @@ const TopNav = () => {
 						value={searchQuery}
 						onChange={(e) => setSearchQuery(e.target.value)}
 						placeholder={t("nav.search_placeholder")}
-						className={`w-full h-14 backdrop-blur-xl rounded-full pl-16 pr-12 text-base outline-none focus:ring-4 focus:ring-blue-500/20 transition-all shadow-lg border ${inputCls}`}
+						className={`w-full h-11 backdrop-blur-xl rounded-full pl-14 pr-10 text-sm outline-none focus:ring-4 focus:ring-blue-500/20 transition-all shadow-lg border ${inputCls}`}
 					/>
 				</form>
 			</div>
@@ -182,11 +189,7 @@ const TopNav = () => {
 				<QuickLinks />
 				<button
 					onClick={() => setShowDiaryList(true)}
-					className={`w-10 h-10 rounded-full flex items-center justify-center border transition-all ${
-						isDark
-							? "bg-[#2a2a2a] hover:bg-[#353535] border-[#3a3a3a]"
-							: "bg-white/50 hover:bg-white/80 border-gray-200"
-					}`}
+					className={`w-10 h-10 rounded-full flex items-center justify-center border transition-all ${navBtnCls}`}
 					title={t("nav.diary_list")}
 				>
 					<BookOpen size={18} className="text-blue-500" />
@@ -195,26 +198,18 @@ const TopNav = () => {
 				{/* Language Toggle Button */}
 				<button
 					onClick={handleLanguageToggle}
-					className={`w-10 h-10 rounded-full flex items-center justify-center border transition-all relative ${
-						isDark
-							? "bg-[#2a2a2a] hover:bg-[#353535] border-[#3a3a3a]"
-							: "bg-white/50 hover:bg-white/80 border-gray-200"
-					}`}
+					className={`w-10 h-10 rounded-full flex items-center justify-center border transition-all relative ${navBtnCls}`}
 					title={t("nav.language")}
 				>
 					<Languages size={18} className="text-green-500" />
-					<span className="absolute -bottom-0.5 -right-0.5 text-[8px] font-bold bg-green-500 text-white px-1 rounded">
+					<span className="absolute -bottom-0.5 -right-0.5 text-[10px] font-bold bg-green-500 text-white px-1 rounded">
 						{i18n.language?.toUpperCase()}
 					</span>
 				</button>
 
 				<button
 					onClick={() => setTheme(isDark ? "light" : "dark")}
-					className={`w-10 h-10 rounded-full flex items-center justify-center border transition-all ${
-						isDark
-							? "bg-[#2a2a2a] hover:bg-[#353535] border-[#3a3a3a]"
-							: "bg-white/50 hover:bg-white/80 border-gray-200"
-					}`}
+					className={`w-10 h-10 rounded-full flex items-center justify-center border transition-all ${navBtnCls}`}
 					title={t("nav.theme_toggle")}
 				>
 					{isDark ? <Moon size={18} /> : <Sun size={18} />}
@@ -222,7 +217,9 @@ const TopNav = () => {
 			</div>
 
 			{/* Diary List Modal */}
-			{showDiaryList && <DiaryListModal onClose={() => setShowDiaryList(false)} />}
+			{showDiaryList && (
+				<DiaryListModal onClose={() => setShowDiaryList(false)} />
+			)}
 		</header>
 	);
 };

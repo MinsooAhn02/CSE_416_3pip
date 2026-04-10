@@ -7,7 +7,7 @@ import { useTheme } from "../../hooks/useTheme";
  * @param {{ results: Array, answer: string, onClose: () => void }} props
  */
 const NewsDetailModal = ({ results = [], answer = "", onClose }) => {
-	const { isDark } = useTheme();
+	const { isDark, cardCls, secondaryBgCls, borderCls, hoverCls } = useTheme();
 	const [expandedIdx, setExpandedIdx] = useState(null);
 
 	const toggleExpand = (idx) => {
@@ -26,9 +26,7 @@ const NewsDetailModal = ({ results = [], answer = "", onClose }) => {
 			{/* 모달 본체 */}
 			<div
 				className={`relative z-10 w-full max-w-lg max-h-[80vh] rounded-2xl border shadow-2xl flex flex-col overflow-hidden ${
-					isDark
-						? "bg-[#1e1e1e] border-[#3a3a3a] text-white"
-						: "bg-white border-gray-200 text-slate-800"
+					cardCls
 				}`}
 				onClick={(e) => e.stopPropagation()}
 			>
@@ -41,7 +39,7 @@ const NewsDetailModal = ({ results = [], answer = "", onClose }) => {
 					<button
 						onClick={onClose}
 						className={`p-1 rounded-full transition-colors ${
-							isDark ? "hover:bg-[#353535]" : "hover:bg-gray-100"
+							hoverCls
 						}`}
 					>
 						<X size={18} />
@@ -50,7 +48,7 @@ const NewsDetailModal = ({ results = [], answer = "", onClose }) => {
 
 				{/* AI 전체 요약 */}
 				{answer && (
-					<div className={`px-4 py-3 border-b ${isDark ? "border-[#3a3a3a] bg-[#252525]" : "border-gray-100 bg-blue-50/30"}`}>
+					<div className={`px-4 py-3 border-b ${borderCls} ${secondaryBgCls}`}>
 						<p className={`text-xs leading-relaxed ${isDark ? "text-blue-300" : "text-blue-700"}`}>
 							{answer}
 						</p>
@@ -68,9 +66,7 @@ const NewsDetailModal = ({ results = [], answer = "", onClose }) => {
 							<div
 								key={idx}
 								className={`rounded-xl border transition-colors ${
-									isDark
-										? "border-[#3a3a3a] hover:bg-[#2a2a2a]"
-										: "border-gray-200 hover:bg-gray-50"
+									`${borderCls} ${hoverCls}`
 								}`}
 							>
 								{/* 뉴스 row — 클릭하면 content 토글 */}
@@ -90,7 +86,7 @@ const NewsDetailModal = ({ results = [], answer = "", onClose }) => {
 
 								{/* 확장 시 content + 원문 링크 */}
 								{expandedIdx === idx && (
-									<div className={`px-3 pb-3 space-y-2 border-t ${isDark ? "border-[#3a3a3a]" : "border-gray-100"}`}>
+									<div className={`px-3 pb-3 space-y-2 border-t ${borderCls}`}>
 										<p className={`text-xs leading-relaxed pt-2 ${isDark ? "opacity-70" : "text-gray-600"}`}>
 											{r.content || "요약 내용이 없습니다."}
 										</p>

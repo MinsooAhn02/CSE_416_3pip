@@ -1,12 +1,11 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { Sparkles, X, RefreshCw } from "lucide-react";
 import { useTheme } from "../../hooks/useTheme";
 import { useWidgetStore } from "../../store/useWidgetStore";
-import { mockSmartWidgets } from "../../mock/data";
 import DragHandle from "../common/DragHandle";
 
 const SmartWidgetContent = ({ keyword }) => {
-	const { isDark, cardCls, muted } = useTheme();
+	const { isDark, cardCls, muted, hoverCls, secondaryBgCls, borderCls } = useTheme();
 	const removeSmartWidget = useWidgetStore((s) => s.removeSmartWidget);
 	const refreshSmartWidget = useWidgetStore((s) => s.refreshSmartWidget);
 	const loadSmartWidget = useWidgetStore((s) => s.loadSmartWidget);
@@ -14,13 +13,21 @@ const SmartWidgetContent = ({ keyword }) => {
 	const error = useWidgetStore((s) => s.smartWidgetErrors[keyword]);
 	const generatedData = useWidgetStore((s) => s.smartWidgetData[keyword]);
 
-	const data = generatedData || mockSmartWidgets[keyword];
+	const data = generatedData;
 
+	/* Guard: only attempt load once per keyword mount.
+	 * Without this, a failed load (generatedData=null, isRefreshing=false, error set)
+	 * would re-trigger on every render → infinite retry loop. */
+	const fetchedRef = useRef(false);
 	useEffect(() => {
-		if (!generatedData && !isRefreshing) {
+		fetchedRef.current = false;
+	}, [keyword]);
+	useEffect(() => {
+		if (!generatedData && !isRefreshing && !error && !fetchedRef.current) {
+			fetchedRef.current = true;
 			loadSmartWidget(keyword);
 		}
-	}, [generatedData, isRefreshing, keyword, loadSmartWidget]);
+	}, [generatedData, isRefreshing, error, keyword, loadSmartWidget]);
 
 	if (!data) {
 		return (
@@ -43,13 +50,13 @@ const SmartWidgetContent = ({ keyword }) => {
 					</div>
 					<button
 						onClick={() => removeSmartWidget(keyword)}
-						className={`${muted} hover:opacity-100 transition-opacity p-1 rounded-lg ${isDark ? "hover:bg-[#333333]" : "hover:bg-gray-200"}`}
+						className={`${muted} hover:opacity-100 transition-opacity p-1 rounded-lg ${hoverCls}`}
 					>
 						<X size={14} />
 					</button>
 				</div>
 				<div
-					className={`text-center py-8 rounded-xl flex flex-col items-center justify-center ${isDark ? "bg-[#333333]" : "bg-gray-50"}`}
+					className={`text-center py-8 rounded-xl flex flex-col items-center justify-center ${secondaryBgCls}`}
 				>
 					<div className="text-3xl mb-3 animate-pulse">🤖</div>
 					<p className="text-sm font-medium mb-1">
@@ -88,14 +95,14 @@ const SmartWidgetContent = ({ keyword }) => {
 					<span className={`text-[10px] ${muted}`}>{data.lastUpdated}</span>
 					<button
 						onClick={() => refreshSmartWidget(keyword)}
-						className={`p-1 rounded-lg transition-all ${isDark ? "hover:bg-[#333333]" : "hover:bg-gray-200"} ${isRefreshing ? "animate-spin" : ""}`}
+						className={`p-1 rounded-lg transition-all ${hoverCls} ${isRefreshing ? "animate-spin" : ""}`}
 						title="새로고침"
 					>
 						<RefreshCw size={12} className={muted} />
 					</button>
 					<button
 						onClick={() => removeSmartWidget(keyword)}
-						className={`p-1 rounded-lg ${isDark ? "hover:bg-[#333333]" : "hover:bg-gray-200"} ${muted} hover:opacity-100`}
+						className={`p-1 rounded-lg ${hoverCls} ${muted} hover:opacity-100`}
 						title="위젯 삭제"
 					>
 						<X size={14} />
@@ -106,7 +113,7 @@ const SmartWidgetContent = ({ keyword }) => {
 			<div>
 				{isRefreshing ? (
 					<div
-						className={`text-center py-6 rounded-xl ${isDark ? "bg-[#333333]" : "bg-gray-50"}`}
+						className={`text-center py-6 rounded-xl ${secondaryBgCls}`}
 					>
 						<RefreshCw
 							size={24}
@@ -129,7 +136,7 @@ const SmartWidgetContent = ({ keyword }) => {
 										{section.bullets?.map((bullet, j) => (
 											<div
 												key={j}
-												className={`p-2.5 rounded-xl text-xs leading-relaxed ${isDark ? "bg-[#333333]" : "bg-gray-50"}`}
+												className={`p-2.5 rounded-xl text-xs leading-relaxed ${secondaryBgCls}`}
 											>
 												{bullet}
 											</div>
@@ -150,7 +157,7 @@ const SmartWidgetContent = ({ keyword }) => {
 										{section.items.map((item, j) => (
 											<div
 												key={j}
-												className={`flex items-center justify-between p-2.5 rounded-xl ${isDark ? "bg-[#333333]" : "bg-gray-50"}`}
+												className={`flex items-center justify-between p-2.5 rounded-xl ${secondaryBgCls}`}
 											>
 												<div>
 													<p className="text-xs font-medium">{item.name}</p>
@@ -184,7 +191,7 @@ const SmartWidgetContent = ({ keyword }) => {
 										{section.tags.map((tag, j) => (
 											<span
 												key={j}
-												className={`text-[10px] px-2.5 py-1 rounded-lg border cursor-pointer transition-colors ${isDark ? "bg-[#333333] border-[#3a3a3a] hover:bg-[#3a3a3a]" : "bg-gray-50 border-gray-200 hover:bg-gray-100"}`}
+												className={`text-[10px] px-2.5 py-1 rounded-lg border cursor-pointer transition-colors ${secondaryBgCls} ${borderCls} ${hoverCls}`}
 											>
 												{tag}
 											</span>

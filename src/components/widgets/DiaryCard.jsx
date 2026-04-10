@@ -6,7 +6,8 @@ import { useDiaryStore } from "../../store/useDiaryStore";
 const todayStr = () => new Date().toISOString().slice(0, 10);
 
 const DiaryCard = () => {
-	const { cardCls, isDark } = useTheme();
+	const { cardCls, cardShadowCls, isDark, inputCls, secondaryBgCls } =
+		useTheme();
 	const { t } = useTranslation();
 	const [diaryText, setDiaryText] = useState("");
 
@@ -22,17 +23,11 @@ const DiaryCard = () => {
 
 	return (
 		<div
-			className={`rounded-2xl border p-5 shadow-sm transition-colors duration-300 max-h-[400px] flex flex-col ${cardCls}`}
+			className={`rounded-2xl border p-5 ${cardShadowCls} transition-colors duration-300 max-h-[400px] flex flex-col ${cardCls}`}
 		>
-			<p className="font-bold text-sm mb-3">
-				{t("diary.question")}
-			</p>
+			<p className="font-bold text-sm mb-3">{t("diary.question")}</p>
 			<textarea
-				className={`w-full h-24 border rounded-lg p-3 text-sm resize-none outline-none focus:ring-2 focus:ring-blue-500/30 transition-all flex-shrink-0 ${
-					isDark
-						? "bg-[#333333] border-[#444444] text-white placeholder:text-neutral-500"
-						: "bg-gray-50 border-gray-200 text-slate-800 placeholder:text-gray-400"
-				}`}
+				className={`w-full h-24 border rounded-lg p-3 text-sm resize-none outline-none focus:ring-2 focus:ring-blue-500/30 transition-all flex-shrink-0 ${inputCls}`}
 				value={diaryText}
 				onChange={(e) => setDiaryText(e.target.value)}
 				placeholder={t("diary.placeholder")}
@@ -49,7 +44,7 @@ const DiaryCard = () => {
 					{savedEntries.map((text, idx) => (
 						<div
 							key={idx}
-							className={`text-xs p-2 rounded-lg ${isDark ? "bg-[#333333]" : "bg-gray-50"}`}
+							className={`text-xs p-2 rounded-lg ${secondaryBgCls}`}
 						>
 							<p>{text}</p>
 						</div>

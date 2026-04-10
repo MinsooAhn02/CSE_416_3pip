@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ls -lh *.txt *.md *.pdf)",
+      "Bash(find . -type f '\\(' -name '*.jsx' -o -name '*.js' -o -name '*.ts' '\\)' -not -path './node_modules/*' -exec sh -c 'lines=$\\(wc -l < \"$1\"\\); [ \"$lines\" -lt 20 ] && echo \"$1 \\($lines lines\\)\"' _ '{}' ';')"
+    ]
+  }
+}

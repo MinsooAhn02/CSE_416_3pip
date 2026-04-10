@@ -1,8 +1,9 @@
-import { useCallback, useState, useEffect } from "react";
-import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useTheme } from "../../hooks/useTheme";
 import { useSettingsStore } from "../../store/useSettingsStore";
 import { useWidgetStore } from "../../store/useWidgetStore";
+import { useDataStore } from "../../store/useDataStore";
 import { DEFAULT_PRIORITY_ORDER } from "../../constants";
 
 import BriefingWidget from "../widgets/BriefingWidget";
@@ -29,51 +30,66 @@ const STANDARD_WIDGET_COMPONENTS = {
 // Stable wrapper to avoid re-mount on every render
 const SmartWidget = ({ keyword }) => <SmartWidgetContent keyword={keyword} />;
 
-/**
- * DashboardLayout - 1:3:3 Frame Architecture
- * 
- * Left Column (1): Fixed - BriefingWidget, DiaryCard
- * Middle Column (3): Widget Scroll Box - Standard Widgets (1 per row, full-width)
- * Right Column (3): Fixed - CalendarWidget
- */
+const EDGE_HOVER_THRESHOLD = 24;
+const EDGE_HOVER_COOLDOWN_MS = 650;
+
+const chunkArray = (items, size) => {
+	if (!Array.isArray(items) || items.length === 0) return [];
+	const chunks = [];
+	for (let i = 0; i < items.length; i += size) {
+		chunks.push(items.slice(i, i + size));
+	}
+	return chunks;
+};
+
+const getSmartPayloadWeight = (payload) => {
+	if (!payload || typeof payload !== "object") return 0;
+	if (!Array.isArray(payload.sections)) return 0;
+
+	return payload.sections.reduce((acc, section) => {
+		const bulletCount = Array.isArray(section?.bullets)
+			? section.bullets.length
+			: 0;
+		const itemCount = Array.isArray(section?.items) ? section.items.length : 0;
+		const tagCount = Array.isArray(section?.tags) ? section.tags.length : 0;
+		return acc + bulletCount + itemCount + tagCount;
+	}, 0);
+};
+
 const DashboardLayout = () => {
-	const { isDark } = useTheme();
+	const { isDark, borderCls } = useTheme();
 	const smartKeywords = useWidgetStore((s) => s.smartKeywords);
-	const priorityOrder = useSettingsStore((s) => s.priorityOrder) || DEFAULT_PRIORITY_ORDER;
+	const vis = useWidgetStore((s) => s.vis);
+	const smartWidgetData = useWidgetStore((s) => s.smartWidgetData);
+	const trends = useDataStore((s) => s.trends);
+	const trendsResults = useDataStore((s) => s.trendsResults);
+	const newsResults = useDataStore((s) => s.newsResults);
+	const stocks = useDataStore((s) => s.stocks);
+	const priorityOrder =
+		useSettingsStore((s) => s.priorityOrder) || DEFAULT_PRIORITY_ORDER;
+	const [activePanel, setActivePanel] = useState(0);
+	const [cardsPerView, setCardsPerView] = useState(2);
+	const lastEdgeTriggerAt = useRef(0);
 
-	// Middle Column widget order state (priority-based, syncs with LLM briefing priority)
-	const [middleWidgetOrder, setMiddleWidgetOrder] = useState(DEFAULT_PRIORITY_ORDER);
+	const expandedWidgetOrder = useMemo(() => {
+		const normalized = [];
 
-	// Update middle column order when priority changes
-	useEffect(() => {
-		setMiddleWidgetOrder(priorityOrder);
-	}, [priorityOrder]);
-
-	/**
-	 * Handle DnD reorder in Middle Column (Standard Widgets only)
-	 * Widget order = LLM Briefing Priority
-	 */
-	const handleMiddleDragEnd = useCallback((result) => {
-		const { source, destination } = result;
-		if (!destination) return;
-		if (source.index === destination.index) return;
-
-		setMiddleWidgetOrder((prev) => {
-			const next = [...prev];
-			const [removed] = next.splice(source.index, 1);
-			next.splice(destination.index, 0, removed);
-
-			// Save to settings store (syncs with LLM briefing priority)
-			useSettingsStore.getState().setPriorityOrder?.(next);
-			return next;
+		priorityOrder.forEach((widgetId) => {
+			if (widgetId === "smart") {
+				if (smartKeywords?.length > 0) {
+					smartKeywords.forEach((kw) => normalized.push(`smart_${kw}`));
+				}
+				return;
+			}
+			// vis[widgetId] === false면 숨김 (X 버튼으로 닫은 위젯)
+			if (vis[widgetId] === false) return;
+			normalized.push(widgetId);
 		});
-	}, []);
 
-	/**
-	 * Render Standard Widget by ID (REQ-WS-002)
-	 * Each widget occupies 100% width (horizontal wide-card format)
-	 */
-	const renderStandardWidget = useCallback((widgetId, index) => {
+		return normalized;
+	}, [priorityOrder, smartKeywords, vis]);
+
+	const renderStandardWidget = useCallback((widgetId) => {
 		let Component = STANDARD_WIDGET_COMPONENTS[widgetId];
 
 		// Handle smart widgets (dynamic AI content)
@@ -82,138 +98,237 @@ const DashboardLayout = () => {
 			Component = () => <SmartWidget keyword={keyword} />;
 		}
 
-		// Handle base 'smart' widget with multiple keywords
-		if (widgetId === "smart" && smartKeywords?.length > 0) {
-			return smartKeywords.map((kw, idx) => (
-				<Draggable key={`smart_${kw}`} draggableId={`smart_${kw}`} index={index + idx}>
-					{(provided, snapshot) => (
-						<div
-							ref={provided.innerRef}
-							{...provided.draggableProps}
-							{...provided.dragHandleProps}
-							className={`w-full ${snapshot.isDragging ? "ring-2 ring-blue-500 rounded-2xl shadow-2xl opacity-90" : ""}`}
-						>
-							<SmartWidget keyword={kw} />
-						</div>
-					)}
-				</Draggable>
-			));
-		}
-
 		if (!Component) return null;
 
-		return (
-			<Draggable key={widgetId} draggableId={widgetId} index={index}>
-				{(provided, snapshot) => (
-					<div
-						ref={provided.innerRef}
-						{...provided.draggableProps}
-						{...provided.dragHandleProps}
-						className={`w-full ${snapshot.isDragging ? "ring-2 ring-blue-500 rounded-2xl shadow-2xl opacity-90" : ""}`}
-						style={{
-							...provided.draggableProps.style,
-							transition: snapshot.isDragging ? undefined : "box-shadow 0.2s ease, opacity 0.2s ease",
-						}}
-					>
-						<Component />
+		return <Component />;
+	}, []);
+
+	const isDenseWidget = useCallback(
+		(widgetId) => {
+			if (widgetId === "news") return (newsResults?.length || 0) > 5;
+			if (widgetId === "trends") {
+				const score = (trends?.length || 0) + (trendsResults?.length || 0);
+				return score > 7;
+			}
+			if (widgetId === "stocks") return (stocks?.length || 0) > 4;
+
+			if (widgetId.startsWith("smart_")) {
+				const keyword = widgetId.slice(6);
+				const payload = smartWidgetData?.[keyword];
+				return getSmartPayloadWeight(payload) > 8;
+			}
+
+			return false;
+		},
+		[newsResults, smartWidgetData, stocks, trends, trendsResults],
+	);
+
+	const widgetStacks = useMemo(() => {
+		const compact = chunkArray(expandedWidgetOrder, 2);
+		if (compact.length === 0) return compact;
+
+		const adaptiveStacks = [];
+		let carry = [];
+
+		expandedWidgetOrder.forEach((widgetId) => {
+			if (isDenseWidget(widgetId)) {
+				if (carry.length > 0) {
+					adaptiveStacks.push(carry);
+					carry = [];
+				}
+				adaptiveStacks.push([widgetId]);
+				return;
+			}
+
+			carry.push(widgetId);
+			if (carry.length === 2) {
+				adaptiveStacks.push(carry);
+				carry = [];
+			}
+		});
+
+		if (carry.length > 0) adaptiveStacks.push(carry);
+		return adaptiveStacks;
+	}, [expandedWidgetOrder, isDenseWidget]);
+
+	const deckItems = useMemo(() => {
+		const baseItems = [
+			{
+				id: "briefing-pack",
+				render: () => (
+					<div className="flex min-h-0 flex-col gap-4">
+						<BriefingWidget />
+						<DiaryCard />
 					</div>
-				)}
-			</Draggable>
-		);
-	}, [smartKeywords]);
+				),
+			},
+		];
 
-	// Theme-based card styles
-	const cardBg = isDark ? "bg-morning-dark-card" : "bg-morning-light-card";
-	const scrollBoxBg = isDark ? "bg-morning-dark-cardSecondary/50" : "bg-morning-light-card/30";
-
-	/* PHASE 13: CRITICAL FIXES */
-	/* #1: Removed fixed height to allow Calendar and DatePanelContainer to expand naturally */
-	/* #4: Shifted layout to the right with ml-[8%] and removed mx-auto */
-	/* - Layout is right-shifted instead of centered */
-	/* - Page scrolls to show full Diary section below Calendar */
-	return (
-		<div 
-			className="flex flex-row gap-4 pb-40 mt-2 h-auto items-start ml-[8%] max-w-[92vw]"
-		>
-			{/* ═══ LEFT SPACER (Ratio 1) ═══ */}
-			<div style={{ flex: "0.3 0 0" }} />
-
-			{/* ═══ LEFT COLUMN (Ratio 1) - Sticky Sidebar ═══ */}
-			{/* PHASE 19: Implemented sticky positioning for Left column */}
-			{/* - sticky top-4: Sticks to top with small offset */}
-			{/* - h-[calc(100vh-2rem)]: Takes full viewport height minus padding */}
-			{/* - overflow-y-auto: Internal scroll for content exceeding viewport */}
-			{/* - custom-scrollbar: Styled scrollbar for consistency */}
-			{/* - z-10: Lower z-index so modals (z-9999+) appear above */}
-			<aside 
-				className="sticky top-4 z-10 flex flex-col gap-4 flex-shrink-0 h-[calc(100vh-2rem)] overflow-y-auto custom-scrollbar"
-				style={{ flex: "3 0 0", minWidth: "15%", maxWidth: "15%" }}
-			>
-				{/* BriefingWidget - Always visible (REQ-WS-002) */}
-				<div className="flex-none">
-					<BriefingWidget />
-				</div>
-				{/* DiaryCard - Always visible (REQ-WS-002) */}
-				<div className="flex-1 min-h-0">
-					<DiaryCard />
-				</div>
-			</aside>
-
-			{/* ═══ MIDDLE COLUMN (Ratio 3) - Widget Scroll Box ═══ */}
-			{/* PHASE 11: Removed max-h constraint, now stretches with items-stretch */}
-			{/* - Middle column height now matches Calendar exactly */}
-			{/* - Internal overflow-y-auto for widget scrolling */}
-			<DragDropContext onDragEnd={handleMiddleDragEnd}>
-				<Droppable droppableId="widgetScrollBox" direction="vertical">
-					{(provided, snapshot) => (
-						<main
-							ref={provided.innerRef}
-							{...provided.droppableProps}
-							className={`
-								widget-scroll-box
-								flex-1 rounded-2xl transition-colors duration-200
-								overflow-y-auto
-								${scrollBoxBg}
-								${snapshot.isDraggingOver ? (isDark ? "bg-blue-500/10" : "bg-blue-100/30") : ""}
-							`}
-							style={{ 
-								flex: "3 0 0",
-							}}
-						>
-							{/* Widget List - 1 widget per row (100% width, horizontal cards) */}
-							<div className="flex flex-col gap-4 p-4">
-								{middleWidgetOrder.map((widgetId, index) =>
-									renderStandardWidget(widgetId, index)
-								)}
-								{provided.placeholder}
+		widgetStacks.forEach((widgetGroup, stackIndex) => {
+			baseItems.push({
+				id: `widget-stack-${stackIndex}`,
+				render: () => (
+					<div className="flex min-h-0 flex-col gap-4">
+						{widgetGroup.map((widgetId) => (
+							<div key={`stack-${stackIndex}-${widgetId}`} className="min-h-0">
+								{renderStandardWidget(widgetId)}
 							</div>
-						</main>
-					)}
-				</Droppable>
-			</DragDropContext>
+						))}
+					</div>
+				),
+			});
+		});
 
-			{/* ═══ RIGHT COLUMN (Ratio 3) - Sticky Sidebar ═══ */}
-			{/* PHASE 19: Implemented sticky positioning for Right column */}
-			{/* - sticky top-4: Sticks to top with small offset */}
-			{/* - h-[calc(100vh-2rem)]: Takes full viewport height minus padding */}
-			{/* - overflow-y-auto: Internal scroll for content exceeding viewport */}
-			{/* - custom-scrollbar: Styled scrollbar for consistency */}
-			{/* - z-10: Lower z-index so modals (z-9999+) appear above */}
-			<aside 
-				className="sticky top-4 z-10 flex flex-col gap-4 flex-shrink-0 h-[calc(100vh-2rem)] overflow-y-auto custom-scrollbar"
-				style={{ flex: "3 0 0", minWidth: "25%", maxWidth: "25%" }}
-			>
-				{/* CalendarWidget - Top (REQ-WS-001) */}
-				{/* PHASE 20: Removed overflow-hidden to allow DatePanelContainer to expand naturally */}
-				{/* - min-h-0 allows flex child to shrink below content size */}
-				{/* - Parent aside handles overflow scrolling */}
-				<div className="min-h-0">
+		return baseItems;
+	}, [renderStandardWidget, widgetStacks]);
+
+	useEffect(() => {
+		if (typeof window === "undefined") return;
+
+		const mediaQuery = window.matchMedia("(min-width: 1280px)");
+		const syncCardsPerView = () => setCardsPerView(mediaQuery.matches ? 2 : 1);
+
+		syncCardsPerView();
+
+		if (typeof mediaQuery.addEventListener === "function") {
+			mediaQuery.addEventListener("change", syncCardsPerView);
+			return () => mediaQuery.removeEventListener("change", syncCardsPerView);
+		}
+
+		mediaQuery.addListener(syncCardsPerView);
+		return () => mediaQuery.removeListener(syncCardsPerView);
+	}, []);
+
+	const maxStartIndex = Math.max(deckItems.length - cardsPerView, 0);
+	const totalPanels = maxStartIndex + 1;
+
+	useEffect(() => {
+		setActivePanel((prev) => Math.min(prev, maxStartIndex));
+	}, [maxStartIndex]);
+
+	const movePanel = useCallback(
+		(delta) => {
+			setActivePanel((prev) => {
+				const next = prev + delta;
+				if (next < 0 || next > maxStartIndex) return prev;
+				return next;
+			});
+		},
+		[maxStartIndex],
+	);
+
+	const handleWindowEdgeHover = useCallback(
+		(event) => {
+			const now = Date.now();
+			if (now - lastEdgeTriggerAt.current < EDGE_HOVER_COOLDOWN_MS) return;
+
+			const cursorX = event.clientX;
+			const isNearLeft = cursorX <= EDGE_HOVER_THRESHOLD;
+			const isNearRight = cursorX >= window.innerWidth - EDGE_HOVER_THRESHOLD;
+
+			if (isNearLeft && activePanel > 0) {
+				lastEdgeTriggerAt.current = now;
+				movePanel(-1);
+				return;
+			}
+
+			if (isNearRight && activePanel < totalPanels - 1) {
+				lastEdgeTriggerAt.current = now;
+				movePanel(1);
+			}
+		},
+		[activePanel, movePanel, totalPanels],
+	);
+
+	useEffect(() => {
+		if (typeof window === "undefined") return;
+		window.addEventListener("mousemove", handleWindowEdgeHover);
+		return () => window.removeEventListener("mousemove", handleWindowEdgeHover);
+	}, [handleWindowEdgeHover]);
+
+	const dotCount = totalPanels;
+	const slideTranslate = activePanel * (100 / cardsPerView);
+	const cardBasis = `${100 / cardsPerView}%`;
+
+	return (
+		<div className="mx-auto mt-0.5 w-full max-w-[96vw] px-2 pb-20 xl:px-4">
+			<div className="grid grid-cols-1 gap-4 pb-2 xl:gap-2 xl:grid-cols-[minmax(0,0.4fr)_minmax(0,1fr)_minmax(0,1.7fr)_minmax(0,0.4fr)] xl:items-start">
+				<aside className="min-h-0 pb-3 xl:col-start-2 xl:sticky xl:top-4 xl:max-h-[calc(100vh-11rem)] xl:overflow-y-auto custom-scrollbar">
 					<CalendarWidget />
-				</div>
-			</aside>
+				</aside>
 
-			{/* ═══ RIGHT SPACER (Ratio 1) ═══ */}
-			<div style={{ flex: "0.7 0 0" }} />
+				<section className="relative min-h-0 pb-3 xl:col-start-3">
+					<div className="absolute -top-11 right-2 z-20 flex items-center gap-2 xl:-top-12">
+						<button
+							type="button"
+							onClick={() => movePanel(-1)}
+							disabled={activePanel === 0}
+							className={`h-9 w-9 rounded-full border flex items-center justify-center transition-all ${
+								activePanel === 0
+									? "cursor-not-allowed opacity-40"
+									: "opacity-90 hover:opacity-100"
+							} ${
+								isDark
+									? `bg-morning-dark-card ${borderCls}`
+									: "bg-white border-gray-200"
+							}`}
+							aria-label="Previous widget panel"
+						>
+							<ChevronLeft size={16} />
+						</button>
+
+						<button
+							type="button"
+							onClick={() => movePanel(1)}
+							disabled={activePanel === totalPanels - 1}
+							className={`h-9 w-9 rounded-full border flex items-center justify-center transition-all ${
+								activePanel === totalPanels - 1
+									? "cursor-not-allowed opacity-40"
+									: "opacity-90 hover:opacity-100"
+							} ${
+								isDark
+									? `bg-morning-dark-card ${borderCls}`
+									: "bg-white border-gray-200"
+							}`}
+							aria-label="Next widget panel"
+						>
+							<ChevronRight size={16} />
+						</button>
+					</div>
+
+					<div className="overflow-hidden pt-1 pb-2">
+						<div
+							className="flex transition-transform duration-500 ease-out"
+							style={{ transform: `translateX(-${slideTranslate}%)` }}
+						>
+							{deckItems.map((item) => (
+								<section
+									key={item.id}
+									className="min-h-0 min-w-0 flex-shrink-0 px-2"
+									style={{
+										width: cardBasis,
+										maxWidth: cardBasis,
+										flexBasis: cardBasis,
+									}}
+								>
+									{item.render()}
+								</section>
+							))}
+						</div>
+					</div>
+				</section>
+			</div>
+
+			<div className="mt-4 flex items-center justify-center gap-2">
+				{Array.from({ length: dotCount }).map((_, i) => (
+					<button
+						key={`carousel-dot-${i}`}
+						onClick={() => setActivePanel(i)}
+						className={`h-2.5 rounded-full transition-all ${activePanel === i ? "w-6 bg-blue-500" : isDark ? "w-2.5 bg-gray-600" : "w-2.5 bg-gray-300"}`}
+						aria-label={`Go to panel ${i + 1}`}
+					/>
+				))}
+			</div>
 		</div>
 	);
 };

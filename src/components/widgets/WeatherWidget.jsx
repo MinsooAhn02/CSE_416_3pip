@@ -8,12 +8,12 @@ import WidgetCard from "../common/WidgetCard";
 const toFahrenheit = (celsius) => Math.round((celsius * 9) / 5 + 32);
 
 const WeatherWidget = () => {
-	const { isDark } = useTheme();
+	const { isDark, secondaryBgCls } = useTheme();
 	const { t } = useTranslation();
 	const weather = useDataStore((s) => s.weather);
 	const loading = useDataStore((s) => s.loading.weather);
 	const error = useDataStore((s) => s.errors.weather);
-	const rawWeather = useDataStore((s) => s.rawData.weather);
+	const apiStatus = useDataStore((s) => s.apiStatus.weather ?? null);
 	const fetchWeather = useDataStore((s) => s.fetchWeather);
 	const getLastUpdatedMinutes = useDataStore((s) => s.getLastUpdatedMinutes);
 	const tempUnit = useSettingsStore((s) => s.tempUnit);
@@ -42,9 +42,12 @@ const WeatherWidget = () => {
 			onRefresh={() => fetchWeather(undefined, undefined, undefined, true)}
 			refreshing={!!loading}
 			refreshIcon={RefreshCw}
+			apiStatus={apiStatus}
+			apiError={error}
 		>
-			{error && <p className="text-[11px] text-red-400 mb-2">{error}</p>}
-			{weather ? (
+			{loading ? (
+				<p className="text-sm opacity-50">{t("widgets.weather.loading")}</p>
+			) : weather ? (
 				<div className="space-y-3">
 					<div className="flex items-center justify-between">
 						<div className="flex items-center gap-3">
@@ -66,11 +69,7 @@ const WeatherWidget = () => {
 							<button
 								onClick={() => setTempUnit("c")}
 								className={`text-xs px-2 py-1 rounded-md ${
-									tempUnit === "c"
-										? "bg-blue-500 text-white"
-										: isDark
-											? "bg-[#333333]"
-											: "bg-gray-100"
+									tempUnit === "c" ? "bg-blue-500 text-white" : secondaryBgCls
 								}`}
 							>
 								C
@@ -78,11 +77,7 @@ const WeatherWidget = () => {
 							<button
 								onClick={() => setTempUnit("f")}
 								className={`text-xs px-2 py-1 rounded-md ${
-									tempUnit === "f"
-										? "bg-blue-500 text-white"
-										: isDark
-											? "bg-[#333333]"
-											: "bg-gray-100"
+									tempUnit === "f" ? "bg-blue-500 text-white" : secondaryBgCls
 								}`}
 							>
 								F
@@ -91,41 +86,28 @@ const WeatherWidget = () => {
 					</div>
 
 					<div className="grid grid-cols-3 gap-2">
-						<div className={`p-2 rounded-lg text-center ${isDark ? "bg-[#333333]" : "bg-gray-50"}`}>
+						<div className={`p-2 rounded-lg text-center ${secondaryBgCls}`}>
 							<Droplets size={14} className="mx-auto mb-1 text-blue-400" />
 							<p className="text-xs font-medium">{weather.humidity}%</p>
 							<p className={`text-[10px] ${isDark ? "text-gray-400" : "text-slate-400"}`}>{t("widgets.weather.humidity")}</p>
 						</div>
-						<div className={`p-2 rounded-lg text-center ${isDark ? "bg-[#333333]" : "bg-gray-50"}`}>
+						<div className={`p-2 rounded-lg text-center ${secondaryBgCls}`}>
 							<Cloud size={14} className="mx-auto mb-1 text-gray-400" />
 							<p className="text-xs font-medium">{weather.precipitation}%</p>
 							<p className={`text-[10px] ${isDark ? "text-gray-400" : "text-slate-400"}`}>{t("widgets.weather.precipitation")}</p>
 						</div>
-						<div className={`p-2 rounded-lg text-center ${isDark ? "bg-[#333333]" : "bg-gray-50"}`}>
+						<div className={`p-2 rounded-lg text-center ${secondaryBgCls}`}>
 							<Wind size={14} className="mx-auto mb-1 text-green-400" />
 							<p className="text-xs font-medium">{weather.airQuality}</p>
 							<p className={`text-[10px] ${isDark ? "text-gray-400" : "text-slate-400"}`}>{t("widgets.weather.air_quality")}</p>
 						</div>
 					</div>
 				</div>
-			) : loading ? (
-				<p className="text-sm opacity-50">{t("widgets.weather.loading")}</p>
+			) : error ? (
+				<p className="text-[11px] text-red-400">{error}</p>
 			) : (
-				<p className="text-sm opacity-50">{t("widgets.weather.no_data")}</p>
+				<p className="text-[11px] text-red-400">{t("widgets.weather.no_data")}</p>
 			)}
-
-			<details className="mt-3">
-				<summary className="text-[11px] opacity-70 cursor-pointer">
-					Raw API Data (weather)
-				</summary>
-				<pre
-					className={`mt-2 text-[10px] leading-relaxed p-2 rounded-lg overflow-auto max-h-48 ${
-						isDark ? "bg-[#222222]" : "bg-gray-100"
-					}`}
-				>
-					{JSON.stringify(rawWeather ?? weather, null, 2)}
-				</pre>
-			</details>
 		</WidgetCard>
 	);
 };

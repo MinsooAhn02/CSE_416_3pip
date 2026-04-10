@@ -1,10 +1,12 @@
 import { create } from "zustand";
+import toast from "react-hot-toast";
 import { load, save } from "../utils/storage";
 import { supabase } from "../lib/supabase";
 import { generateSmartWidgetData } from "../services/aiService";
 import { useAuthStore } from "./useAuthStore";
 import { useDataStore } from "./useDataStore";
 import { DEFAULT_VIS, DEFAULT_LAYOUTS, WIDGET_LIST } from "../constants";
+import i18n from "../l10n/i18n";
 
 const LAYOUT_VERSION = 14;
 const BUILTIN_IDS = new Set(WIDGET_LIST.map((w) => w.id));
@@ -255,8 +257,18 @@ export const useWidgetStore = create((set, get) => ({
 	addSmartWidget: async () => {
 		const { newKeyword, smartKeywords } = get();
 		const kw = newKeyword.trim();
-		if (!kw || smartKeywords.includes(kw)) return;
-		if (kw.startsWith("smart_") || BUILTIN_IDS.has(kw)) return;
+		if (!kw) {
+			toast.error(i18n.t("toast.widget_invalid"), { id: "widget-invalid" });
+			return;
+		}
+		if (smartKeywords.includes(kw)) {
+			toast.error(i18n.t("toast.widget_exists"), { id: "widget-exists" });
+			return;
+		}
+		if (kw.startsWith("smart_") || BUILTIN_IDS.has(kw)) {
+			toast.error(i18n.t("toast.widget_invalid"), { id: "widget-invalid" });
+			return;
+		}
 		const newKey = `smart_${kw}`;
 		set((s) => {
 			const nextKeywords = [...s.smartKeywords, kw];
@@ -286,6 +298,7 @@ export const useWidgetStore = create((set, get) => ({
 				showAddSmart: false,
 			};
 		});
+		toast.success(i18n.t("toast.widget_added"), { id: "widget-added" });
 		await get().loadSmartWidget(kw, true);
 	},
 	removeSmartWidget: (kw) => {

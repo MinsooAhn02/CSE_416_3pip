@@ -6,24 +6,30 @@ import PINModal from "../modals/PINModal";
 
 /**
  * DiaryPanel — PIN-protected diary display and edit
- * 
+ *
  * BUG FIX #1: Blur-Lock Interaction
  * - Shows blurred content with lock overlay initially
  * - PIN modal only appears on user click, not automatically
- * 
+ *
  * BUG FIX #2: Strict PIN Session Reset
  * - PIN auth resets when closing/switching dates
  * - User must re-enter PIN every time
- * 
+ *
  * BUG FIX #4: Diary Edit Functionality
  * - Users can now edit AI-generated diary content
  * - Save button updates state correctly
- * 
+ *
  * @param {{ selectedDate: string, onClose?: () => void }} props
  */
-const DiaryPanel = ({ selectedDate, onClose }) => {
-	const { isDark, cardCls, inputCls } = useTheme();
-	const { getDiary, saveDiary, saveMemo, isPinAuthenticatedSession, clearPinSession } = useDiaryStore();
+const DiaryPanel = ({ selectedDate, onClose, compact = false }) => {
+	const { isDark, cardCls, inputCls, hoverCls, secondaryBgCls } = useTheme();
+	const {
+		getDiary,
+		saveDiary,
+		saveMemo,
+		isPinAuthenticatedSession,
+		clearPinSession,
+	} = useDiaryStore();
 
 	const [showPinModal, setShowPinModal] = useState(false);
 	const [isEditingDiary, setIsEditingDiary] = useState(false);
@@ -98,6 +104,76 @@ const DiaryPanel = ({ selectedDate, onClose }) => {
 		return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")} ${days[d.getDay()]}`;
 	};
 
+	if (compact) {
+		const previewText =
+			diaryContent || memoContent || "No diary content for this date.";
+
+		return (
+			<div className={`rounded-xl border p-3 ${cardCls}`}>
+				<div className="flex items-center justify-between gap-2 mb-2">
+					<div className="flex items-center gap-2">
+						<BookOpen size={15} className="text-blue-500" />
+						<h3 className="font-bold text-xs">Diary</h3>
+						{!isAuthenticated && <Lock size={13} className="text-gray-500" />}
+					</div>
+					{isAuthenticated && (
+						<button
+							onClick={handleLock}
+							title="Lock and reset PIN"
+							className={`p-1 rounded-md transition-colors ${hoverCls}`}
+						>
+							<Lock size={14} />
+						</button>
+					)}
+				</div>
+
+				{showPinModal && !isAuthenticated && (
+					<PINModal
+						onSuccess={() => {
+							setShowPinModal(false);
+						}}
+						onCancel={() => {
+							setShowPinModal(false);
+							onClose?.();
+						}}
+					/>
+				)}
+
+				{!isAuthenticated ? (
+					<button
+						onClick={() => setShowPinModal(true)}
+						className={`w-full h-12 rounded-lg px-3 flex items-center gap-2 transition-all ${`${secondaryBgCls} ${hoverCls}`}`}
+					>
+						<Lock
+							size={16}
+							className={isDark ? "text-gray-500" : "text-gray-400"}
+						/>
+						<p
+							className={`text-xs text-left ${isDark ? "text-gray-400" : "text-gray-600"}`}
+						>
+							Diary is locked. Tap to unlock.
+						</p>
+					</button>
+				) : (
+					<div
+						className={`h-12 rounded-lg px-3 flex items-center gap-3 ${secondaryBgCls}`}
+					>
+						<p
+							className={`text-[11px] whitespace-nowrap ${isDark ? "text-gray-400" : "text-gray-500"}`}
+						>
+							{formatDate(selectedDate)}
+						</p>
+						<p
+							className={`text-xs truncate ${isDark ? "text-gray-300" : "text-gray-700"}`}
+						>
+							{previewText}
+						</p>
+					</div>
+				)}
+			</div>
+		);
+	}
+
 	return (
 		<div className={`rounded-xl border p-4 space-y-4 h-auto ${cardCls}`}>
 			{/* Header */}
@@ -107,15 +183,26 @@ const DiaryPanel = ({ selectedDate, onClose }) => {
 					<h3 className="font-bold text-sm">Diary</h3>
 					{!isAuthenticated && <Lock size={14} className="text-gray-500" />}
 				</div>
-				{isAuthenticated && (
-					<button
-						onClick={handleLock}
-						title="Lock and reset PIN"
-						className={`p-1.5 rounded-lg transition-colors ${isDark ? "hover:bg-[#353535]" : "hover:bg-gray-100"}`}
-					>
-						<Lock size={16} />
-					</button>
-				)}
+				<div className="flex items-center gap-1">
+					{isAuthenticated && (
+						<button
+							onClick={handleLock}
+							title="Lock and reset PIN"
+							className={`p-1.5 rounded-lg transition-colors ${hoverCls}`}
+						>
+							<Lock size={16} />
+						</button>
+					)}
+					{onClose && (
+						<button
+							onClick={onClose}
+							title="Close diary"
+							className={`p-1.5 rounded-lg transition-colors ${hoverCls}`}
+						>
+							<X size={16} />
+						</button>
+					)}
+				</div>
 			</div>
 
 			{/* PIN Modal (BUG FIX #1: Only shows on click, not automatically) */}
@@ -135,14 +222,15 @@ const DiaryPanel = ({ selectedDate, onClose }) => {
 			{!isAuthenticated && (
 				<div
 					onClick={() => setShowPinModal(true)}
-					className={`h-[280px] rounded-lg flex flex-col items-center justify-center cursor-pointer transition-all ${
-						isDark
-							? "bg-[#2a2a2a] hover:bg-[#353535]"
-							: "bg-gray-50 hover:bg-gray-100"
-					}`}
+					className={`h-[280px] rounded-lg flex flex-col items-center justify-center cursor-pointer transition-all ${`${secondaryBgCls} ${hoverCls}`}`}
 				>
-					<Lock size={48} className={`mb-3 ${isDark ? "text-gray-500" : "text-gray-400"}`} />
-					<p className={`text-xs font-medium text-center ${isDark ? "text-gray-400" : "text-gray-600"}`}>
+					<Lock
+						size={48}
+						className={`mb-3 ${isDark ? "text-gray-500" : "text-gray-400"}`}
+					/>
+					<p
+						className={`text-xs font-medium text-center ${isDark ? "text-gray-400" : "text-gray-600"}`}
+					>
 						Click to unlock
 					</p>
 				</div>
@@ -152,20 +240,24 @@ const DiaryPanel = ({ selectedDate, onClose }) => {
 			{isAuthenticated && (
 				<div className="space-y-4">
 					{/* Date Info */}
-					<p className={`text-xs font-medium flex-shrink-0 ${isDark ? "text-gray-400" : "text-gray-600"}`}>
+					<p
+						className={`text-xs font-medium flex-shrink-0 ${isDark ? "text-gray-400" : "text-gray-600"}`}
+					>
 						{formatDate(selectedDate)}
 					</p>
 
 					{/* AI Generated Diary (Now Editable!) */}
 					<div className="space-y-2">
 						<div className="flex items-center justify-between">
-							<label className={`text-xs font-medium block ${isDark ? "text-blue-300" : "text-blue-600"}`}>
+							<label
+								className={`text-xs font-medium block ${isDark ? "text-blue-300" : "text-blue-600"}`}
+							>
 								AI Generated Diary
 							</label>
 							{!isEditingDiary && (
 								<button
 									onClick={() => setIsEditingDiary(true)}
-									className={`p-1 rounded-lg text-xs transition-colors ${isDark ? "hover:bg-[#353535]" : "hover:bg-gray-100"}`}
+									className={`p-1 rounded-lg text-xs transition-colors ${hoverCls}`}
 									title="Edit diary"
 								>
 									<Edit2 size={14} />
@@ -174,9 +266,7 @@ const DiaryPanel = ({ selectedDate, onClose }) => {
 						</div>
 						{!isEditingDiary ? (
 							<div
-								className={`p-3 rounded-lg text-xs leading-relaxed whitespace-pre-wrap min-h-[80px] cursor-pointer transition-all ${
-									isDark ? "bg-[#2a2a2a] text-gray-300 hover:bg-[#353535]" : "bg-gray-50 text-gray-700 hover:bg-gray-100"
-								}`}
+								className={`p-3 rounded-lg text-xs leading-relaxed whitespace-pre-wrap min-h-[80px] cursor-pointer transition-all ${`${secondaryBgCls} ${hoverCls}`}`}
 								onClick={() => setIsEditingDiary(true)}
 							>
 								{diaryContent || "No diary generated for this date yet."}
@@ -201,7 +291,7 @@ const DiaryPanel = ({ selectedDate, onClose }) => {
 									</button>
 									<button
 										onClick={() => setIsEditingDiary(false)}
-										className={`flex-1 px-3 py-2 rounded-lg text-xs font-medium transition-colors ${isDark ? "bg-[#2a2a2a] hover:bg-[#353535]" : "bg-gray-100 hover:bg-gray-200"}`}
+										className={`flex-1 px-3 py-2 rounded-lg text-xs font-medium transition-colors ${`${secondaryBgCls} ${hoverCls}`}`}
 									>
 										Cancel
 									</button>
@@ -213,13 +303,15 @@ const DiaryPanel = ({ selectedDate, onClose }) => {
 					{/* Memo Section */}
 					<div className="space-y-2">
 						<div className="flex items-center justify-between">
-							<label className={`text-xs font-medium block ${isDark ? "opacity-70" : "text-gray-600"}`}>
+							<label
+								className={`text-xs font-medium block ${isDark ? "opacity-70" : "text-gray-600"}`}
+							>
 								Personal Notes
 							</label>
 							{!isEditingMemo && (
 								<button
 									onClick={() => setIsEditingMemo(true)}
-									className={`p-1 rounded-lg text-xs transition-colors ${isDark ? "hover:bg-[#353535]" : "hover:bg-gray-100"}`}
+									className={`p-1 rounded-lg text-xs transition-colors ${hoverCls}`}
 									title="Edit notes"
 								>
 									<Edit2 size={14} />
@@ -228,9 +320,7 @@ const DiaryPanel = ({ selectedDate, onClose }) => {
 						</div>
 						{!isEditingMemo ? (
 							<div
-								className={`p-3 rounded-lg text-xs leading-relaxed whitespace-pre-wrap min-h-[80px] cursor-pointer transition-all ${
-									isDark ? "bg-[#2a2a2a] text-gray-400 hover:bg-[#353535]" : "bg-gray-50 text-gray-600 hover:bg-gray-100"
-								}`}
+								className={`p-3 rounded-lg text-xs leading-relaxed whitespace-pre-wrap min-h-[80px] cursor-pointer transition-all ${`${secondaryBgCls} ${hoverCls}`}`}
 								onClick={() => setIsEditingMemo(true)}
 							>
 								{memoContent || "Click to add personal notes..."}
@@ -255,7 +345,7 @@ const DiaryPanel = ({ selectedDate, onClose }) => {
 									</button>
 									<button
 										onClick={() => setIsEditingMemo(false)}
-										className={`flex-1 px-3 py-2 rounded-lg text-xs font-medium transition-colors ${isDark ? "bg-[#2a2a2a] hover:bg-[#353535]" : "bg-gray-100 hover:bg-gray-200"}`}
+										className={`flex-1 px-3 py-2 rounded-lg text-xs font-medium transition-colors ${`${secondaryBgCls} ${hoverCls}`}`}
 									>
 										Cancel
 									</button>

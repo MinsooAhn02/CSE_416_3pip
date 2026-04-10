@@ -15,7 +15,7 @@ import PINModal from "./PINModal";
  * @param {{ onClose: () => void }} props
  */
 const DiaryListModal = ({ onClose }) => {
-	const { isDark, cardCls, inputCls } = useTheme();
+	const { isDark, cardCls, inputCls, hoverCls, secondaryBgCls, borderCls } = useTheme();
 	const { entries, getDiaryDates, isPinAuthenticatedSession, saveDiary, saveMemo } = useDiaryStore();
 
 	const [showPinModal, setShowPinModal] = useState(false);
@@ -138,7 +138,7 @@ const DiaryListModal = ({ onClose }) => {
 						transition={{ duration: 0.2 }}
 					>
 						{/* Header */}
-						<div className={`flex items-center justify-between p-4 border-b ${isDark ? "border-[#3a3a3a]" : "border-gray-200"}`}>
+						<div className={`flex items-center justify-between p-4 border-b ${borderCls}`}>
 							<div className="flex items-center gap-3">
 								<div className={`p-2 rounded-lg ${isDark ? "bg-blue-500/20" : "bg-blue-100"}`}>
 									<BookOpen size={18} className="text-blue-500" />
@@ -155,7 +155,7 @@ const DiaryListModal = ({ onClose }) => {
 							<button
 								onClick={onClose}
 								className={`p-1 rounded-full transition-colors ${
-									isDark ? "hover:bg-[#353535]" : "hover:bg-gray-100"
+									hoverCls
 								}`}
 							>
 								<X size={18} />
@@ -190,7 +190,7 @@ const DiaryListModal = ({ onClose }) => {
 						{isAuthenticated && (
 							<>
 								{/* Search & Sort Controls */}
-								<div className={`p-4 border-b space-y-3 ${isDark ? "border-[#3a3a3a] bg-[#2a2a2a]" : "border-gray-200 bg-gray-50"}`}>
+								<div className={`p-4 border-b space-y-3 ${`${borderCls} ${secondaryBgCls}`}`}>
 									{/* Search */}
 									<div className="relative">
 										<Search size={16} className="absolute left-3 top-1/2 transform -translate-y-1/2 opacity-50" />
@@ -218,9 +218,7 @@ const DiaryListModal = ({ onClose }) => {
 															? isDark
 																? "bg-blue-600 text-white"
 																: "bg-blue-500 text-white"
-															: isDark
-															? "bg-[#3a3a3a] text-gray-400 hover:bg-[#454545]"
-															: "bg-gray-200 text-gray-600 hover:bg-gray-300"
+															: `${secondaryBgCls} ${hoverCls}`
 													}`}
 												>
 													{option === "recent" ? "Most Recent" : "Oldest"}
@@ -243,7 +241,7 @@ const DiaryListModal = ({ onClose }) => {
 														key={dateStr}
 														onClick={() => handleOpenDetail(dateStr)}
 														className={`w-full text-left p-4 transition-all ${
-															isDark ? "hover:bg-[#353535]" : "hover:bg-gray-100"
+															hoverCls
 														}`}
 													>
 														{/* Entry Header */}
@@ -288,12 +286,12 @@ const DiaryListModal = ({ onClose }) => {
 						transition={{ duration: 0.2 }}
 					>
 						{/* Detail Header */}
-						<div className={`flex items-center justify-between p-4 border-b ${isDark ? "border-[#3a3a3a]" : "border-gray-200"}`}>
+						<div className={`flex items-center justify-between p-4 border-b ${borderCls}`}>
 							<div className="flex items-center gap-3">
 								<button
 									onClick={handleBackToList}
 									className={`p-1 rounded-full transition-colors ${
-										isDark ? "hover:bg-[#353535]" : "hover:bg-gray-100"
+										hoverCls
 									}`}
 									title="Back to list"
 								>
@@ -327,7 +325,7 @@ const DiaryListModal = ({ onClose }) => {
 												setEditMemo(entry?.memo || "");
 											}}
 											className={`p-1 rounded-full transition-colors ${
-												isDark ? "hover:bg-[#353535]" : "hover:bg-gray-100"
+												hoverCls
 											}`}
 											title="Cancel"
 										>
@@ -348,7 +346,7 @@ const DiaryListModal = ({ onClose }) => {
 										<button
 									onClick={onClose}
 									className={`p-1 rounded-full transition-colors ${
-										isDark ? "hover:bg-[#353535]" : "hover:bg-gray-100"
+										hoverCls
 									}`}
 									title="Close entire modal"									>											<X size={18} />
 										</button>

@@ -1,0 +1,186 @@
+================================================================
+  API 로직 현황 및 문제 정리
+  작성일: 2026-04-10 (업데이트)
+================================================================
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  1. 현재 API 호출 구조 (정상 작동 중)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+[호출 방식]
+  - invokeEdgeDetailed(fnName, body)
+    직접 fetch()로 Supabase Edge Function 호출
+    헤더: apikey + Authorization = ANON KEY (JWT 불필요)
+    타임아웃: 25초
+    사용처: 날씨(weather), 주식(stocks), 트렌드(tavily), 뉴스(tavily)
+
+  - invokeFunction(fnName, body) [aiService.js]
+    supabase.functions.invoke() 사용 (Supabase SDK)
+    헤더: 로그인된 유저 JWT 자동 포함
+    타임아웃: 15초
+    사용처: 브리핑(groq), 스마트위젯(groq+tavily), AI 일기(groq)
+
+[캐시 구조]
+  - DB 캐시: Supabase api_cache 테이블
+    키: u:{userId}:{cacheKey}
+    TTL: 1시간 (fetched_at 기준)
+    읽기: readApiCache() → { data, fetchedAt } 반환
+    쓰기: writeApiCache()
+
+  - localStorage 캐시: mb_cache_{key}
+    DB 캐시 실패 시 fallback용
+
+[로드 순서]
+  1. 로그인 or 자동로그인 → Supabase 세션 복원
+  2. handleAuthChange() → user 세팅
+  3. App.jsx effect 실행 (user?.id 의존)
+  4. hydrateFromDB() x4 (설정/위젯/투두/다이어리)
+  5. fetchAll({ useExistingCache: true }) 호출
+  6. 각 위젯별: DB 캐시 확인 → 있으면 표시 / 없으면 API 호출
+
+[캐시 정책]
+  - F5 1시간 이내: DB 캐시 사용 (API 호출 없음)
+  - F5 1시간 초과: API 재호출
+  - 수동 새로고침 버튼: force=true → 캐시 무시하고 항상 API 호출
+  - 탭 비활성 후 복귀: visibilitychange → 1시간 경과 시 자동 갱신
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  2. Edge Functions 목록 및 상태
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  [groq]         Groq LLM → 브리핑, 스마트위젯 분석, AI 일기
+  [weather]      OpenWeatherMap → 현재날씨 + 대기질 (실제 API)
+  [stocks]       Twelve Data → 주식/환율 시세 (실제 API)
+  [tavily]       Tavily Search → 트렌드, 뉴스(지역+글로벌)
+  [kakao-places] Kakao Local API → 주변 맛집
+  [calendar]     Google Calendar API → 오늘 일정
+  [fitness]      Google Fitness API → 걸음수, 수면, 심박수
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  3. 완료된 수정사항
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  [완료] 날씨: OpenWeatherMap API 연동 (Geolocation → 실제 날씨)
+  [완료] 뉴스: 지역+글로벌 뉴스 병렬 호출, 썸네일 이미지 표시
+  [완료] 주식: Twelve Data API 연동, 선택 심볼 변경 시 즉시 재호출
+  [완료] 뉴스 위젯 auto-fetch useEffect 제거 (fetchAll로 통일)
+  [완료] 캐시 TTL 1시간, F5 재호출 없음, visibilitychange 자동 갱신
+  [완료] 자동로그인 시 API 호출 안 되는 문제 (user?.id 의존성 수정)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  4. [사용자가 해야 할 것] Supabase 환경변수 설정
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Supabase 대시보드 → Edge Functions → Secrets (또는 Settings → Vault)에서
+아래 환경변수를 추가해야 함. 없으면 모든 API가 오류 반환.
+
+  OPENWEATHER_API_KEY = [REDACTED]
+    사용처: weather Edge Function
+    발급처: https://openweathermap.org/api → API keys 탭
+
+  TWELVEDATA_API_KEY = [REDACTED]
+    사용처: stocks Edge Function
+    발급처: https://twelvedata.com/account/api-keys
+
+  TAVILY_API_KEY = (기존 키)
+    사용처: tavily Edge Function (트렌드, 뉴스)
+    발급처: https://app.tavily.com/home → API Keys
+
+  GROQ_API_KEY = (기존 키)
+    사용처: groq Edge Function (브리핑, 스마트위젯, AI 일기)
+    발급처: https://console.groq.com/keys
+
+[설정 방법]
+  1. Supabase 대시보드 접속 → 해당 프로젝트 선택
+  2. 좌측 메뉴 "Edge Functions" 클릭
+  3. 상단 "Manage secrets" 또는 우측 Secrets 섹션 클릭
+  4. 위 키 이름과 값을 하나씩 추가
+  (또는 CLI: supabase secrets set OPENWEATHER_API_KEY=...)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  5. [사용자가 해야 할 것] Edge Function 배포
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+코드 변경 후 배포해야 실제로 반영됨.
+
+  supabase functions deploy weather
+  supabase functions deploy tavily
+  supabase functions deploy stocks  (기존 배포 되어 있으면 스킵 가능)
+
+[배포 전 확인]
+  - Supabase CLI 로그인 상태: supabase login
+  - 프로젝트 연결 상태: supabase link --project-ref <프로젝트_REF>
+    (프로젝트 REF는 Supabase 대시보드 → Settings → General)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  6. [사용자가 해야 할 것] Google Calendar / Fitness 연동
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Google Calendar와 Fitness 위젯은 Google OAuth provider_token이 필요함.
+현재 토큰 만료 시 mock 데이터로 폴백됨. 아래 순서대로 설정 필요.
+
+─── 6-A. Google Cloud Console 설정 ───
+
+  1. https://console.cloud.google.com 접속
+  2. 프로젝트 생성 또는 기존 프로젝트 선택
+  3. "APIs & Services" → "Enable APIs" 클릭
+     - "Google Calendar API" 활성화
+     - "Fitness API" 활성화
+  4. "OAuth consent screen" 설정
+     - User Type: External
+     - App name, 개발자 이메일 입력
+     - Scopes 추가:
+       - https://www.googleapis.com/auth/calendar.readonly
+       - https://www.googleapis.com/auth/fitness.activity.read
+       - https://www.googleapis.com/auth/fitness.sleep.read
+       - https://www.googleapis.com/auth/fitness.heart_rate.read
+  5. "Credentials" → "OAuth 2.0 Client IDs" 생성
+     - Application type: Web application
+     - Authorized redirect URIs: Supabase의 OAuth 콜백 URL 추가
+       형식: https://<프로젝트_REF>.supabase.co/auth/v1/callback
+     - Client ID, Client Secret 복사
+
+─── 6-B. Supabase Auth 설정 ───
+
+  1. Supabase 대시보드 → Authentication → Providers
+  2. "Google" 활성화
+  3. Client ID, Client Secret 입력 (6-A에서 복사한 값)
+  4. "Additional OAuth Scopes" 입력:
+     https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/fitness.activity.read https://www.googleapis.com/auth/fitness.sleep.read https://www.googleapis.com/auth/fitness.heart_rate.read
+  5. 저장
+
+─── 6-C. 프론트엔드 로그인 방식 ───
+
+  현재 Google 로그인 시 provider_token이 세션에 포함되어야 함.
+  LoginScreen.jsx의 Google 로그인 코드 확인:
+    supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: {
+        scopes: "https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/fitness.activity.read ...",
+      }
+    })
+  → options.scopes에 위 scope들이 있어야 provider_token에 포함됨.
+
+─── 6-D. 토큰 갱신 문제 (현재 미구현) ───
+
+  Google OAuth access token은 1시간 후 만료됨.
+  현재 코드에는 자동 갱신 로직 없음.
+  → 단기 해결: 사용자가 다시 로그인하면 새 토큰 발급
+  → 장기 해결: refresh_token을 사용해 Edge Function에서 갱신 로직 추가
+    (Supabase는 provider_refresh_token도 세션에 저장함)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  7. 남은 문제 (낮은 우선순위)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  [문제 E] fetchRestaurants, fetchCalendar, fetchHealth에 apiStatus 없음
+    → 이 위젯들은 디버그 배너 없음
+
+  [문제 F] 주식 Twelve Data free tier 요청 제한
+    → 하루 800회 제한 (free tier)
+    → 초과 시 Stooq + open.er-api 폴백으로 자동 대체
+
+  [문제 G] Google Calendar/Fitness 토큰 자동 갱신 없음
+    → 6-D 참고
+
+================================================================

@@ -47,7 +47,7 @@ const BriefingSkeleton = () => (
 );
 
 const BriefingWidget = () => {
-	const { isDark, cardCls, muted, hoverCls } = useTheme();
+	const { isDark, cardCls, cardShadowCls, muted, hoverCls } = useTheme();
 	const { t, i18n } = useTranslation();
 	const tone = useSettingsStore((s) => s.tone);
 	const bLen = useSettingsStore((s) => s.bLen) || "medium";
@@ -89,7 +89,8 @@ const BriefingWidget = () => {
 	];
 
 	// Get current line limit based on bLen
-	const currentLineLimit = lengthOptions.find(opt => opt.value === bLen)?.lines || 3;
+	const currentLineLimit =
+		lengthOptions.find((opt) => opt.value === bLen)?.lines || 3;
 
 	// Update dropdown position when settings button is clicked
 	useEffect(() => {
@@ -131,9 +132,24 @@ const BriefingWidget = () => {
 
 			// Generate all three versions in parallel
 			const [shortResult, mediumResult, longResult] = await Promise.all([
-				generateDetailedBriefing({ context, tone, length: "short", priorityOrder }),
-				generateDetailedBriefing({ context, tone, length: "medium", priorityOrder }),
-				generateDetailedBriefing({ context, tone, length: "long", priorityOrder }),
+				generateDetailedBriefing({
+					context,
+					tone,
+					length: "short",
+					priorityOrder,
+				}),
+				generateDetailedBriefing({
+					context,
+					tone,
+					length: "medium",
+					priorityOrder,
+				}),
+				generateDetailedBriefing({
+					context,
+					tone,
+					length: "long",
+					priorityOrder,
+				}),
 			]);
 
 			setBriefingVersions({
@@ -150,7 +166,8 @@ const BriefingWidget = () => {
 	};
 
 	// Check if any briefing version exists
-	const hasBriefings = briefingVersions.short || briefingVersions.medium || briefingVersions.long;
+	const hasBriefings =
+		briefingVersions.short || briefingVersions.medium || briefingVersions.long;
 
 	useEffect(() => {
 		if (!hasBriefings && !isLoading) {
@@ -183,7 +200,7 @@ const BriefingWidget = () => {
 
 	// All sentences from summary
 	const allSentences = splitIntoSentences(displayBriefing.summary);
-	
+
 	// Limit sentences for widget card based on selected length (1, 3, or 5)
 	const summaryLines = allSentences.slice(0, currentLineLimit);
 
@@ -224,7 +241,7 @@ const BriefingWidget = () => {
 		<>
 			<div
 				onClick={handleWidgetClick}
-				className={`rounded-2xl border p-5 shadow-sm transition-colors duration-300 cursor-pointer hover:shadow-md ${cardCls}`}
+				className={`rounded-2xl border p-5 ${cardShadowCls} transition-colors duration-300 cursor-pointer hover:shadow-sm ${cardCls}`}
 			>
 				<div className="flex items-center justify-between mb-4">
 					<div className="flex items-center gap-2">
@@ -237,60 +254,68 @@ const BriefingWidget = () => {
 								ref={settingsBtnRef}
 								onClick={handleGearClick}
 								className={`p-1.5 rounded-full transition-colors ${
-									isDark ? "hover:bg-morning-dark-hover" : "hover:bg-morning-light-hover/30"
+									isDark
+										? "hover:bg-morning-dark-hover"
+										: "hover:bg-morning-light-hover/30"
 								}`}
 								title={t("briefing.length_settings")}
 							>
 								<Settings size={14} />
 							</button>
-							
-							{showLengthSettings && createPortal(
-								<AnimatePresence>
-									<motion.div
-										initial={{ opacity: 0, y: -10 }}
-										animate={{ opacity: 1, y: 0 }}
-										exit={{ opacity: 0, y: -10 }}
-										className={`fixed rounded-lg border shadow-lg min-w-[140px] z-[9999] ${
-											isDark
-												? "bg-morning-dark-card border-morning-dark-hover"
-												: "bg-white border-morning-light-hover/30"
-										}`}
-										style={{
-											top: dropdownPos.top,
-											right: dropdownPos.right,
-										}}
-										onClick={(e) => e.stopPropagation()}
-									>
-										{lengthOptions.map((opt) => (
-											<button
-												key={opt.value}
-												onClick={() => handleLengthChange(opt.value)}
-												className={`w-full px-3 py-2 text-left text-xs transition-colors first:rounded-t-lg last:rounded-b-lg ${
-													bLen === opt.value
-														? "bg-blue-500 text-white"
-														: isDark
-															? "hover:bg-morning-dark-hover"
-															: "hover:bg-morning-light-hover/20"
-												}`}
-											>
-												{opt.label}
-											</button>
-										))}
-									</motion.div>
-								</AnimatePresence>,
-								document.body
-							)}
+
+							{showLengthSettings &&
+								createPortal(
+									<AnimatePresence>
+										<motion.div
+											initial={{ opacity: 0, y: -10 }}
+											animate={{ opacity: 1, y: 0 }}
+											exit={{ opacity: 0, y: -10 }}
+											className={`fixed rounded-lg border shadow-lg min-w-[140px] z-[9999] ${
+												isDark
+													? "bg-morning-dark-card border-morning-dark-hover"
+													: "bg-white border-morning-light-hover/30"
+											}`}
+											style={{
+												top: dropdownPos.top,
+												right: dropdownPos.right,
+											}}
+											onClick={(e) => e.stopPropagation()}
+										>
+											{lengthOptions.map((opt) => (
+												<button
+													key={opt.value}
+													onClick={() => handleLengthChange(opt.value)}
+													className={`w-full px-3 py-2 text-left text-xs transition-colors first:rounded-t-lg last:rounded-b-lg ${
+														bLen === opt.value
+															? "bg-blue-500 text-white"
+															: isDark
+																? "hover:bg-morning-dark-hover"
+																: "hover:bg-morning-light-hover/20"
+													}`}
+												>
+													{opt.label}
+												</button>
+											))}
+										</motion.div>
+									</AnimatePresence>,
+									document.body,
+								)}
 						</div>
-						
+
 						<button
 							onClick={handleRefresh}
 							disabled={isLoading}
 							className={`p-1.5 rounded-full transition-colors ${
-								isDark ? "hover:bg-morning-dark-hover" : "hover:bg-morning-light-hover/30"
+								isDark
+									? "hover:bg-morning-dark-hover"
+									: "hover:bg-morning-light-hover/30"
 							} ${isLoading ? "opacity-50" : ""}`}
 							title={t("briefing.refresh")}
 						>
-							<RefreshCw size={14} className={isLoading ? "animate-spin" : ""} />
+							<RefreshCw
+								size={14}
+								className={isLoading ? "animate-spin" : ""}
+							/>
 						</button>
 					</div>
 				</div>
@@ -299,7 +324,9 @@ const BriefingWidget = () => {
 					{t("briefing.subtitle")}
 				</p>
 
-				<p className="text-sm font-medium mb-3">{t("briefing.today_briefing")}</p>
+				<p className="text-sm font-medium mb-3">
+					{t("briefing.today_briefing")}
+				</p>
 
 				<div className="space-y-2">
 					{isLoading && !hasBriefings ? (
@@ -328,13 +355,14 @@ const BriefingWidget = () => {
 				</p>
 			</div>
 
-			{showLengthSettings && createPortal(
-				<div 
-					className="fixed inset-0 z-[9998]" 
-					onClick={() => setShowLengthSettings(false)}
-				/>,
-				document.body
-			)}
+			{showLengthSettings &&
+				createPortal(
+					<div
+						className="fixed inset-0 z-[9998]"
+						onClick={() => setShowLengthSettings(false)}
+					/>,
+					document.body,
+				)}
 
 			{createPortal(
 				<AnimatePresence>
@@ -362,19 +390,27 @@ const BriefingWidget = () => {
 								transition={{ type: "spring", damping: 25, stiffness: 300 }}
 								onClick={(e) => e.stopPropagation()}
 							>
-								<div className={`flex items-center justify-between p-5 border-b ${
-									isDark ? "border-morning-dark-hover" : "border-morning-light-hover/30"
-								}`}>
+								<div
+									className={`flex items-center justify-between p-5 border-b ${
+										isDark
+											? "border-morning-dark-hover"
+											: "border-morning-light-hover/30"
+									}`}
+								>
 									<div className="flex items-center gap-3">
 										<Sparkles size={22} className="text-blue-500" />
-										<h3 className="font-bold text-base">{t("briefing.detailed_briefing")}</h3>
+										<h3 className="font-bold text-base">
+											{t("briefing.detailed_briefing")}
+										</h3>
 									</div>
 									<div className="flex items-center gap-2">
 										<button
 											onClick={handleRefresh}
 											disabled={isLoading}
 											className={`p-2 rounded-full transition-colors ${
-												isDark ? "hover:bg-morning-dark-hover" : "hover:bg-morning-light-hover/30"
+												isDark
+													? "hover:bg-morning-dark-hover"
+													: "hover:bg-morning-light-hover/30"
 											} ${isLoading ? "opacity-50" : ""}`}
 											title={t("briefing.refresh")}
 										>
@@ -386,7 +422,9 @@ const BriefingWidget = () => {
 										<button
 											onClick={handleClose}
 											className={`p-2 rounded-full transition-colors ${
-												isDark ? "hover:bg-morning-dark-hover" : "hover:bg-morning-light-hover/30"
+												isDark
+													? "hover:bg-morning-dark-hover"
+													: "hover:bg-morning-light-hover/30"
 											}`}
 										>
 											<X size={18} />
@@ -444,7 +482,9 @@ const BriefingWidget = () => {
 									{yesterdayMemo && (
 										<div
 											className={`mt-4 p-3 rounded-lg ${
-												isDark ? "bg-morning-dark-cardSecondary" : "bg-morning-light-hover/10"
+												isDark
+													? "bg-morning-dark-cardSecondary"
+													: "bg-morning-light-hover/10"
 											}`}
 										>
 											<p className={`text-xs ${muted}`}>
@@ -456,10 +496,13 @@ const BriefingWidget = () => {
 									{lastGenerated && (
 										<p className={`text-[10px] ${muted} text-right`}>
 											{t("briefing.last_updated")}:{" "}
-											{lastGenerated.toLocaleTimeString(i18n.language === "ko" ? "ko-KR" : "en-US", {
-												hour: "2-digit",
-												minute: "2-digit",
-											})}
+											{lastGenerated.toLocaleTimeString(
+												i18n.language === "ko" ? "ko-KR" : "en-US",
+												{
+													hour: "2-digit",
+													minute: "2-digit",
+												},
+											)}
 										</p>
 									)}
 								</div>
@@ -467,7 +510,7 @@ const BriefingWidget = () => {
 						</>
 					)}
 				</AnimatePresence>,
-				document.body
+				document.body,
 			)}
 		</>
 	);

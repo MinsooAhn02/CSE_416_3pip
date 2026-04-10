@@ -1,5 +1,10 @@
 import { useState, useEffect, useRef, useMemo } from "react";
-import { Calendar, ArrowLeftRight, ChevronLeft, ChevronRight } from "lucide-react";
+import {
+	Calendar,
+	ArrowLeftRight,
+	ChevronLeft,
+	ChevronRight,
+} from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useTheme } from "../../hooks/useTheme";
 import { useDiaryStore } from "../../store/useDiaryStore";
@@ -13,7 +18,8 @@ const sameDay = (a, b) =>
 	a.getDate() === b.getDate();
 
 const CalendarWidget = () => {
-	const { isDark, cardCls, muted } = useTheme();
+	const { isDark, cardCls, cardShadowCls, muted, hoverCls, borderCls } =
+		useTheme();
 	const { t, i18n } = useTranslation();
 	const [calView, setCalView] = useState("month");
 	const [currentDate, setCurrentDate] = useState(new Date());
@@ -28,11 +34,11 @@ const CalendarWidget = () => {
 	const { events = [], tasks = [] } = useGoogleCalendarStore();
 
 	const hasEventsOnDate = (dateStr) => {
-		return events?.some(e => e.date === dateStr) || false;
+		return events?.some((e) => e.date === dateStr) || false;
 	};
 
 	const hasTasksOnDate = (dateStr) => {
-		return tasks?.some(t => t.date === dateStr && !t.completed) || false;
+		return tasks?.some((t) => t.date === dateStr && !t.completed) || false;
 	};
 
 	const now = new Date();
@@ -82,16 +88,19 @@ const CalendarWidget = () => {
 	const isCurrentMonth =
 		viewYear === now.getFullYear() && viewMonth === now.getMonth();
 
-	const monthLabel = currentDate.toLocaleDateString(i18n.language === "ko" ? "ko-KR" : "en-US", {
-		year: "numeric",
-		month: "long",
-	});
+	const monthLabel = currentDate.toLocaleDateString(
+		i18n.language === "ko" ? "ko-KR" : "en-US",
+		{
+			year: "numeric",
+			month: "long",
+		},
+	);
 
 	const dayFullNames = t("calendar.days_full", { returnObjects: true });
 
 	return (
 		<div
-			className={`rounded-2xl border p-5 shadow-sm transition-colors duration-300 flex flex-col ${cardCls}`}
+			className={`rounded-2xl border p-5 ${cardShadowCls} transition-colors duration-300 flex flex-col ${cardCls}`}
 		>
 			{/* Header */}
 			<div className="flex items-center justify-between mb-4">
@@ -106,7 +115,7 @@ const CalendarWidget = () => {
 						<>
 							<button
 								onClick={goToPrev}
-								className={`p-1 rounded-full transition-colors ${isDark ? "hover:bg-[#353535]" : "hover:bg-gray-100"}`}
+								className={`p-1 rounded-full transition-colors ${hoverCls}`}
 							>
 								<ChevronLeft size={16} />
 							</button>
@@ -115,7 +124,7 @@ const CalendarWidget = () => {
 							</span>
 							<button
 								onClick={goToNext}
-								className={`p-1 rounded-full transition-colors ${isDark ? "hover:bg-[#353535]" : "hover:bg-gray-100"}`}
+								className={`p-1 rounded-full transition-colors ${hoverCls}`}
 							>
 								<ChevronRight size={16} />
 							</button>
@@ -124,7 +133,7 @@ const CalendarWidget = () => {
 
 					<button
 						onClick={handleCycleView}
-						className={`p-1 rounded-full transition-colors ${isDark ? "hover:bg-[#353535]" : "hover:bg-gray-100"}`}
+						className={`p-1 rounded-full transition-colors ${hoverCls}`}
 						title={t("calendar.cycle_view")}
 					>
 						<ArrowLeftRight size={18} />
@@ -145,7 +154,7 @@ const CalendarWidget = () => {
 					))}
 					{cells.map((day, i) => {
 						if (day === null) {
-							return <div key={i} className="invisible py-2" />;
+							return <div key={i} className="invisible h-9 w-9 mx-auto" />;
 						}
 						const dateStr = `${viewYear}-${String(viewMonth + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 						const hasDiary = diaryDates.has(dateStr);
@@ -153,26 +162,17 @@ const CalendarWidget = () => {
 						const isSelected = selectedDateForPanels === dateStr;
 
 						return (
-							<div
+							<button
 								key={i}
+								type="button"
 								onClick={() => {
 									setSelectedDateForPanels(dateStr);
 									setSelectedDate(dateStr);
 								}}
-								className={`relative text-center py-2 text-sm rounded-full cursor-pointer transition-all ${
-									isToday
-										? "bg-blue-500 text-white font-bold"
-										: isDark
-											? "hover:bg-[#353535]"
-											: "hover:bg-gray-100"
-								} ${
-									isSelected && !isToday
-										? "border-2 border-blue-500"
-										: ""
-								} ${
-									isSelected && isToday
-										? "border-2 border-blue-300"
-										: ""
+								className={`relative mx-auto flex h-9 w-9 items-center justify-center text-sm rounded-full transition-colors ${
+									isToday ? "bg-blue-500 text-white font-bold" : hoverCls
+								} ${isSelected && !isToday ? "ring-2 ring-blue-500" : ""} ${
+									isSelected && isToday ? "ring-2 ring-blue-300" : ""
 								}`}
 							>
 								{day}
@@ -202,7 +202,7 @@ const CalendarWidget = () => {
 										/>
 									)}
 								</div>
-							</div>
+							</button>
 						);
 					})}
 				</div>
@@ -215,22 +215,23 @@ const CalendarWidget = () => {
 						const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 						const isSelected = selectedDateForPanels === dateStr;
 						const hasDiary = diaryDates.has(dateStr);
-						
+
 						return (
-							<div
+							<button
 								key={i}
+								type="button"
 								onClick={() => {
 									setSelectedDateForPanels(dateStr);
 									setSelectedDate(dateStr);
 								}}
-								className={`relative text-center p-4 rounded-lg border transition-colors cursor-pointer ${
+								className={`relative text-center p-4 rounded-lg border transition-colors ${
 									sameDay(d, now)
 										? "bg-blue-500 text-white border-blue-500"
 										: isSelected
-										? isDark ? "bg-blue-500/30 border-blue-500" : "bg-blue-100 border-blue-500"
-										: isDark
-											? "border-[#3a3a3a] hover:bg-[#353535]"
-											: "border-gray-200 hover:bg-gray-50"
+											? isDark
+												? "bg-blue-500/30 border-blue-500"
+												: "bg-blue-100 border-blue-500"
+											: `${borderCls} ${hoverCls}`
 								}`}
 							>
 								<p className="text-xs">{DAYS[d.getDay()]}</p>
@@ -261,7 +262,7 @@ const CalendarWidget = () => {
 										/>
 									)}
 								</div>
-							</div>
+							</button>
 						);
 					})}
 				</div>
@@ -270,20 +271,24 @@ const CalendarWidget = () => {
 			{/* Day View */}
 			{calView === "day" && (
 				<div className="flex justify-center items-start py-6">
-					<div 
+					<button
+						type="button"
 						onClick={() => {
 							const dateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
 							setSelectedDateForPanels(dateStr);
 							setSelectedDate(dateStr);
 						}}
-						className="w-40 h-40 rounded-2xl bg-blue-500 text-white flex flex-col items-center justify-center shadow-lg cursor-pointer hover:bg-blue-600 transition-colors"
+						className="w-40 h-40 rounded-2xl bg-blue-500 text-white flex flex-col items-center justify-center shadow-sm hover:bg-blue-600 transition-colors"
 					>
 						<p className="text-xs uppercase">{dayFullNames[now.getDay()]}</p>
 						<p className="text-6xl font-bold">{now.getDate()}</p>
 						<p className="text-sm">
-							{now.toLocaleDateString(i18n.language === "ko" ? "ko-KR" : "en-US", { month: "long" })}
+							{now.toLocaleDateString(
+								i18n.language === "ko" ? "ko-KR" : "en-US",
+								{ month: "long" },
+							)}
 						</p>
-					</div>
+					</button>
 				</div>
 			)}
 

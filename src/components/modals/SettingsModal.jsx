@@ -23,13 +23,16 @@ import { useTodoStore } from "../../store/useTodoStore";
 import { WIDGET_LIST, STANDARD_WIDGETS, DEFAULT_PRIORITY_ORDER } from "../../constants";
 import { save } from "../../utils/storage";
 import Toggle from "../common/Toggle";
+import ConfirmDialog from "../common/ConfirmDialog";
 
-// Logout button with loading state and error handling
-const LogoutButton = ({ logout, setShowSettings, isDark }) => {
+// Logout button with confirm dialog and loading state
+const LogoutButton = ({ logout, setShowSettings }) => {
+	const [showConfirm, setShowConfirm] = useState(false);
 	const [isLoggingOut, setIsLoggingOut] = useState(false);
 	const [error, setError] = useState(null);
 
-	const handleLogout = async () => {
+	const handleConfirmedLogout = async () => {
+		setShowConfirm(false);
 		setIsLoggingOut(true);
 		setError(null);
 		try {
@@ -45,9 +48,9 @@ const LogoutButton = ({ logout, setShowSettings, isDark }) => {
 	return (
 		<div className="space-y-1">
 			<button
-				onClick={handleLogout}
+				onClick={() => setShowConfirm(true)}
 				disabled={isLoggingOut}
-				className={`w-full p-3 rounded-xl text-sm text-left bg-red-500/10 text-red-400 hover:bg-red-500/20 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed`}
+				className="w-full p-3 rounded-xl text-sm text-left bg-red-500/10 text-red-400 hover:bg-red-500/20 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
 			>
 				{isLoggingOut ? (
 					<RefreshCw size={16} className="animate-spin" />
@@ -57,6 +60,15 @@ const LogoutButton = ({ logout, setShowSettings, isDark }) => {
 				{isLoggingOut ? "로그아웃 중..." : "로그아웃"}
 			</button>
 			{error && <p className="text-xs text-red-400 px-1">{error}</p>}
+			{showConfirm && (
+				<ConfirmDialog
+					title="로그아웃"
+					message="정말 로그아웃 하시겠습니까?"
+					confirmLabel="로그아웃"
+					onConfirm={handleConfirmedLogout}
+					onCancel={() => setShowConfirm(false)}
+				/>
+			)}
 		</div>
 	);
 };
@@ -104,6 +116,12 @@ const SettingsModal = () => {
 	const recurringTodos = todos.filter((t) => t.isFixed);
 
 	const bgRef = useRef(null);
+
+	// Confirm dialog state: null | { title, message, onConfirm }
+	const [confirmState, setConfirmState] = useState(null);
+	const openConfirm = (title, message, onConfirm) =>
+		setConfirmState({ title, message, onConfirm });
+	const closeConfirm = () => setConfirmState(null);
 
 	// Get widget labels for priority display
 	const getWidgetLabel = (widgetId) => {
@@ -157,7 +175,6 @@ const SettingsModal = () => {
 							{ id: "priority", label: "데이터 우선순위" },
 							{ id: "routine", label: "고정 TODO" },
 							{ id: "clock", label: "시계 스타일" },
-							{ id: "layout", label: "레이아웃" },
 							{ id: "briefing", label: "AI 브리핑" },
 							{ id: "theme", label: "테마" },
 							{ id: "profile", label: "프로필" },
@@ -280,7 +297,13 @@ const SettingsModal = () => {
 											)}
 										</div>
 										<button
-											onClick={() => removeSmartWidget(kw)}
+											onClick={() =>
+												openConfirm(
+													"스마트 위젯 삭제",
+													`'${kw}' 위젯을 삭제하시겠습니까?`,
+													() => { removeSmartWidget(kw); closeConfirm(); },
+												)
+											}
 											className="text-red-400 hover:text-red-300 text-xs"
 										>
 											삭제
@@ -349,7 +372,13 @@ const SettingsModal = () => {
 												<span className="text-sm">{todo.text}</span>
 											</div>
 											<button
-												onClick={() => deleteTodo(todo.id)}
+												onClick={() =>
+													openConfirm(
+														"루틴 삭제",
+														`'${todo.text}' 루틴을 삭제하시겠습니까?`,
+														() => { deleteTodo(todo.id); closeConfirm(); },
+													)
+												}
 												className="text-red-400 hover:text-red-300 text-xs"
 											>
 												삭제
@@ -407,48 +436,6 @@ const SettingsModal = () => {
 										</button>
 									))}
 								</div>
-							</div>
-						)}
-						{settingsTab === "layout" && (
-							<div className="space-y-4">
-								<p className={`text-xs mb-2 ${muted}`}>
-									위젯을 드래그하여 원하는 위치로 이동할 수 있습니다. 위젯
-									크기는 내용에 맞게 자동 조절됩니다.
-								</p>
-								<div
-									className={`p-4 rounded-xl ${isDark ? "bg-white/5" : "bg-gray-50"}`}
-								>
-									<div className="flex items-center gap-3 mb-3">
-										<GripVertical
-											size={18}
-											className={isDark ? "text-blue-300" : "text-blue-600"}
-										/>
-										<div>
-											<p className="text-sm font-medium">드래그 & 드롭</p>
-											<p className={`text-xs ${muted}`}>
-												위젯 왼쪽 상단의 ⠿ 핸들을 잡고 드래그하세요
-											</p>
-										</div>
-									</div>
-									<div className="flex items-center gap-3">
-										<RefreshCw
-											size={18}
-											className={isDark ? "text-blue-300" : "text-blue-600"}
-										/>
-										<div>
-											<p className="text-sm font-medium">자동 크기 조절</p>
-											<p className={`text-xs ${muted}`}>
-												위젯 높이가 내용에 맞게 자동으로 조절됩니다
-											</p>
-										</div>
-									</div>
-								</div>
-								<button
-									onClick={resetDndLayout}
-									className={`w-full p-3 rounded-xl text-sm font-medium transition-colors ${isDark ? "bg-white/5 hover:bg-white/10" : "bg-gray-50 hover:bg-gray-100"}`}
-								>
-									🔄 레이아웃 초기화
-								</button>
 							</div>
 						)}
 						{settingsTab === "theme" && (
@@ -671,6 +658,16 @@ const SettingsModal = () => {
 					</div>
 				</div>
 			</div>
+
+			{confirmState && (
+				<ConfirmDialog
+					title={confirmState.title}
+					message={confirmState.message}
+					confirmLabel="확인"
+					onConfirm={confirmState.onConfirm}
+					onCancel={closeConfirm}
+				/>
+			)}
 		</div>
 	);
 };

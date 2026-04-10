@@ -1,7 +1,19 @@
 import { create } from "zustand";
+import toast from "react-hot-toast";
 import { load, save } from "../utils/storage";
 import { supabase } from "../lib/supabase";
 import { DEFAULT_PRIORITY_ORDER } from "../constants";
+import i18n from "../l10n/i18n";
+
+/* Fires a single "saved" toast, debounced by toast id so rapid
+ * changes don't stack. Kept inside the store so every setter
+ * shares the same UX. */
+const notifySaved = () => {
+	toast.success(i18n.t("toast.settings_saved"), {
+		id: "settings-saved",
+		duration: 1800,
+	});
+};
 
 /* Supabase DB에 설정 동기화 (백그라운드, 비차단) */
 const syncSettings = async (fields) => {
@@ -124,16 +136,19 @@ export const useSettingsStore = create((set, get) => ({
 		set({ theme: t });
 		save("mb_theme", t);
 		syncSettings({ theme: t });
+		notifySaved();
 	},
 	setBgImage: (img) => {
 		set({ bgImage: img });
 		save("mb_bg", img);
 		syncSettings({ bg_image: img });
+		notifySaved();
 	},
 	removeBg: () => {
 		set({ bgImage: null });
 		save("mb_bg", null);
 		syncSettings({ bg_image: null });
+		notifySaved();
 	},
 	setShowSettings: (v) => set({ showSettings: v }),
 	setSettingsTab: (t) => set({ settingsTab: t }),
@@ -142,36 +157,43 @@ export const useSettingsStore = create((set, get) => ({
 		set({ tone: t });
 		save("mb_tone", t);
 		syncSettings({ tone: t });
+		notifySaved();
 	},
 	setBLen: (l) => {
 		set({ bLen: l });
 		save("mb_blen", l);
 		syncSettings({ briefing_length: l });
+		notifySaved();
 	},
 	setVoiceOn: (v) => {
 		set({ voiceOn: v });
 		save("mb_voice", v);
 		syncSettings({ voice_on: v });
+		notifySaved();
 	},
 	setClockStyle: (s) => {
 		set({ clockStyle: s });
 		save("mb_clock", s);
 		syncSettings({ clock_style: s });
+		notifySaved();
 	},
 	setIs12Hour: (v) => {
 		set({ is12Hour: v });
 		save("mb_is_12hour", v);
 		syncSettings({ is_12hour: v });
+		notifySaved();
 	},
 	setTempUnit: (u) => {
 		set({ tempUnit: u });
 		save("mb_temp_unit", u);
 		syncSettings({ temp_unit: u });
+		notifySaved();
 	},
 	setStockSymbols: (symbols) => {
 		set({ stockSymbols: symbols });
 		save("mb_stock_symbols", symbols);
 		syncSettings({ stock_symbols: symbols });
+		notifySaved();
 	},
 
 	// Data Priority (REQ-US-006)
@@ -179,6 +201,7 @@ export const useSettingsStore = create((set, get) => ({
 		set({ priorityOrder: order });
 		save("mb_priority_order", order);
 		syncSettings({ priority_order: order });
+		notifySaved();
 	},
 
 	// First-Login Briefing Modal (REQ-WS-006)
@@ -186,6 +209,7 @@ export const useSettingsStore = create((set, get) => ({
 		set({ showFirstLoginBriefing: v });
 		save("mb_show_first_login_briefing", v);
 		syncSettings({ show_first_login_briefing: v });
+		notifySaved();
 	},
 	setShowFirstLoginModal: (v) => set({ showFirstLoginModal: v }),
 	dismissFirstLoginModal: () => {

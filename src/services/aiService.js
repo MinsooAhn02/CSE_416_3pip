@@ -522,12 +522,104 @@ export async function generateBriefing({ tone, length, context }) {
 	return lines.join("\n");
 }
 
+/**
+ * 스마트 위젯 데이터 생성
+ * 1단계: Groq → 키워드 핵심 포인트 3개 + 이모지 추출
+ * 2단계: Tavily → 키워드 관련 최신 뉴스/정보 검색
+ * 3단계: 두 결과를 SmartWidgetContent 포맷으로 조합
+ */
 export async function generateSmartWidgetData(keyword, context = {}) {
-	const data = await invokeFunction("smart-widget", {
-		keyword,
-		...context,
+	// ─── Step 1: Groq 분석 ───────────────────────────────────────────
+	const groqData = await invokeFunction("groq", {
+		system: [
+			"당신은 키워드 분석 전문가입니다.",
+			"반드시 JSON만 반환하고 다른 텍스트는 포함하지 마세요.",
+		].join("\n"),
+		prompt: [
+			`'${keyword}'에 대해 다음 JSON 형식으로 정확히 응답하세요:`,
+			`{ "emoji": "관련 이모지 1개", "bullets": ["핵심 포인트1", "핵심 포인트2", "핵심 포인트3"] }`,
+			"- emoji: 키워드를 가장 잘 나타내는 이모지 1개",
+			"- bullets: 현재 시점에서 '${keyword}'에 대해 알아야 할 핵심 포인트 3개 (각 1~2문장)",
+			"- 한국어로 작성",
+		].join("\n"),
+		temperature: 0.5,
 	});
-	return data ?? null;
+
+	let emoji = "🔍";
+	let bullets = [];
+
+	if (groqData?.text) {
+		try {
+			const text = groqData.text.trim();
+			const match = text.match(/\{[\s\S]*\}/);
+			const parsed = JSON.parse(match ? match[0] : text);
+			if (parsed?.emoji) emoji = parsed.emoji;
+			if (Array.isArray(parsed?.bullets)) bullets = parsed.bullets.slice(0, 3);
+		} catch {
+			// 파싱 실패 시 텍스트에서 추출 시도
+			const lines = groqData.text
+				.split("\n")
+				.map((l) => l.replace(/^[-•*\d.]\s*/, "").trim())
+				.filter((l) => l.length > 10)
+				.slice(0, 3);
+			bullets = lines;
+		}
+	}
+
+	// ─── Step 2: Tavily 검색 ─────────────────────────────────────────
+	const tavilyData = await invokeFunction("tavily", {
+		query: `${keyword} 최신 정보 동향 뉴스`,
+	});
+
+	const newsItems = (tavilyData?.results ?? [])
+		.slice(0, 5)
+		.map((r) => {
+			let source = r.url ?? "";
+			try {
+				source = new URL(r.url).hostname.replace(/^www\./, "");
+			} catch {}
+			return {
+				title: r.title ?? r.url ?? "",
+				url: r.url ?? "",
+				source,
+				time: "최근",
+			};
+		})
+		.filter((r) => r.title);
+
+	// ─── Step 3: SmartWidgetContent 포맷으로 조합 ───────────────────
+	const sections = [];
+
+	if (bullets.length > 0) {
+		sections.push({
+			type: "summary",
+			title: "핵심 포인트",
+			bullets,
+		});
+	}
+
+	if (tavilyData?.answer) {
+		sections.push({
+			type: "summary",
+			title: "AI 요약",
+			bullets: [tavilyData.answer],
+		});
+	}
+
+	if (newsItems.length > 0) {
+		sections.push({
+			type: "news",
+			title: "관련 정보",
+			items: newsItems,
+		});
+	}
+
+	if (sections.length === 0) return null;
+
+	const now = new Date();
+	const lastUpdated = `${now.getHours().toString().padStart(2, "0")}:${now.getMinutes().toString().padStart(2, "0")} 업데이트`;
+
+	return { emoji, lastUpdated, sections };
 }
 
 /**
