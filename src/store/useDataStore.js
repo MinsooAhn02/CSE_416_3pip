@@ -17,7 +17,7 @@ const DEBUG_FLOW = import.meta.env.VITE_DEBUG_FLOW === "1";
 const EDGE_TIMEOUT_MS = 25000;
 
 /* ────────────────────────────────────────────
-   30-minute Access-Time-based Caching
+   1-hour Access-Time-based Caching
    ──────────────────────────────────────────── */
 const CACHE_THRESHOLD_MS = 60 * 60 * 1000; // 1시간
 
@@ -29,8 +29,8 @@ const setLastAccessTime = () => save(ACCESS_TIME_KEY, Date.now());
 /**
  * 접속 시간 기준으로 캐시가 유효한지 판단.
  * Δt = (현재 시간 - 마지막 접속 시간)
- * Δt > 30분이면 stale → 전체 API 재호출
- * Δt ≤ 30분이면 fresh → 캐시 사용
+ * Δt > 1시간이면 stale → 전체 API 재호출
+ * Δt ≤ 1시간이면 fresh → 캐시 사용
  */
 const isCacheStale = () => {
 	const lastAccess = getLastAccessTime();
@@ -119,6 +119,47 @@ const cacheIt = (key, data) => {
 	save(`mb_cache_${key}_at`, Date.now());
 };
 
+/* ── 위치 캐시 (module scope) ──
+ * Geolocation을 매 refresh마다 다시 호출하면 브라우저 권한 상태에 따라
+ * 6초까지 블록될 수 있고, 최악의 경우 resolve/reject 중 어느 쪽도 호출되지
+ * 않아 fetch 함수가 영원히 hang 되는 문제가 있었음.
+ * → 첫 호출 시 위치를 얻어 module scope에 캐시 (5분), 이후에는 즉시 반환.
+ *   내부적으로 hard timeout(6.5s) race를 걸어 hang을 방지.
+ */
+let _geoCache = null; // { lat, lon, at }
+const GEO_CACHE_MS = 5 * 60 * 1000;
+
+const getGeoPosition = async () => {
+	if (_geoCache && Date.now() - _geoCache.at < GEO_CACHE_MS) {
+		return { lat: _geoCache.lat, lon: _geoCache.lon };
+	}
+	if (typeof navigator === "undefined" || !navigator.geolocation) return null;
+	try {
+		const pos = await Promise.race([
+			new Promise((resolve, reject) =>
+				navigator.geolocation.getCurrentPosition(resolve, reject, {
+					timeout: 6000,
+					maximumAge: GEO_CACHE_MS,
+				}),
+			),
+			new Promise((_, reject) =>
+				setTimeout(
+					() => reject(new Error("geolocation hard-timeout")),
+					6500,
+				),
+			),
+		]);
+		_geoCache = {
+			lat: pos.coords.latitude,
+			lon: pos.coords.longitude,
+			at: Date.now(),
+		};
+		return { lat: _geoCache.lat, lon: _geoCache.lon };
+	} catch {
+		return null;
+	}
+};
+
 /* ── DB 캐시 헬퍼 (api_cache 테이블) ── */
 /** Auth store에서 동기적으로 userId를 읽는다. 네트워크 요청 없음. */
 const getUserId = () => {
@@ -128,7 +169,7 @@ const getUserId = () => {
 const toCacheRowId = (userId, cacheKey) => `u:${userId}:${cacheKey}`;
 
 /**
- * DB 캐시 읽기 - 30분 접속시간 기반.
+ * DB 캐시 읽기 - 1시간 접속시간 기반.
  * forceRefresh=true이면 캐시 무시 (수동 새로고침).
  * Returns { data, fetchedAt } so callers can stamp the real fetch time
  * instead of "now" (fixes the stale last-updated display bug).
@@ -270,7 +311,18 @@ const normalizeStockItem = (item) => {
 
 const hasMeaningfulStockValues = (rows) => {
 	if (!Array.isArray(rows) || rows.length === 0) return false;
-	return rows.some((row) => Number(row?.price ?? 0) > 0);
+	return rows.some((row) => {
+		// Raw edge 응답은 { price: number } 형태
+		const rawPrice = Number(row?.price ?? 0);
+		if (rawPrice > 0) return true;
+		// normalizeStockItem 통과 후 캐시에 저장된 형태는 { value: "1,234.56" }
+		// → 여기도 인식하지 못하면 주식 DB 캐시가 항상 bypass 되어
+		//   매번 API를 두드림 (과거 latent 버그).
+		const v = row?.value;
+		if (typeof v !== "string") return false;
+		const parsed = Number(v.replace(/[^0-9.\-]/g, ""));
+		return Number.isFinite(parsed) && parsed > 0;
+	});
 };
 
 /* ── 맛집 정규화 ── */
@@ -357,22 +409,15 @@ export const useDataStore = create((set, get) => ({
 	   - 실패 시 mock fallback
 	   ══════════════════════════════════════════ */
 	fetchWeather: async (latArg, lonArg, userId, force = false) => {
-		// ── 위치 결정: Geolocation 우선, 실패 시 서울 기본값 ──
+		// ── 위치 결정: Geolocation (module scope 캐시) 우선, 실패 시 서울 기본값 ──
 		let lat = latArg ?? 37.5665;
 		let lon = lonArg ?? 126.978;
 
-		if (latArg == null && lonArg == null && typeof navigator !== "undefined" && navigator.geolocation) {
-			try {
-				const pos = await new Promise((resolve, reject) =>
-					navigator.geolocation.getCurrentPosition(resolve, reject, {
-						timeout: 6000,
-						maximumAge: 5 * 60 * 1000, // 5분 캐시
-					}),
-				);
-				lat = pos.coords.latitude;
-				lon = pos.coords.longitude;
-			} catch {
-				/* 위치 권한 거부 또는 타임아웃 → 서울 기본값 유지 */
+		if (latArg == null && lonArg == null) {
+			const geo = await getGeoPosition();
+			if (geo) {
+				lat = geo.lat;
+				lon = geo.lon;
 			}
 		}
 
@@ -618,24 +663,15 @@ export const useDataStore = create((set, get) => ({
 	   newsResults: 뉴스 기사 배열 [{title, url, content}, ...]
 	   ══════════════════════════════════════════ */
 	fetchNews: async (userId, force = false) => {
-		// 위치 정보로 지역 뉴스 캐시 키 결정
+		// 위치 정보로 지역 뉴스 캐시 키 결정 (module scope 캐시 공유)
 		let locationLabel = "KR";
 		let locationObj = null;
-		if (typeof navigator !== "undefined" && navigator.geolocation) {
-			try {
-				const pos = await new Promise((resolve, reject) =>
-					navigator.geolocation.getCurrentPosition(resolve, reject, {
-						timeout: 6000,
-						maximumAge: 5 * 60 * 1000,
-					}),
-				);
-				const lat = Math.round(pos.coords.latitude * 10) / 10;
-				const lon = Math.round(pos.coords.longitude * 10) / 10;
-				locationLabel = `${lat}_${lon}`;
-				locationObj = { lat, lon };
-			} catch {
-				/* fallback: 대한민국 */
-			}
+		const geo = await getGeoPosition();
+		if (geo) {
+			const lat = Math.round(geo.lat * 10) / 10;
+			const lon = Math.round(geo.lon * 10) / 10;
+			locationLabel = `${lat}_${lon}`;
+			locationObj = { lat, lon };
 		}
 
 		const cacheKey = `news_${locationLabel}`;
@@ -919,7 +955,7 @@ export const useDataStore = create((set, get) => ({
 
 	   옵션:
 	   - useExistingCache: true → 캐시 있으면 API 호출 생략 (로그인 직후)
-	   - useExistingCache: false (기본값) → 기존 동작 (30분 stale 체크)
+	   - useExistingCache: false (기본값) → 기존 동작 (1시간 stale 체크)
 
 	   1) useExistingCache=true → force=false로 모든 fetch 호출 (캐시 우선)
 	   2) useExistingCache=false → isCacheStale() 결과에 따라 force 결정

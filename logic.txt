@@ -1,0 +1,437 @@
+================================================================
+  API 호출 로직 전체 정리 (2026-04-12 기준)
+  읽는 법: "언제 API가 호출되는가" → "어떻게 처리되는가" 순서
+================================================================
+
+
+■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
+  0. 파일 지도 — 어디에 뭐가 있는지
+■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
+
+  src/lib/supabase.js                  createClient (anon key)
+  src/store/useAuthStore.js            login/logout/handleAuthChange/user
+  src/store/useDataStore.js            모든 위젯 API fetcher + 캐시 + fetchAll
+  src/store/useSettingsStore.js        stockSymbols, vis, language 등
+  src/store/useWidgetStore.js          위젯 레이아웃, activeWidgetIds (별개)
+  src/App.jsx                          auth listener + fetchAll 트리거
+  src/components/widgets/*Widget.jsx   각 위젯 (수동 새로고침 버튼)
+  src/services/aiService.js            groq 기반 AI 호출 (별도 경로)
+  supabase/functions/weather/*.ts      OpenWeatherMap
+  supabase/functions/stocks/*.ts       Twelve Data
+  supabase/functions/tavily/*.ts       Tavily (트렌드/뉴스)
+  supabase/functions/kakao-places/*.ts Kakao Local
+  supabase/functions/calendar/*.ts     Google Calendar
+  supabase/functions/fitness/*.ts      Google Fitness
+  supabase/functions/groq/*.ts         Groq LLM
+
+
+■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
+  1. "언제" API가 호출되는가 — 전체 트리거 지도
+■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
+
+(A) 앱 최초 마운트 — 세션 복원 직후 (App.jsx:67-93)
+    조건:
+      - isLoggedIn === true  (mb_login localStorage에서 읽어 옴)
+      - user?.id !== null    (Supabase handleAuthChange가 user를 세팅해야 채워짐)
+      - initDoneRef.current === false  (세션 내 1회 가드)
+    순서:
+      1) Promise.all([ hydrateFromDB x4 ])
+         - useSettingsStore.hydrateFromDB()
+         - useWidgetStore.hydrateFromDB()
+         - useTodoStore.hydrateFromDB()
+         - useDiaryStore.hydrateFromDB()
+      2) fetchAll({ useExistingCache: true })
+         → force=false. 1시간 이내 DB 캐시가 있으면 API 생략.
+      3) generateAiTodoOnLoad() (calEvents 기반)
+
+(B) 신규 로그인 직후 (LoginScreen → OAuth redirect)
+    - Supabase가 URL 콜백 경로에서 SIGNED_IN 이벤트 비동기(setTimeout 0) 발행.
+    - App.jsx의 onAuthStateChange 콜백 → handleAuthChange(session)
+      → useAuthStore의 user가 세팅됨 → (A)의 effect가 재발화.
+
+(C) 자동 세션 복원 — 문제의 경로
+    - Supabase GoTrueClient 생성자에서 _initialize → _recoverAndRefresh 가
+      스토리지에서 토큰을 로드하고 _notifyAllSubscribers('SIGNED_IN', s) 호출.
+    - App.jsx의 auth listener가 그 이벤트를 받으면 handleAuthChange(s) 가
+      실행되고 user가 세팅됨 → (A)가 발화.
+    - 보조 수단 (이전 수정): App.jsx가 mount 시점에 getSession() 을 직접
+      호출해서 handleAuthChange를 한 번 더 불러줌 (race 보정).
+
+(D) 탭 포커스 복귀 (App.jsx:96-107)
+    조건: isLoggedIn === true && document.visibilityState === "visible"
+    동작: fetchAll({ useExistingCache: true })
+          → DB 캐시 1시간 만료된 항목만 자동 재호출.
+
+(E) 5분 폴링 (App.jsx:114-123)
+    조건: isLoggedIn === true && user?.id  (탭이 visible일 때만 실행)
+    동작: setInterval(5min, () => fetchAll({ useExistingCache: true }))
+          → visibilitychange와 동일한 효과. 백그라운드에서는 동작 안 함.
+
+(F) 위젯별 수동 새로고침 버튼 (각 *Widget.jsx의 onRefresh)
+    WeatherWidget      → fetchWeather(undefined, undefined, undefined, true)
+    StocksWidget       → fetchStocks(stockSymbols, undefined, true)
+    TrendsWidget       → fetchTrends(undefined, true)
+    NewsWidget         → fetchNews(undefined, true)
+    (공통: force=true 전달 → 캐시 우회 → 무조건 edge 함수 호출)
+
+(G) StocksWidget의 심볼 변경 (StocksWidget.jsx:50, 63)
+    - 사용자가 추가/삭제하면 `await fetchStocks(next)` 호출.
+    - force=false이므로 새 심볼 조합의 캐시가 있으면 재사용, 없으면 API 호출.
+
+(H) 브리핑/스마트위젯/AI 일기 생성 (별도 경로)
+    - aiService.js에서 supabase.functions.invoke('groq', ...) 호출.
+    - 이 경로는 useDataStore의 fetch* 와 완전히 독립.
+
+  ▸ 정리: (A)(B)(C)가 "자동 초기 로드", (D)(E)가 "주기적 갱신",
+         (F)(G)가 "수동/파라미터 변경", (H)가 "AI 전용" 경로.
+
+
+■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
+  2. 로그인 상태 → user.id 세팅 플로우 (API 호출 전제조건)
+■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
+
+useAuthStore 초기값 (src/store/useAuthStore.js:6-14):
+  isLoggedIn: load("mb_login", false)   ← localStorage 기반
+  user: null                             ← 반드시 handleAuthChange 통해 세팅
+
+handleAuthChange(session) 분기:
+  session 존재  → set({ isLoggedIn:true, user:{id,email,...}, providerToken })
+                  save("mb_login", true)
+                  await loadUserSettings() (Supabase DB → persona/onboarded)
+  session null  → set({ isLoggedIn:false, user:null, providerToken:null })
+                  save("mb_login", false)
+
+App.jsx useEffect #1 (auth listener, 44-63):
+  - mount 시: supabase.auth.getSession().then(s => handleAuthChange(s))
+  - 이후: supabase.auth.onAuthStateChange(cb)로 구독 유지
+  - cleanup 시: cancelled=true + subscription.unsubscribe()
+
+★ 주의 — isLoggedIn은 localStorage 때문에 '즉시 true'로 시작할 수 있지만
+  user?.id는 그 시점에 null임. App.jsx effect #2 (67-93)는 두 값이
+  모두 유효할 때만 동작하므로, user?.id가 세팅되기 전에는 hydrateFromDB /
+  fetchAll이 절대 실행되지 않음.
+
+★ 자동 세션 복원 경로에서 만약
+  supabase.auth.getSession()이 null을 리턴하거나,
+  onAuthStateChange가 INITIAL_SESSION/SIGNED_IN을 한 번도 emit하지 않으면,
+  handleAuthChange는 호출되지 않고 user?.id는 영원히 null → 위젯 공란.
+
+
+■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
+  3. fetchAll 내부 로직 (useDataStore.js:964-1098)
+■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
+
+시그니처: fetchAll({ useExistingCache = false })
+
+Step 1: force 결정
+  shouldForceRefresh = useExistingCache ? false : isCacheStale()
+  isCacheStale() = (Date.now() - load("mb_last_access_time")) > 1h
+  → App.jsx에서는 항상 useExistingCache:true 로 부르므로 force=false.
+    (= 수동 버튼 외에는 DB 캐시가 신선하면 edge 함수 호출 없음.)
+
+Step 2: userId + visibility 로딩
+  userId = useAuthStore.getState().user?.id  ← 동기 readonly
+  if (userId && supabase) {
+    Promise.all([
+      supabase.from("user_settings").select("*").eq("id", userId).single(),
+      supabase.from("widget_layouts").select("layouts").eq("id", userId).single(),
+    ])
+    → settings.vis 를 DEFAULT_VIS에 병합
+    → layouts에서 id.startsWith("smart_") 인 것만 추가
+    → visibleWidgets 배열 확정
+  } else {
+    visibleWidgets = DEFAULT_VIS의 true 키들 (fallback)
+  }
+
+  ★ userId가 null이면 DB 쿼리 자체를 스킵하고 DEFAULT_VIS만 사용.
+    즉 "로그인 안 된 상태로 fetchAll이 불려도 동작은 함" — 하지만
+    readApiCache/writeApiCache가 userId null 에서 early return 하므로
+    DB 캐시는 전혀 안 쓰이고, writeApiCache도 안 됨 → 매번 mock fallback만
+    걸리거나 edge 호출 후 저장 실패. 이게 증상을 더 혼란스럽게 만듦.
+
+Step 3: set({ activeWidgetIds: visibleWidgets })
+  ★ 여기서 activeWidgetIds는 "이번 fetchAll이 실제로 돌 위젯 id" 의미.
+    BriefingWidget 같이 scoreSignals()를 쓰는 컴포넌트가 이걸 읽음.
+
+Step 4: jobs = visibleWidgets 기반으로 fetchWeather/Stocks/Trends/News/
+        Restaurants/Calendar/Health 를 조건부로 push → Promise.all(jobs).
+
+Step 5: setLastAccessTime()  ← 1시간 stale 판정 기준 업데이트.
+
+★ 각 fetch 호출 시 userId 를 4번째 인자로 넘김. 이 값이 null이면
+  readApiCache/writeApiCache는 사실상 no-op. 따라서 "로그인 상태지만 user.id
+  가 아직 null"인 찰나에 fetchAll이 호출되면 캐시는 없는 거나 마찬가지가 됨.
+
+
+■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
+  4. 개별 fetcher 공통 패턴 (useDataStore.js 각 fetchX 함수)
+■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
+
+공통 순서 — Weather/Stocks/Trends/News/Restaurants/Calendar/Health 모두 동일 골격:
+
+  1) cacheKey 결정 (예: `weather_${rLat}_${rLon}`, `stocks_${symbols.join('_')}`)
+  2) if (!force) {
+       const dbCached = await readApiCache(cacheKey, userId, false)
+       if (dbCached?.data) {
+         set(state를 캐시로 채움)
+         cacheIt(key, data)     ← localStorage 백업
+         markFetched(key, dbCached.fetchedAt)
+         setApiStatus(key, "ok")
+         return;                ← ★ 여기서 끝, API 호출 없음
+       }
+     }
+  3) set({ loading.key: true, errors.key: null })
+  4) try {
+       const edge = await invokeEdgeDetailed(fnName, body)
+       if (edge.ok && edge.data 유효) {
+         set(정규화된 data)
+         cacheIt(key, data)
+         await writeApiCache(cacheKey, data, userId)
+         markFetched(key)            ← 현재 시각
+         setApiStatus(key, "ok")
+         return;
+       }
+       // edge 실패: mock fallback + error 표시
+       set({ errors.key: edge.error })
+       const mock = await mockFetchX()
+       set(위젯 state를 mock로)
+       markFetched(key)
+       setApiStatus(key, "error")
+     } catch(e) {
+       set({ errors.key: e.message })
+       mock fallback
+       markFetched(key)
+       setApiStatus(key, "error")
+     } finally {
+       set({ loading.key: false })
+     }
+
+위젯별 특이 사항:
+
+  fetchWeather (411-482)
+    - getGeoPosition() 으로 위치 획득 (실패 시 서울 37.5665,126.978).
+    - cacheKey = weather_{rLat.1자리}_{rLon.1자리}
+    - body = { lat:rLat, lon:rLon }
+
+  fetchStocks (488-563)
+    - normalizeStockSymbols()로 중복/공백 제거, 최대 4개.
+    - cacheKey = stocks_${symbols_join_'_'}
+    - hasMeaningfulStockValues(row): row.price>0 OR row.value(문자열)>0
+    - body = { symbols: normalizedSymbols }
+
+  fetchTrends (571-657)
+    - cacheKey = "trends_full"
+    - body = { query: "대한민국 실시간 이슈..." }
+    - set(trends / trendsAnswer / trendsResults) 를 분리 저장.
+
+  fetchNews (665-775)
+    - getGeoPosition() 으로 위치 → cacheKey = news_${lat}_${lon} 또는 news_KR
+    - Promise.all로 지역 뉴스 5개 + 글로벌 뉴스 5개 병렬 호출.
+    - mode: "news" 로 tavily edge 호출.
+    - set(newsResults 10개 머지, image/published_date 포함).
+
+  fetchRestaurants (780-830)
+    - invokeEdge("kakao-places", { query, lat, lon, radius:1200 })
+    - apiStatus 업데이트 없음(≠ weather/stocks/trends/news).
+
+  fetchCalendar (836-897)
+    - supabase.auth.getSession() 으로 provider_token 필요.
+    - 토큰 없으면 mock fallback.
+    - body = { token, todayOnly:true } → 프론트 필터링 한 번 더.
+
+  fetchHealth (903-951)
+    - provider_token 필요. 없으면 mock.
+    - body = { token }
+    - normalizeHealthData로 steps/sleep/calories/heartRate만 사용.
+
+
+■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
+  5. Edge 호출 헬퍼 (useDataStore.js:42-113)
+■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
+
+invokeEdgeDetailed(fnName, body)
+  - URL = `${VITE_SUPABASE_URL}/functions/v1/${fnName}`
+  - 헤더: Content-Type:application/json,
+         apikey: ANON_KEY,
+         Authorization: Bearer ANON_KEY  ← 유저 JWT 아님
+  - AbortController 25초 타임아웃 (EDGE_TIMEOUT_MS).
+  - 리턴: { ok, data, error, timedOut, elapsedMs }
+  - SUPABASE_URL 또는 ANON_KEY 가 undefined면 곧바로 null 리턴.
+
+invokeEdge(fnName, body)
+  - 위의 thin wrapper. ok이면 data, 아니면 null.
+
+★ 이 경로는 "유저 JWT 불필요"이므로 로그인 없이도 edge 호출 자체는 가능.
+  하지만 DB 캐시 읽기/쓰기는 userId가 필요 → 실질적으로 로그인 필요.
+
+★ aiService.js의 groq 계열은 supabase.functions.invoke() (SDK 경로) 를
+  쓰므로 유저 JWT가 필요하고, 15초 타임아웃. 경로가 다름에 주의.
+
+
+■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
+  6. 캐시 레이어 — 3중 구조
+■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
+
+  [L1] module-scope 메모리 캐시 — _geoCache (5분)
+       getGeoPosition() 내부. 브라우저 geolocation 재호출 방지.
+
+  [L2] Supabase api_cache 테이블 — 주 캐시 (TTL 1시간)
+       Row id = `u:${userId}:${cacheKey}`
+       Columns: id, user_id, data(jsonb), fetched_at(timestamptz)
+       readApiCache(key, userId, force) — force=true면 즉시 null.
+         · 로우가 없거나 PGRST116이면 null.
+         · fetched_at 으로부터 1시간 지났으면 null.
+         · 그 외에는 { data, fetchedAt } 리턴.
+       writeApiCache(key, payload, userId)
+         · upsert({ id, user_id, data: payload, fetched_at: now() })
+
+  [L3] localStorage — mb_cache_{key} (fallback)
+       cacheIt(key, data) / cached(key, fallback)
+       L2 쓰기/읽기 실패 시 최종 안전망. TTL 없이 덮어쓰기.
+
+  별도: mb_last_access_time — fetchAll 호출 시각. isCacheStale 판정용.
+  별도: mb_last_fetched_at — { [key]: ts } 형태. "N분 전" 표시용.
+
+★ markFetched(key, ts)의 두 번째 인자는 "실제 데이터가 잡힌 시각".
+  캐시 히트 시 dbCached.fetchedAt 을 넘기고, 네트워크 히트 시 넘기지 않아
+  Date.now()가 쓰임. 이 구분이 없으면 "2011m ago"처럼 실제 나이와
+  표시가 어긋남.
+
+
+■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
+  7. 에러/실패 처리 매트릭스
+■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
+
+  edge 응답 시나리오 vs 상태 변화:
+
+  ┌────────────────────┬───────────────┬──────────┬───────────────────┐
+  │ 경우                 │ data            │ apiStatus │ 위젯 표시           │
+  ├────────────────────┼───────────────┼──────────┼───────────────────┤
+  │ DB 캐시 hit          │ 캐시 데이터     │ ok       │ 정상               │
+  │ edge 200 OK + 유효   │ edge 정규화    │ ok       │ 정상               │
+  │ edge 200 OK + 빈값   │ mock fallback  │ error    │ mock + 에러 배너   │
+  │ edge 4xx/5xx        │ mock fallback  │ error    │ mock + 에러 배너   │
+  │ AbortError (25s)    │ mock fallback  │ error    │ mock + timeout 표시 │
+  │ throw               │ mock fallback  │ error    │ mock + catch 메시지 │
+  │ SUPABASE_URL 없음    │ edge=null→실패 │ error    │ mock + 에러 배너   │
+  │ userId null          │ 캐시 read/write │ ok/err   │ edge 직접 때림      │
+  │                    │  스킵            │ (상황별) │ (캐시 없음)          │
+  └────────────────────┴───────────────┴──────────┴───────────────────┘
+
+  loading.key 는 finally 블록에서 무조건 false로 돌아감.
+  errors.key 는 오류 메시지(또는 null)로 남음 → 위젯 배너에 표시.
+
+
+■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
+  8. 문제 발생 시 점검해야 할 의심 포인트 — 우선순위 순
+■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
+
+증상: "npm run dev 실행하면 위젯 공란, 재로그인만 하면 정상"
+
+순서대로 체크해 볼 것:
+
+  (1) handleAuthChange 가 실제로 호출되는가?
+      - useAuthStore.handleAuthChange 맨 위에 console.log 찍고
+        "자동 로드 vs 재로그인" 두 경로 모두 호출되는지 비교.
+      - getSession() 결과가 null인지 세션 오브젝트인지 확인.
+
+  (2) user?.id 가 언제 세팅되는가?
+      - App.jsx의 effect #2에 console.log("[effect2]", isLoggedIn, user?.id)
+        를 넣어 첫 트리거 시점과 두 번째 트리거 시점 확인.
+      - 만약 user?.id는 세팅됐는데 effect가 "initDoneRef 이미 true" 때문에
+        스킵됐다면 (예: StrictMode 재마운트 후 ref가 여전히 true) → 버그.
+
+  (3) fetchAll 진입 자체를 하는가?
+      - useDataStore.fetchAll 첫 줄에 console.log("[fetchAll]", options, userId)
+      - 로그가 안 찍히면 effect chain이 끊긴 것 (1)(2) 쪽 문제.
+      - 로그가 찍히는데 visibleWidgets가 빈 배열이면 DEFAULT_VIS나 settings 문제.
+
+  (4) visibleWidgets 안에 각 키가 들어 있는가?
+      - DEFAULT_VIS 값 + user_settings.vis 병합 결과 확인.
+      - weather/stocks/trends/news 각각 visibleWidgets.includes(k) 확인.
+
+  (5) readApiCache가 null을 돌려주는가, 로우는 있는데 TTL로 null인가?
+      - userId null이면 즉시 null (→ 매번 edge 호출).
+      - 로우는 있는데 fetched_at이 1시간 넘었으면 null (→ 예상 동작).
+
+  (6) invokeEdgeDetailed의 결과
+      - edge.ok === false 이면 edge.error 및 HTTP status 확인.
+      - edge.timedOut === true 이면 25초 넘음 → edge 함수 자체 hang 의심.
+      - edge.ok && !edge.data 이면 edge가 빈 응답 리턴.
+      - Network 탭에서 /functions/v1/weather 요청 자체가 안 나가면 (3)(4) 문제.
+
+  (7) loading 은 도는데 markFetched/state set 이 안 이루어지는 경우
+      - try/catch 안에서 return이 누락됐거나,
+      - normalize 함수가 항상 null 리턴 (예: hasMeaningfulStockValues 편향).
+
+  (8) StrictMode effect 이중 실행
+      - 마운트에서 cancelled=true → 두 번째 마운트에서 다시 getSession()이
+        호출됨. 두 번째 실행도 null을 받으면 (1)로 돌아감.
+      - initDoneRef는 컴포넌트 인스턴스별이지만 StrictMode 재마운트 시
+        동일 인스턴스면 ref가 유지됨 → 다음 로그인 때 초기화 안 될 수 있음.
+        (isLoggedIn===false 가 되는 순간 App.jsx:70에서 ref.current=false로
+         리셋되지만, 자동 복원 실패로 "isLoggedIn 은 true인데 user는 null"
+         상태가 지속되면 ref도 리셋 안 됨.)
+
+  (9) Supabase URL / ANON KEY env
+      - invokeEdgeDetailed 맨 위의 early return: SUPABASE_URL || ANON_KEY
+        가 falsy이면 null 리턴 → 모든 위젯이 조용히 mock로 빠짐.
+      - import.meta.env.VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY 확인.
+
+  (10) api_cache 테이블이 비었는데 user_settings / widget_layouts 쿼리만
+       계속 실패하는 경우
+       - fetchAll의 try/catch는 "DB query failed, using defaults" 만 찍고
+         조용히 visibleWidgets = DEFAULT_VIS로 계속 진행. 만약 RLS 정책
+         오류로 user_settings SELECT가 계속 실패하고 있다면 콘솔 경고 확인.
+
+
+■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
+  9. "자동 복원 vs 재로그인"이 왜 다른 결과를 내는지 — 한 줄 요약
+■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
+
+  재로그인은 OAuth redirect → URL 콜백 경로라서 GoTrueClient가
+  setTimeout(_notifyAllSubscribers('SIGNED_IN'), 0) 으로 한 틱 미루고 통보함.
+  그 사이 React effect가 subscribe를 완료해 두기 때문에 이벤트 수신 보장.
+
+  반면 자동 세션 복원은 _recoverAndRefresh가 동기 경로로
+  _notifyAllSubscribers('SIGNED_IN', session) 을 호출해서, 그 시점에
+  subscriber가 등록돼 있지 않으면 이벤트가 유실됨. 이후엔 INITIAL_SESSION
+  도 "원래 등록됐던 id"에만 리플레이되는 구조여서, StrictMode에서
+  resubscribe된 새 id는 통보를 못 받을 수 있음.
+
+  → 이미 적용한 보정: App.jsx에서 mount 시 getSession()을 명시적으로 한 번
+    호출해서 user를 세팅. (subscriber 경로와 무관한 fallback.)
+    이 보정이 있어도 여전히 실패한다면 getSession() 자체가 null을
+    리턴하거나 handleAuthChange 내부에서 조기 return되는 경로를 봐야 함.
+
+
+■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
+  10. 디버그용 1회용 로그 패치 제안
+■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
+
+아래 로그를 한 번만 넣으면 (1)~(6)를 동시에 구분할 수 있음:
+
+  useAuthStore.handleAuthChange 맨 위:
+    console.log("[auth] handleAuthChange", !!session, session?.user?.id);
+
+  App.jsx effect #2 (67줄) 첫 줄:
+    console.log("[app] effect2", { isLoggedIn, uid: user?.id, init: initDoneRef.current });
+
+  useDataStore.fetchAll 첫 줄:
+    console.log("[data] fetchAll start", options, "uid=", useAuthStore.getState().user?.id);
+
+  useDataStore.fetchAll Step2 끝(visibleWidgets 확정 직후):
+    console.log("[data] visible=", visibleWidgets);
+
+  invokeEdgeDetailed 리턴 직전 (ok 경로/실패 경로 모두):
+    console.log("[edge]", fnName, "ok=", result.ok, "elapsed=", result.elapsedMs);
+
+  이 5줄만 있으면 "어느 단계에서 끊기는지"가 바로 보임:
+    · [auth] 가 안 찍힘  → 세션 복원 자체 실패 / getSession null
+    · [app] effect2는 찍히는데 uid=null → user 세팅 전에 효과 발화 → 대기 상태 정상
+    · [app] effect2가 uid 세팅 후에도 fetchAll 안 찍힘 → initDoneRef 문제
+    · [data] fetchAll 찍히는데 visible=[] → user_settings/vis 문제
+    · [edge] 안 찍힘 → cacheKey hit (정상) 또는 캐시 로직 early return
+    · [edge] ok=false → 서버/키/네트워크 문제
+
+================================================================

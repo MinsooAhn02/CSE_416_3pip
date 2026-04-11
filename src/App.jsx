@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Toaster } from "react-hot-toast";
 import { useAuthStore } from "./store/useAuthStore";
 import { useSettingsStore } from "./store/useSettingsStore";
@@ -29,33 +29,68 @@ const App = () => {
 	const { isDark } = useTheme();
 	const fetchAll = useDataStore((s) => s.fetchAll);
 	const bgImage = useSettingsStore((s) => s.bgImage);
-	const initDoneRef = useRef(false);
+	const initPhaseRef = useRef("none");
+	const [authBootstrapDone, setAuthBootstrapDone] = useState(!supabase);
 
 	// Use the new midnight trigger hook (REQ-CS-005, REQ-AJ-001)
 	useMidnightTrigger(isLoggedIn);
 
 	// Supabase auth listener
+	// onAuthStateChange 단독으로는 INITIAL_SESSION 이벤트가 StrictMode 2중 mount,
+	// Supabase _recoverAndRefresh 와 구독 등록 사이의 race, 또는 세션 갱신 중
+	// lock 경합 상황에서 누락되는 엣지 케이스가 있음.
+	// → 마운트 시 getSession()으로 현재 세션을 명시적으로 조회해서
+	//   handleAuthChange를 한번 불러주고, 이후 로그인/로그아웃/토큰갱신 이벤트는
+	//   onAuthStateChange로 이어서 수신.
 	useEffect(() => {
-		if (!supabase) return;
-		const { data: { subscription } } = supabase.auth.onAuthStateChange(
-			(_event, session) => handleAuthChange(session)
-		);
-		return () => subscription?.unsubscribe();
+		if (!supabase) {
+			setAuthBootstrapDone(true);
+			return;
+		}
+		let cancelled = false;
+
+		// 1) 마운트 직후 현재 세션을 적극적으로 조회 (구독 타이밍과 무관)
+		supabase.auth
+			.getSession()
+			.then(({ data: { session } }) => {
+				if (cancelled) return;
+				handleAuthChange(session); // null 이면 로그아웃 처리됨
+			})
+			.catch((e) => {
+				if (cancelled) return;
+				console.warn("[auth] getSession failed:", e?.message || e);
+				handleAuthChange(null);
+			})
+			.finally(() => {
+				if (!cancelled) setAuthBootstrapDone(true);
+			});
+
+		// 2) 이후 이벤트 수신 (로그인/로그아웃/토큰갱신)
+		const {
+			data: { subscription },
+		} = supabase.auth.onAuthStateChange((_event, session) => {
+			handleAuthChange(session);
+			setAuthBootstrapDone(true);
+		});
+
+		return () => {
+			cancelled = true;
+			subscription?.unsubscribe();
+		};
 	}, [handleAuthChange]);
 
 	// 로그인 or 자동 로그인 시 초기 데이터 로드
-	// user?.id 의존성: 자동 로그인 시 Supabase 세션 복원 후 user가 세팅되면 실행
+	// 1) 정상 경로: user?.id 확보 후 hydrate + fetchAll
+	// 2) 폴백 경로: 로그인 상태인데 user 정보가 지연되면 fetchAll 1회로 공란 방지
 	useEffect(() => {
-		if (!isLoggedIn || !user?.id) {
-			// 로그아웃 시 다음 로그인을 위해 초기화
-			if (!isLoggedIn) initDoneRef.current = false;
+		if (!authBootstrapDone) return;
+
+		if (!isLoggedIn) {
+			initPhaseRef.current = "none";
 			return;
 		}
-		// 같은 세션에서 중복 실행 방지
-		if (initDoneRef.current) return;
-		initDoneRef.current = true;
 
-		const init = async () => {
+		const runFullInit = async () => {
 			try {
 				await Promise.all([
 					useSettingsStore.getState().hydrateFromDB?.(),
@@ -70,8 +105,29 @@ const App = () => {
 			await fetchAll({ useExistingCache: true });
 			generateAiTodoOnLoad();
 		};
-		init();
-	}, [isLoggedIn, user?.id, fetchAll]);
+
+		const runFallbackInit = async () => {
+			await fetchAll({ useExistingCache: true });
+		};
+
+		if (user?.id) {
+			if (initPhaseRef.current === "user") return;
+			initPhaseRef.current = "user";
+			runFullInit();
+			return;
+		}
+
+		if (initPhaseRef.current !== "none") return;
+		initPhaseRef.current = "fallback";
+
+		const timerId = setTimeout(() => {
+			const auth = useAuthStore.getState();
+			if (!auth.isLoggedIn || auth.user?.id) return;
+			runFallbackInit();
+		}, 1200);
+
+		return () => clearTimeout(timerId);
+	}, [authBootstrapDone, isLoggedIn, user?.id, fetchAll]);
 
 	// 탭이 다시 포커스될 때 캐시 만료(1시간) 확인 → 자동 갱신
 	useEffect(() => {
@@ -84,8 +140,25 @@ const App = () => {
 			fetchAll({ useExistingCache: true });
 		};
 		document.addEventListener("visibilitychange", handleVisibility);
-		return () => document.removeEventListener("visibilitychange", handleVisibility);
+		return () =>
+			document.removeEventListener("visibilitychange", handleVisibility);
 	}, [isLoggedIn, fetchAll]);
+
+	// 주기적 자동 갱신 (5분 interval)
+	// 이전에는 visibilitychange + 로그인 시점만 트리거였음 → 탭을 계속 켜두면
+	// 1시간이 지나도 자동 새로고침이 안 돼서 "N분 전" 표시가 계속 증가하는 문제.
+	// 5분마다 fetchAll({ useExistingCache: true })를 호출하면 readApiCache가
+	// 1시간 TTL로 판단해서 만료된 항목만 실제 API로 갱신됨 (캐시 내 항목은 no-op).
+	useEffect(() => {
+		if (!isLoggedIn || !user?.id) return;
+		const POLL_MS = 5 * 60 * 1000;
+		const timerId = setInterval(() => {
+			if (document.visibilityState !== "visible") return;
+			if (!useAuthStore.getState().user?.id) return;
+			fetchAll({ useExistingCache: true });
+		}, POLL_MS);
+		return () => clearInterval(timerId);
+	}, [isLoggedIn, user?.id, fetchAll]);
 
 	/**
 	 * AI Todo 자동 생성 — 앱 로드 시 1회 실행
@@ -106,6 +179,20 @@ const App = () => {
 		}
 	};
 
+	if (!authBootstrapDone) {
+		return (
+			<div
+				className={`min-h-screen w-full flex items-center justify-center font-sans ${
+					isDark
+						? "bg-morning-dark-page text-morning-dark-text"
+						: "bg-morning-light-page text-morning-light-text"
+				}`}
+			>
+				<p className="text-sm opacity-80">세션 확인 중...</p>
+			</div>
+		);
+	}
+
 	if (!isLoggedIn) return <LoginScreen />;
 
 	return (
@@ -116,10 +203,10 @@ const App = () => {
 					: "bg-morning-light-page text-morning-light-text"
 			}`}
 			style={{
-				backgroundImage: bgImage ? `url(${bgImage})` : 'none',
-				backgroundSize: 'cover',
-				backgroundPosition: 'center',
-				backgroundAttachment: 'fixed'
+				backgroundImage: bgImage ? `url(${bgImage})` : "none",
+				backgroundSize: "cover",
+				backgroundPosition: "center",
+				backgroundAttachment: "fixed",
 			}}
 		>
 			<TopNav />

@@ -257,7 +257,10 @@ const DashboardLayout = () => {
 					<CalendarWidget />
 				</aside>
 
-				<section className="relative min-h-0 pb-3 xl:col-start-3">
+				<section
+					className="relative min-h-0 pb-3 xl:col-start-3"
+					data-widget-overlay-host="true"
+				>
 					<div className="absolute -top-11 right-2 z-20 flex items-center gap-2 xl:-top-12">
 						<button
 							type="button"

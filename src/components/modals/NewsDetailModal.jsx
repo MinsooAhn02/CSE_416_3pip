@@ -1,12 +1,24 @@
 import { useState } from "react";
-import { X, ExternalLink, ChevronDown, ChevronUp, Newspaper } from "lucide-react";
+import { createPortal } from "react-dom";
+import {
+	X,
+	ExternalLink,
+	ChevronDown,
+	ChevronUp,
+	Newspaper,
+} from "lucide-react";
 import { useTheme } from "../../hooks/useTheme";
 
 /**
  * 뉴스 상세 모달 — 요약 리스트 + 개별 클릭 시 content 확장 + 원문 링크
- * @param {{ results: Array, answer: string, onClose: () => void }} props
+ * @param {{ results: Array, answer: string, onClose: () => void, hostElement?: HTMLElement | null }} props
  */
-const NewsDetailModal = ({ results = [], answer = "", onClose }) => {
+const NewsDetailModal = ({
+	results = [],
+	answer = "",
+	onClose,
+	hostElement = null,
+}) => {
 	const { isDark, cardCls, secondaryBgCls, borderCls, hoverCls } = useTheme();
 	const [expandedIdx, setExpandedIdx] = useState(null);
 
@@ -14,19 +26,39 @@ const NewsDetailModal = ({ results = [], answer = "", onClose }) => {
 		setExpandedIdx((prev) => (prev === idx ? null : idx));
 	};
 
-	return (
+	if (typeof document === "undefined") return null;
+	const sectionFillMode = !!hostElement;
+	const portalTarget = hostElement || document.body;
+
+	return createPortal(
 		/* 반투명 오버레이 */
 		<div
-			className="fixed inset-0 z-[60] flex items-center justify-center p-4"
+			className={
+				sectionFillMode
+					? "absolute inset-0 z-[120] p-2 sm:p-3 xl:p-4"
+					: "fixed inset-0 z-[60] flex items-center justify-center p-4"
+			}
 			onClick={onClose}
 		>
 			{/* 배경 블러 */}
-			<div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
+			<div
+				className={
+					sectionFillMode
+						? `absolute inset-2 sm:inset-3 xl:inset-4 rounded-2xl ${
+								isDark
+									? "bg-black/10 backdrop-blur-[0.5px]"
+									: "bg-slate-900/6 backdrop-blur-[0.5px]"
+							}`
+						: "absolute inset-0 bg-black/50 backdrop-blur-sm"
+				}
+			/>
 
 			{/* 모달 본체 */}
 			<div
-				className={`relative z-10 w-full max-w-lg max-h-[80vh] rounded-2xl border shadow-2xl flex flex-col overflow-hidden ${
-					cardCls
+				className={`z-10 rounded-2xl border shadow-2xl flex flex-col overflow-hidden ${cardCls} ${
+					sectionFillMode
+						? "relative h-full w-full max-h-full"
+						: "relative w-full max-w-2xl max-h-[82vh]"
 				}`}
 				onClick={(e) => e.stopPropagation()}
 			>
@@ -38,9 +70,7 @@ const NewsDetailModal = ({ results = [], answer = "", onClose }) => {
 					</div>
 					<button
 						onClick={onClose}
-						className={`p-1 rounded-full transition-colors ${
-							hoverCls
-						}`}
+						className={`p-1 rounded-full transition-colors ${hoverCls}`}
 					>
 						<X size={18} />
 					</button>
@@ -49,7 +79,9 @@ const NewsDetailModal = ({ results = [], answer = "", onClose }) => {
 				{/* AI 전체 요약 */}
 				{answer && (
 					<div className={`px-4 py-3 border-b ${borderCls} ${secondaryBgCls}`}>
-						<p className={`text-xs leading-relaxed ${isDark ? "text-blue-300" : "text-blue-700"}`}>
+						<p
+							className={`text-xs leading-relaxed ${isDark ? "text-blue-300" : "text-blue-700"}`}
+						>
 							{answer}
 						</p>
 					</div>
@@ -65,9 +97,7 @@ const NewsDetailModal = ({ results = [], answer = "", onClose }) => {
 						results.map((r, idx) => (
 							<div
 								key={idx}
-								className={`rounded-xl border transition-colors ${
-									`${borderCls} ${hoverCls}`
-								}`}
+								className={`rounded-xl border transition-colors ${`${borderCls} ${hoverCls}`}`}
 							>
 								{/* 뉴스 row — 클릭하면 content 토글 */}
 								<button
@@ -80,14 +110,19 @@ const NewsDetailModal = ({ results = [], answer = "", onClose }) => {
 									{expandedIdx === idx ? (
 										<ChevronUp size={14} className="flex-shrink-0 opacity-50" />
 									) : (
-										<ChevronDown size={14} className="flex-shrink-0 opacity-50" />
+										<ChevronDown
+											size={14}
+											className="flex-shrink-0 opacity-50"
+										/>
 									)}
 								</button>
 
 								{/* 확장 시 content + 원문 링크 */}
 								{expandedIdx === idx && (
 									<div className={`px-3 pb-3 space-y-2 border-t ${borderCls}`}>
-										<p className={`text-xs leading-relaxed pt-2 ${isDark ? "opacity-70" : "text-gray-600"}`}>
+										<p
+											className={`text-xs leading-relaxed pt-2 ${isDark ? "opacity-70" : "text-gray-600"}`}
+										>
 											{r.content || "요약 내용이 없습니다."}
 										</p>
 										{r.url && (
@@ -108,7 +143,8 @@ const NewsDetailModal = ({ results = [], answer = "", onClose }) => {
 					)}
 				</div>
 			</div>
-		</div>
+		</div>,
+		portalTarget,
 	);
 };
 

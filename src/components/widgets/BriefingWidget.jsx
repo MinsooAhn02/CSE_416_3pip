@@ -52,13 +52,14 @@ const BriefingWidget = () => {
 	const tone = useSettingsStore((s) => s.tone);
 	const bLen = useSettingsStore((s) => s.bLen) || "medium";
 	const setBLen = useSettingsStore((s) => s.setBLen);
-	const activeWidgetIds = useSettingsStore((s) => s.activeWidgetIds) || [];
 	const priorityOrder = useSettingsStore((s) => s.priorityOrder) || [];
 
 	const weather = useDataStore((s) => s.weather);
 	const stocks = useDataStore((s) => s.stocks);
 	const trends = useDataStore((s) => s.trends);
 	const calEvents = useDataStore((s) => s.calEvents);
+	// activeWidgetIds는 useDataStore에서 세팅됨 (fetchAll → set activeWidgetIds)
+	const activeWidgetIds = useDataStore((s) => s.activeWidgetIds) || [];
 	const todos = useTodoStore((s) => s.todos);
 
 	const getDiary = useDiaryStore((s) => s.getDiary);
@@ -169,10 +170,31 @@ const BriefingWidget = () => {
 	const hasBriefings =
 		briefingVersions.short || briefingVersions.medium || briefingVersions.long;
 
+	// 초기 1회 생성 플래그 — 위젯 데이터가 최소 한 종류 로드된 뒤 브리핑을 만들기 위해
+	const initialGenDoneRef = useRef(false);
+
+	// 데이터가 준비되면 초기 브리핑을 1회 생성
 	useEffect(() => {
-		if (!hasBriefings && !isLoading) {
-			generateAllBriefings();
-		}
+		if (initialGenDoneRef.current) return;
+		if (isLoading) return;
+		const dataReady =
+			!!weather ||
+			(Array.isArray(calEvents) && calEvents.length > 0) ||
+			(Array.isArray(stocks) && stocks.length > 0) ||
+			(Array.isArray(trends) && trends.length > 0) ||
+			activeWidgetIds.length > 0;
+		if (!dataReady) return;
+		initialGenDoneRef.current = true;
+		generateAllBriefings();
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [weather, calEvents, stocks, trends, activeWidgetIds, isLoading]);
+
+	// 톤이 변경되면 즉시 재생성 (초기 생성이 끝난 뒤에만)
+	useEffect(() => {
+		if (!initialGenDoneRef.current) return;
+		if (isLoading) return;
+		generateAllBriefings();
+		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [tone]);
 
 	// Get the current briefing based on selected length
