@@ -1,0 +1,566 @@
+================================================================================
+  DATA DESIGN DOCUMENT — MorningBrief.AI (CSE 416, 3pip)
+  작성일: 2026-04-21
+================================================================================
+
+--------------------------------------------------------------------------------
+1. 엔티티(Entity) 목록 및 속성
+--------------------------------------------------------------------------------
+
+[A] User (Supabase auth.users — 자동 관리)
+  id            UUID       PK
+  email         TEXT
+  created_at    TIMESTAMPTZ
+
+[B] user_settings  (Supabase 테이블, 1행 per User)
+  id                        UUID         PK, FK → auth.users
+  persona                   TEXT         사용자 직업/성향 설명
+  theme                     TEXT         "dark" | "light"
+  tone                      TEXT         "friendly" | "professional" | "humorous"
+  briefing_length           TEXT         "short" | "medium" | "long"
+  voice_on                  BOOLEAN
+  clock_style               TEXT         "digital" | "analog"
+  bg_image                  TEXT         배경 이미지 URL
+  vis                       JSONB        위젯 가시성 { widgetId: boolean }
+  is_12hour                 BOOLEAN
+  temp_unit                 TEXT         "c" | "f"
+  stock_symbols             TEXT[]       예: ["KOSPI","NASDAQ","SP500","USDKRW"]
+  priority_order            TEXT[]       위젯 우선순위 배열
+  show_first_login_briefing BOOLEAN
+  last_briefing_shown       DATE
+  created_at                TIMESTAMPTZ
+  updated_at                TIMESTAMPTZ
+
+[C] widget_layouts  (Supabase 테이블, 1행 per User)
+  id              UUID         PK, FK → auth.users
+  layouts         JSONB        { lg: [...], md: [...], sm: [...] }
+  layout_version  INT
+  created_at      TIMESTAMPTZ
+  updated_at      TIMESTAMPTZ
+
+  레이아웃 아이템 구조 (layouts.lg[]):
+    i    STRING   위젯 ID ("briefing", "weather" 등)
+    x    INT      그리드 열 위치
+    y    INT      그리드 행 위치
+    w    INT      너비 (그리드 단위)
+    h    INT      높이
+    minW INT      최소 너비
+    minH INT      최소 높이
+
+[D] todos  (Supabase 테이블)
+  id          UUID         PK
+  user_id     UUID         FK → auth.users
+  text        TEXT         할 일 내용
+  completed   BOOLEAN
+  is_fixed    BOOLEAN      매일 반복(루틴) 여부
+  created_at  TIMESTAMPTZ
+
+[E] diaries  (Supabase 테이블)
+  id          UUID         PK
+  user_id     UUID         FK → auth.users
+  date        DATE         일기 날짜 (YYYY-MM-DD)
+  diary_text  TEXT         일기 본문
+  memo        TEXT         메모/요약
+  updated_at  TIMESTAMPTZ
+
+[F] smart_keywords  (Supabase 테이블)
+  id          UUID         PK
+  user_id     UUID         FK → auth.users
+  keyword     TEXT         스마트 위젯 키워드
+  created_at  TIMESTAMPTZ
+  UNIQUE(user_id, keyword)
+
+[G] api_cache  (Supabase 테이블, TTL=1시간)
+  id          UUID         PK
+  user_id     UUID         FK → auth.users
+  cache_key   TEXT         예: "weather_37.5_126.9"
+  data        JSONB        캐시된 응답 데이터
+  fetched_at  TIMESTAMPTZ  마지막 갱신 시간
+
+[H] Weather  (외부 API → api_cache 저장, 런타임 상태)
+  temp          FLOAT    기온 (°C 또는 °F)
+  city          STRING   도시명
+  condition     STRING   날씨 상태 (예: 맑음, 흐림)
+  humidity      INT      습도 (%)
+  precipitation INT      강수확률 (%)
+  airQuality    STRING   대기질 (좋음/보통/나쁨)
+
+[I] Stock  (외부 API → api_cache 저장, 런타임 상태, 배열)
+  name    STRING   종목명 (KOSPI, NASDAQ 등)
+  value   STRING   현재 가격 (포맷됨)
+  change  STRING   변동값 (부호 포함)
+  up      BOOLEAN  상승 여부
+
+[J] TrendItem  (외부 API → api_cache, 런타임 상태)
+  trends        STRING[]  해시태그/트렌드 키워드 배열
+  trendsAnswer  STRING    AI 요약 문장
+  trendsResults ARRAY     아래 구조 배열
+    title    STRING
+    url      STRING
+    content  STRING
+
+[K] NewsItem  (외부 API → api_cache, 런타임 상태)
+  news        STRING[]  뉴스 키워드 배열
+  newsAnswer  STRING    AI 요약
+  newsResults ARRAY     아래 구조 배열
+    title          STRING
+    url            STRING
+    content        STRING
+    image          STRING | null
+    published_date STRING | null
+
+[L] Restaurant  (외부 API → api_cache, 런타임 상태, 배열)
+  name      STRING   가게명
+  category  STRING   음식 카테고리
+  distance  STRING   거리 (미터)
+  address   STRING   주소
+  url       STRING   상세 페이지 URL
+
+[M] CalendarEvent  (Google Calendar API → api_cache, 런타임 상태, 배열)
+  id          STRING
+  title       STRING
+  date        STRING   YYYY-MM-DD
+  startTime   STRING   HH:MM
+  endTime     STRING   HH:MM
+  location    STRING | null
+  description STRING | null
+
+[N] HealthData  (Google Fit API → api_cache, 런타임 상태)
+  steps         INT    오늘 걸음 수
+  stepsGoal     INT    목표 (기본 10000)
+  sleep         FLOAT  어제 수면 시간 (시간)
+  sleepGoal     FLOAT  목표 (기본 8)
+  calories      INT    소모 칼로리
+  caloriesGoal  INT    목표 (기본 2200)
+  heartRate     INT    현재 심박수 (bpm)
+  water         INT    수분 섭취 (잔)
+  waterGoal     INT    목표 (기본 8)
+
+[O] QuickLink  (localStorage, 런타임 상태, 배열)
+  id     STRING   예: "naver"
+  name   STRING   표시명
+  url    STRING   URL
+  icon   STRING   아이콘 텍스트 (N, G 등)
+  color  STRING   아이콘 배경색 (hex)
+
+[P] CalendarTask  (런타임 상태 — useGoogleCalendarStore, 배열)
+  id          STRING
+  title       STRING
+  date        STRING   YYYY-MM-DD
+  startTime   STRING   예상 시작 시간
+  endTime     STRING   예상 종료 시간
+  description STRING | null
+  completed   BOOLEAN
+
+
+--------------------------------------------------------------------------------
+2. 엔티티 간 관계
+--------------------------------------------------------------------------------
+
+2-1. DB 관계 (Supabase / Postgres)
+  User      1 : 1   user_settings    (각 유저는 설정 1행)
+  User      1 : 1   widget_layouts   (각 유저는 레이아웃 1행)
+  User      1 : N   todos            (유저는 여러 할 일 소유)
+  User      1 : N   diaries          (유저는 날짜별 일기 소유)
+  User      1 : N   smart_keywords   (유저는 여러 스마트 키워드 소유)
+  User      1 : N   api_cache        (유저별 API 응답 캐시)
+
+2-2. 런타임/논리 관계
+  user_settings  1 : 1  Widget.vis       (가시성 JSONB → 각 위젯 표시 여부)
+  user_settings  1 : 1  widget_layouts   (레이아웃 버전 관리)
+  smart_keywords 1 : N  SmartWidgetData  (키워드 하나당 위젯 데이터 1개)
+  CalendarEvent  N : M  CalendarTask     (같은 날짜에 여러 이벤트/태스크 공존)
+  todos          N : 1  User             (매일 자정 is_fixed=false 항목 자동 초기화)
+
+2-3. 외부 서비스 연동 관계
+  User         1 : N   Weather (1시간마다 위치별 갱신)
+  User         1 : N   Stock (1시간마다 심볼별 갱신)
+  User         1 : N   CalendarEvent (Google Calendar OAuth 토큰 경유)
+  User         1 : 1   HealthData (Google Fit OAuth 토큰 경유)
+
+2-4. 집계/의존 관계
+  Weather + Stock + TrendItem + NewsItem + CalendarEvent + HealthData + todos
+    → BriefingWidget (Groq LLM이 집계하여 AI 브리핑 생성)
+
+
+--------------------------------------------------------------------------------
+3. Mermaid classDiagram
+--------------------------------------------------------------------------------
+
+```mermaid
+classDiagram
+    class User {
+        +UUID id
+        +TEXT email
+        +TIMESTAMPTZ created_at
+    }
+
+    class UserSettings {
+        +UUID id
+        +TEXT persona
+        +TEXT theme
+        +TEXT tone
+        +TEXT briefing_length
+        +BOOLEAN voice_on
+        +TEXT clock_style
+        +TEXT bg_image
+        +JSONB vis
+        +BOOLEAN is_12hour
+        +TEXT temp_unit
+        +TEXT[] stock_symbols
+        +TEXT[] priority_order
+        +BOOLEAN show_first_login_briefing
+        +DATE last_briefing_shown
+        +TIMESTAMPTZ created_at
+        +TIMESTAMPTZ updated_at
+    }
+
+    class WidgetLayouts {
+        +UUID id
+        +JSONB layouts
+        +INT layout_version
+        +TIMESTAMPTZ created_at
+        +TIMESTAMPTZ updated_at
+    }
+
+    class Todo {
+        +UUID id
+        +UUID user_id
+        +TEXT text
+        +BOOLEAN completed
+        +BOOLEAN is_fixed
+        +TIMESTAMPTZ created_at
+    }
+
+    class Diary {
+        +UUID id
+        +UUID user_id
+        +DATE date
+        +TEXT diary_text
+        +TEXT memo
+        +TIMESTAMPTZ updated_at
+    }
+
+    class SmartKeyword {
+        +UUID id
+        +UUID user_id
+        +TEXT keyword
+        +TIMESTAMPTZ created_at
+    }
+
+    class ApiCache {
+        +UUID id
+        +UUID user_id
+        +TEXT cache_key
+        +JSONB data
+        +TIMESTAMPTZ fetched_at
+    }
+
+    class Weather {
+        +FLOAT temp
+        +STRING city
+        +STRING condition
+        +INT humidity
+        +INT precipitation
+        +STRING airQuality
+    }
+
+    class Stock {
+        +STRING name
+        +STRING value
+        +STRING change
+        +BOOLEAN up
+    }
+
+    class TrendItem {
+        +STRING[] trends
+        +STRING trendsAnswer
+        +TrendResult[] trendsResults
+    }
+
+    class NewsItem {
+        +STRING[] news
+        +STRING newsAnswer
+        +NewsResult[] newsResults
+    }
+
+    class Restaurant {
+        +STRING name
+        +STRING category
+        +STRING distance
+        +STRING address
+        +STRING url
+    }
+
+    class CalendarEvent {
+        +STRING id
+        +STRING title
+        +STRING date
+        +STRING startTime
+        +STRING endTime
+        +STRING location
+        +STRING description
+    }
+
+    class HealthData {
+        +INT steps
+        +INT stepsGoal
+        +FLOAT sleep
+        +FLOAT sleepGoal
+        +INT calories
+        +INT caloriesGoal
+        +INT heartRate
+        +INT water
+        +INT waterGoal
+    }
+
+    class QuickLink {
+        +STRING id
+        +STRING name
+        +STRING url
+        +STRING icon
+        +STRING color
+    }
+
+    class CalendarTask {
+        +STRING id
+        +STRING title
+        +STRING date
+        +STRING startTime
+        +STRING endTime
+        +STRING description
+        +BOOLEAN completed
+    }
+
+    class BriefingWidget {
+        <<aggregates>>
+        +Weather weather
+        +Stock[] stocks
+        +TrendItem trends
+        +NewsItem news
+        +CalendarEvent[] events
+        +HealthData health
+        +Todo[] todos
+    }
+
+    %% DB 1:1 관계
+    User "1" --> "1" UserSettings : owns
+    User "1" --> "1" WidgetLayouts : owns
+
+    %% DB 1:N 관계
+    User "1" --> "N" Todo : has
+    User "1" --> "N" Diary : has
+    User "1" --> "N" SmartKeyword : has
+    User "1" --> "N" ApiCache : caches
+
+    %% 외부 API 데이터 (캐시 경유)
+    ApiCache "1" --> "1" Weather : stores
+    ApiCache "1" --> "N" Stock : stores
+    ApiCache "1" --> "1" TrendItem : stores
+    ApiCache "1" --> "1" NewsItem : stores
+    ApiCache "1" --> "N" Restaurant : stores
+    ApiCache "1" --> "N" CalendarEvent : stores
+    ApiCache "1" --> "1" HealthData : stores
+
+    %% 집계 관계
+    Weather --> BriefingWidget : feeds
+    Stock --> BriefingWidget : feeds
+    TrendItem --> BriefingWidget : feeds
+    NewsItem --> BriefingWidget : feeds
+    CalendarEvent --> BriefingWidget : feeds
+    HealthData --> BriefingWidget : feeds
+    Todo --> BriefingWidget : feeds
+
+    %% 기타
+    UserSettings --> WidgetLayouts : version_sync
+    SmartKeyword "1" --> "1" ApiCache : smart_cache
+```
+
+
+--------------------------------------------------------------------------------
+4. 주요 데이터 흐름 (페이지/컴포넌트별)
+--------------------------------------------------------------------------------
+
+4-1. 앱 초기화 흐름
+  ① App 마운트
+  ② Supabase getSession() 호출
+  ③ handleAuthChange(session)
+      - user 상태 설정 (id, email, displayName, avatarUrl)
+      - loadUserSettings() → user_settings 테이블 조회
+  ④ authBootstrapDone = true → runFullInit() 트리거
+  ⑤ hydrateFromDB(): user_settings, widget_layouts, todos, diaries 로드
+  ⑥ fetchAll(): 모든 외부 API 병렬 호출
+  ⑦ 위젯 렌더링
+
+4-2. LoginScreen  (isLoggedIn = false)
+  사용 데이터:
+    - useAuthStore: isLoggedIn, login()
+  흐름:
+    Google OAuth 버튼 클릭
+    → Supabase signInWithOAuth(google)
+    → 리다이렉트 후 session 수신
+    → handleAuthChange → isLoggedIn = true
+
+4-3. OnboardingModal  (onboarded = false)
+  사용 데이터:
+    - useAuthStore: obStep, selCats, perms, persona
+    - useSettingsStore: tone, bLen
+  흐름:
+    단계별 진행 (카테고리 선택 → 권한 요청 → 완료)
+    → finishOB() 호출
+    → user_settings 저장 (persona, tone, bLen, selCats)
+
+4-4. DashboardLayout  (메인 화면)
+  사용 데이터:
+    - useWidgetStore: vis, layouts, editMode
+    - useDataStore: 모든 위젯 데이터
+    - useAuthStore: user, isLoggedIn
+  흐름:
+    위젯 가시성 (vis) 조회
+    → React Grid Layout으로 위젯 배치
+    → 각 위젯에 해당 데이터 전달
+
+4-5. BriefingWidget  (AI 브리핑)
+  사용 데이터:
+    - useDataStore: weather, stocks, trends, news, calEvents, healthData
+    - useTodoStore: todos
+    - useAuthStore: persona
+    - useSettingsStore: tone, bLen, voiceOn
+  흐름:
+    모든 데이터 집계
+    → Groq LLM Edge Function 호출 (POST /functions/v1/groq)
+    → 개인화 브리핑 텍스트 반환
+    → 음성 읽기 (voiceOn=true 시 Web Speech API)
+
+4-6. WeatherWidget
+  사용 데이터:
+    - useDataStore: weather, loading.weather, errors.weather
+    - useSettingsStore: tempUnit
+  흐름:
+    Geolocation API로 위도/경도 획득
+    → cache_key "weather_{lat}_{lon}" 조회 (api_cache)
+    → 캐시 hit: 표시 / 미스: OpenWeatherMap Edge Function 호출
+    → 온도 단위 변환 (tempUnit)
+
+4-7. StocksWidget
+  사용 데이터:
+    - useDataStore: stocks, loading.stocks
+    - useSettingsStore: stockSymbols
+  흐름:
+    stockSymbols 배열로 cache_key 생성
+    → Twelve Data Edge Function 호출 (캐시 미스 시)
+    → 종목별 등락 시각화
+
+4-8. TrendsWidget
+  사용 데이터:
+    - useDataStore: trends, trendsAnswer, trendsResults, loading.trends
+  흐름:
+    Tavily API (mode: trends) → 키워드 추출
+    → Groq로 AI 요약 생성
+    → 해시태그 + 출처 표시
+
+4-9. NewsWidget
+  사용 데이터:
+    - useDataStore: news, newsAnswer, newsResults, loading.news
+  흐름:
+    Tavily API 2회 병렬 호출 (지역 뉴스 + 글로벌 뉴스)
+    → 기사 목록 + AI 요약 표시
+
+4-10. HealthWidget
+  사용 데이터:
+    - useDataStore: healthData, loading.health
+    - useAuthStore: perms.fit, providerToken
+  흐름:
+    Google Fit 권한 확인 (perms.fit)
+    → providerToken으로 fitness Edge Function 호출
+    → 걸음/수면/칼로리/심박/수분 진행 바 표시
+
+4-11. CalendarWidget (DatePanelContainer)
+  사용 데이터:
+    - useDataStore: calEvents
+    - useGoogleCalendarStore: events, tasks, selectedDate
+    - useAuthStore: perms.cal, providerToken
+  흐름:
+    Google Calendar 권한 확인 (perms.cal)
+    → calendar Edge Function 호출 (todayOnly: true)
+    → 오늘 일정 목록 표시
+    → 로컬 태스크(Task) 별도 관리
+
+4-12. SmartWidgetContent
+  사용 데이터:
+    - useWidgetStore: smartKeywords, smartWidgetData, refreshing
+    - useAuthStore: user
+  흐름:
+    사용자 입력 키워드 저장 (smart_keywords 테이블)
+    → smart-widget Edge Function 호출 (keyword + 컨텍스트)
+    → 키워드별 맞춤 정보 카드 표시
+
+4-13. DiaryCard / DiaryPanel
+  사용 데이터:
+    - useDiaryStore: entries, pinSet, isPinAuthenticated
+  흐름:
+    PIN 설정 여부 확인
+    → isPinAuthenticated 확인 (미인증 시 PIN 입력 모달)
+    → 일기 텍스트 편집 → saveDiary() → diaries 테이블 저장
+
+4-14. TodoWidget / TaskPanel
+  사용 데이터:
+    - useTodoStore: todos, newTodoText, newRoutineText
+  흐름:
+    할 일 추가/완료/삭제 → todos 테이블 동기화
+    매일 자정 ensureDailyReset() 실행
+      → is_fixed=true 항목만 completed 초기화
+
+4-15. SettingsModal
+  사용 데이터:
+    - useSettingsStore: theme, tone, bLen, clockStyle, tempUnit, stockSymbols 등
+    - useWidgetStore: vis
+  흐름:
+    설정 변경 → useSettingsStore 상태 업데이트
+    → user_settings 테이블 upsert
+    → 위젯 즉시 반영
+
+4-16. QuickLinks
+  사용 데이터:
+    - useQuickLinksStore: links
+  흐름:
+    링크 표시 (localStorage 기반)
+    → 편집 모달에서 추가/삭제/순서 변경
+
+
+--------------------------------------------------------------------------------
+5. API 엔드포인트 요약
+--------------------------------------------------------------------------------
+
+Edge Function                  | 요청                              | 응답
+-------------------------------|-----------------------------------|-----------------------------
+POST /functions/v1/weather     | { lat, lon }                      | Weather
+POST /functions/v1/stocks      | { symbols: string[] }             | Stock[]
+POST /functions/v1/tavily      | { query, mode?, max_results? }    | TrendItem | NewsItem
+POST /functions/v1/kakao-places| { query, lat, lon, radius }       | Restaurant[]
+POST /functions/v1/calendar    | { token, todayOnly }              | CalendarEvent[]
+POST /functions/v1/fitness     | { token }                         | HealthData
+POST /functions/v1/groq        | { prompt, context }               | { answer: string }
+POST /functions/v1/smart-widget| { keyword, context }             | SmartWidgetData
+
+
+--------------------------------------------------------------------------------
+6. 캐시 전략 요약
+--------------------------------------------------------------------------------
+
+계층        | 저장소          | TTL      | 키 패턴
+------------|----------------|----------|------------------------------------------
+DB Cache    | api_cache 테이블| 1시간    | weather_{lat}_{lon}
+            |                |          | stocks_{sym1}_{sym2}...
+            |                |          | trends_full
+            |                |          | news_{lat}_{lon} | news_KR
+            |                |          | restaurants_{query}_{lat}_{lon}
+            |                |          | calendar_today
+            |                |          | health_default
+위치 캐시   | 메모리         | 5분      | (위도/경도)
+로컬 폴백   | localStorage   | 무제한   | 네트워크 실패 시 이전 데이터 제공
+
+
+================================================================================
+END OF DOCUMENT
+================================================================================
