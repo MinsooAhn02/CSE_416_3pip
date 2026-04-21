@@ -1,0 +1,119 @@
+\documentclass[11pt, a4paper]{article}
+
+% --- UNIVERSAL PREAMBLE BLOCK ---
+\usepackage[a4paper, top=2.5cm, bottom=2.5cm, left=2cm, right=2cm]{geometry}
+\usepackage{fontspec}
+\usepackage[english, bidi=basic, provide=*]{babel}
+
+% Set default font to Sans Serif (Noto Sans)
+\babelfont{rm}{Noto Sans}
+
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{xcolor}
+\usepackage{colortbl}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{parskip}
+\usepackage{titlesec}
+\usepackage{enumitem}
+
+% Colors
+\definecolor{navy}{HTML}{1a2a4a}
+\definecolor{tableheader}{HTML}{2563eb}
+\definecolor{rowgray}{HTML}{f3f4f6}
+
+% Section styling
+\titleformat{\section}
+  {\large\bfseries\color{white}}
+  {}{0em}
+  {}
+  [{\color{navy}}]
+
+\newcommand{\sectionbox}[1]{%
+  \noindent\colorbox{navy}{\parbox{\dimexpr\linewidth-2\fboxsep}%
+  {\large\bfseries\color{white}\strut\ #1\strut}}%
+  \vspace{6pt}
+}
+
+\begin{document}
+
+% --- Cover Page ---
+\begin{center}
+    \vspace*{1cm}
+    {\fontsize{28}{34}\selectfont\bfseries\color{navy} MorningBrief.AI}\\[10pt]
+    {\Large\textbf{Data Design \& Web View Documentation}}\\[6pt]
+    {\large CSE 416: Software Engineering \quad$\cdot$\quad Team 3pip}\\[20pt]
+    
+    \noindent\rule{\linewidth}{1.5pt}
+\end{center}
+
+\vspace{20pt}
+
+\sectionbox{Team Members \& Contributions}
+\begin{table}[h]
+    \centering
+    \begin{tabularx}{\linewidth}{>{\bfseries}l l X}
+        \rowcolor{tableheader}
+        \color{white}Name & \color{white}SBU Email & \color{white}Main Contributions \\ \addlinespace[2pt]
+        \rowcolor{rowgray}
+        Minsoo Ahn & minsoo.ahn@stonybrook.edu & Infra \& Supabase environment setup, Project UI skeleton, External API integration (Weather/News) \\
+        Sungmin Choo & sungmin.choo@stonybrook.edu & Backend integration planning, Dashboard UI implementation, Smart Keyword widget logic \\
+        \rowcolor{rowgray}
+        Dahyun Kwon & dahyun.kwon@stonybrook.edu & Diary \& Calendar interaction design, UI/UX implementation, Frontend mockup testing \\
+    \end{tabularx}
+\end{table}
+
+\vspace{20pt}
+
+\sectionbox{1. Data Design Overview}
+MorningBrief.AI utilizes \textbf{Supabase (PostgreSQL)} for persistent storage. Our data architecture is designed to handle two distinct types of information:
+\begin{itemize}
+    \item \textbf{Persistent Entities:} Core user data, preferences, and user-generated content (Todos, Diaries) that remain in the database.
+    \item \textbf{Runtime Entities (API Cache):} Dynamic data fetched from external providers (OpenWeather, Google Calendar, News API). These are stored in a centralized \texttt{ApiCache} table to minimize API costs and improve performance.
+\end{itemize}
+
+\subsection*{Key Attributes Description}
+\begin{itemize}
+    \item \textbf{UserSettings.vis (JSONB):} A flexible mapping of widget IDs to boolean values, allowing users to toggle specific dashboard components.
+    \item \textbf{Todo.is\_fixed (Boolean):} Differentiates between one-time tasks and recurring daily routines that survive the nightly cleanup process.
+    \item \textbf{ApiCache.cache\_key (String):} A unique identifier generated based on request parameters (e.g., coordinates or search terms) to manage TTL (Time-To-Live).
+    \item \textbf{BriefingWidget (Aggregation):} This is a virtual entity representing the data context sent to the \textbf{Groq LLM} to generate the personalized "Morning Briefing" text.
+\end{itemize}
+
+\newpage
+
+\sectionbox{2. UML Class Diagram}
+\begin{figure}[h]
+    \centering
+    % Placeholder for the diagram image generated from Mermaid
+    \framebox{\parbox{0.9\textwidth}{\centering
+        \vspace{4cm}
+        \textbf{[Insert UML\_Diagram.png here]} \\
+        \small\textit{Please export the Mermaid code as a high-resolution PNG and replace this frame.}
+        \vspace{4cm}
+    }}
+    \caption{UML Class Diagram for MorningBrief.AI Data Architecture}
+\end{figure}
+
+\sectionbox{3. Data Associations}
+\textbf{Entity Relationships:}
+\begin{itemize}
+    \item \textbf{User $\to$ UserSettings / WidgetLayouts (1:1):} Each user profile is strictly mapped to one set of configuration and layout preferences.
+    \item \textbf{User $\to$ Todo / Diary / SmartKeyword (1:N):} A user can manage multiple tasks, history logs, and custom monitoring keywords.
+    \item \textbf{ApiCache $\to$ Dynamic Entities (1:1/1:N):} The cache serves as a proxy for external entities. For example, one \texttt{ApiCache} entry might store a single \texttt{Weather} object or a list of \texttt{Stock} objects.
+\end{itemize}
+
+\sectionbox{4. Front-end Web View Plan}
+The UI is implemented using \textbf{React.js} and \textbf{Tailwind CSS} for a responsive, modular dashboard. 
+\begin{itemize}
+    \item \textbf{Modular Widgets:} Each data entity in the UML corresponds to a dedicated UI component.
+    \item \textbf{State Management:} Runtime data is managed via React hooks, synchronized with the Supabase \texttt{ApiCache} to ensure seamless updates without redundant network requests.
+\end{itemize}
+
+\vfill
+\begin{center}
+    \small\color{gray} Generated for CSE 416 Project Submission --- Stony Brook University
+\end{center}
+
+\end{document}
