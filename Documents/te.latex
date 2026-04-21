@@ -1,119 +1,141 @@
 \documentclass[11pt, a4paper]{article}
 
 % --- UNIVERSAL PREAMBLE BLOCK ---
-\usepackage[a4paper, top=2.5cm, bottom=2.5cm, left=2cm, right=2cm]{geometry}
+\usepackage[a4paper, top=3cm, bottom=3cm, left=2.5cm, right=2.5cm]{geometry}
 \usepackage{fontspec}
 \usepackage[english, bidi=basic, provide=*]{babel}
 
-% Set default font to Sans Serif (Noto Sans)
+\babelprovide[import, onchar=ids fonts]{english}
+
+% Professional Typography Settings
 \babelfont{rm}{Noto Sans}
+\setmainfont{Noto Sans}
 
 \usepackage{booktabs}
 \usepackage{tabularx}
 \usepackage{xcolor}
-\usepackage{colortbl}
 \usepackage{graphicx}
 \usepackage{hyperref}
 \usepackage{parskip}
 \usepackage{titlesec}
 \usepackage{enumitem}
+\usepackage{fancyhdr}
 
-% Colors
-\definecolor{navy}{HTML}{1a2a4a}
-\definecolor{tableheader}{HTML}{2563eb}
-\definecolor{rowgray}{HTML}{f3f4f6}
+% Colors (Subtle Accents)
+\definecolor{darkgray}{HTML}{333333}
+\definecolor{softblue}{HTML}{2563eb}
 
-% Section styling
+% Section styling: Clean lines instead of boxes
 \titleformat{\section}
-  {\large\bfseries\color{white}}
-  {}{0em}
+  {\large\bfseries\color{darkgray}}
+  {\thesection.}{0.5em}
   {}
-  [{\color{navy}}]
+  [{\titlerule[0.5pt]}]
+\titlespacing{\section}{0pt}{20pt}{12pt}
 
-\newcommand{\sectionbox}[1]{%
-  \noindent\colorbox{navy}{\parbox{\dimexpr\linewidth-2\fboxsep}%
-  {\large\bfseries\color{white}\strut\ #1\strut}}%
-  \vspace{6pt}
-}
+% Table custom column
+\newcolumntype{L}{>{\raggedright\arraybackslash}X}
+
+% Header/Footer
+\pagestyle{fancy}
+\fancyhf{}
+\renewcommand{\headrulewidth}{0pt}
+\fancyfoot[C]{\small\color{gray} Page \thepage \quad | \quad MorningBrief.AI}
 
 \begin{document}
 
-% --- Cover Page ---
+% --- PAGE 1: Formal Title & Team ---
 \begin{center}
     \vspace*{1cm}
-    {\fontsize{28}{34}\selectfont\bfseries\color{navy} MorningBrief.AI}\\[10pt]
-    {\Large\textbf{Data Design \& Web View Documentation}}\\[6pt]
-    {\large CSE 416: Software Engineering \quad$\cdot$\quad Team 3pip}\\[20pt]
-    
-    \noindent\rule{\linewidth}{1.5pt}
+    {\LARGE\bfseries MorningBrief.AI}\\[10pt]
+    {\large Data Design \& Architecture Specification}\\[5pt]
+    \rule{0.3\linewidth}{0.8pt}\\[15pt]
+    {\small CSE 416: Software Engineering \quad·\quad Team 3pip \quad·\quad \today}
+    \vspace{2cm}
 \end{center}
 
-\vspace{20pt}
-
-\sectionbox{Team Members \& Contributions}
+\section{Team Contributions}
 \begin{table}[h]
-    \centering
-    \begin{tabularx}{\linewidth}{>{\bfseries}l l X}
-        \rowcolor{tableheader}
-        \color{white}Name & \color{white}SBU Email & \color{white}Main Contributions \\ \addlinespace[2pt]
-        \rowcolor{rowgray}
-        Minsoo Ahn & minsoo.ahn@stonybrook.edu & Infra \& Supabase environment setup, Project UI skeleton, External API integration (Weather/News) \\
-        Sungmin Choo & sungmin.choo@stonybrook.edu & Backend integration planning, Dashboard UI implementation, Smart Keyword widget logic \\
-        \rowcolor{rowgray}
-        Dahyun Kwon & dahyun.kwon@stonybrook.edu & Diary \& Calendar interaction design, UI/UX implementation, Frontend mockup testing \\
+    \centering\small
+    \begin{tabularx}{\linewidth}{@{} l l L @{}}
+        \toprule
+        \textbf{Name} & \textbf{SBU Email} & \textbf{Key Activities \& Work Products} \\
+        \midrule
+        Ahn Minsoo & minsoo.ahn@stonybrook.edu & Infra/Supabase cloud setup, Persistent storage schema, External API integration. \\
+        Choo Sungmin & sungmin.choo@stonybrook.edu & Backend aggregation logic, Smart Keyword filtering, Dashboard core widget development. \\
+        Kwon Dahyun & dahyun.kwon@stonybrook.edu & Diary/Calendar interaction model, React component architecture, Frontend UI/UX implementation. \\
+        \bottomrule
     \end{tabularx}
 \end{table}
 
-\vspace{20pt}
+\vspace{1cm}
 
-\sectionbox{1. Data Design Overview}
-MorningBrief.AI utilizes \textbf{Supabase (PostgreSQL)} for persistent storage. Our data architecture is designed to handle two distinct types of information:
-\begin{itemize}
-    \item \textbf{Persistent Entities:} Core user data, preferences, and user-generated content (Todos, Diaries) that remain in the database.
-    \item \textbf{Runtime Entities (API Cache):} Dynamic data fetched from external providers (OpenWeather, Google Calendar, News API). These are stored in a centralized \texttt{ApiCache} table to minimize API costs and improve performance.
-\end{itemize}
+\section{Project Overview}
+MorningBrief.AI is a data-driven personal assistant designed to synthesize disparate data points into a coherent daily narrative. The architecture focuses on \textbf{Contextual Awareness} and \textbf{Efficiency}.
 
-\subsection*{Key Attributes Description}
-\begin{itemize}
-    \item \textbf{UserSettings.vis (JSONB):} A flexible mapping of widget IDs to boolean values, allowing users to toggle specific dashboard components.
-    \item \textbf{Todo.is\_fixed (Boolean):} Differentiates between one-time tasks and recurring daily routines that survive the nightly cleanup process.
-    \item \textbf{ApiCache.cache\_key (String):} A unique identifier generated based on request parameters (e.g., coordinates or search terms) to manage TTL (Time-To-Live).
-    \item \textbf{BriefingWidget (Aggregation):} This is a virtual entity representing the data context sent to the \textbf{Groq LLM} to generate the personalized "Morning Briefing" text.
-\end{itemize}
+\textbf{Database Strategy} \\
+We utilize \textbf{Supabase (PostgreSQL)} to maintain relational integrity between user preferences and generated content. This ensures that every briefing is highly personalized and contextually accurate based on stored user history.
 
-\newpage
+\textbf{Performance \& Caching} \\
+To optimize load times and API overhead, an \textbf{API Caching Layer} is implemented. High-frequency data such as weather and stock trends are cached for 60 minutes, ensuring data freshness while providing near-instant response times.
 
-\sectionbox{2. UML Class Diagram}
-\begin{figure}[h]
+\newpage % --- PAGE 2: UML ONLY ---
+
+\vspace*{\fill}
+\section{UML Class Diagram}
+\begin{figure}[htbp]
     \centering
-    % Placeholder for the diagram image generated from Mermaid
-    \framebox{\parbox{0.9\textwidth}{\centering
-        \vspace{4cm}
-        \textbf{[Insert UML\_Diagram.png here]} \\
-        \small\textit{Please export the Mermaid code as a high-resolution PNG and replace this frame.}
-        \vspace{4cm}
-    }}
-    \caption{UML Class Diagram for MorningBrief.AI Data Architecture}
+    % UML 이미지만 표시 (컴파일을 위해 플레이스홀더 처리)
+    \ifdefined\directlua
+      \framebox{\parbox[c][10cm][c]{0.95\linewidth}{\centering \textbf{UML Class Diagram Image Location} \\ \small (Upload your diagram.png file here)}}
+    \else
+      \includegraphics[width=\linewidth]{diagram.png}
+    \fi
+    \vspace{1cm}
+    \caption{MorningBrief.AI Data Model \& Entity Relationships}
 \end{figure}
+\vspace*{\fill}
 
-\sectionbox{3. Data Associations}
-\textbf{Entity Relationships:}
-\begin{itemize}
-    \item \textbf{User $\to$ UserSettings / WidgetLayouts (1:1):} Each user profile is strictly mapped to one set of configuration and layout preferences.
-    \item \textbf{User $\to$ Todo / Diary / SmartKeyword (1:N):} A user can manage multiple tasks, history logs, and custom monitoring keywords.
-    \item \textbf{ApiCache $\to$ Dynamic Entities (1:1/1:N):} The cache serves as a proxy for external entities. For example, one \texttt{ApiCache} entry might store a single \texttt{Weather} object or a list of \texttt{Stock} objects.
+\newpage % --- PAGE 3: Technical Details ---
+
+\section{Data Associations \& Constraints}
+The system architecture is governed by the following relational constraints to ensure data consistency.
+
+\begin{table}[h]
+    \centering\small
+    \begin{tabularx}{\linewidth}{@{} l c l L @{}}
+        \toprule
+        \textbf{Primary Entity} & \textbf{Cardinality} & \textbf{Related Entity} & \textbf{Logic \& Constraint} \\
+        \midrule
+        User & 1 : 1 & UserSettings & Profile-specific AI persona settings. \\
+        User & 1 : 1 & WidgetLayouts & Serialized grid state of the React dashboard. \\
+        User & 1 : N & Todo & Cascade delete: tasks are removed on account closure. \\
+        User & 1 : N & Diary & Indexed by date for rapid calendar retrieval. \\
+        ApiCache & 1 : 1 & Weather/Stock & Keyed by geolocation or ticker symbol. \\
+        \bottomrule
+    \end{tabularx}
+\end{table}
+
+\section{Detailed Entity Analysis}
+\begin{itemize}[leftmargin=1.5em, labelsep=0.5em]
+    \item \textbf{UserSettings.vis (JSONB)}: Utilizes native PostgreSQL JSON support for schema-less flexibility in widget state management.
+    \item \textbf{Todo.is\_fixed (Boolean)}: Distinguishes recurring daily routines from one-time tasks, managed by the nightly reset worker.
+    \item \textbf{BriefingWidget (Aggregate)}: A logical hub that prepares prompts for the Groq LLM by synthesizing rows from multiple tables.
 \end{itemize}
 
-\sectionbox{4. Front-end Web View Plan}
-The UI is implemented using \textbf{React.js} and \textbf{Tailwind CSS} for a responsive, modular dashboard. 
-\begin{itemize}
-    \item \textbf{Modular Widgets:} Each data entity in the UML corresponds to a dedicated UI component.
-    \item \textbf{State Management:} Runtime data is managed via React hooks, synchronized with the Supabase \texttt{ApiCache} to ensure seamless updates without redundant network requests.
+\section{Front-end Implementation Plan}
+The UI is a single-page application built with \textbf{React.js} and \textbf{Tailwind CSS}.
+
+\textbf{Component Architecture}
+\begin{itemize}[noitemsep]
+    \item \textbf{Grid System}: \texttt{react-grid-layout} is used for draggable widgets, with positions persisted in \texttt{WidgetLayouts}.
+    \item \textbf{Theming}: Dynamic CSS variables are mapped to the AI Persona selected in \texttt{UserSettings}.
+    \item \textbf{State Management}: React hooks synchronize cached API data with the view to minimize re-renders.
 \end{itemize}
 
 \vfill
 \begin{center}
-    \small\color{gray} Generated for CSE 416 Project Submission --- Stony Brook University
+    \small\color{gray} Team 3pip \quad·\quad CSE 416 \quad·\quad Stony Brook University
 \end{center}
 
 \end{document}
