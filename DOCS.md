@@ -1,271 +1,417 @@
-# MorningBrief.AI — 프로젝트 문서 통합본
+# MorningBrief.AI - 통합 프로젝트 문서
 
-> 작성일: 2026-04-09 | 기존 문서들(brief.txt, fix.txt, guide.txt, func_requirements*.txt, progress.txt, TODO.md 등)을 하나로 합침
-
----
-
-## 1. 프로젝트 개요
-
-**MorningBriefing.AI** — Chrome New Tab Extension (React 기반 대시보드)
-
-사용자 데이터(날씨, 주식, 뉴스, 일정, 건강 정보)를 한눈에 파악하고, AI 기반 브리핑 및 일기/TODO 관리 기능을 제공하는 자동화 라이프로깅 서비스.
-
-**핵심 가치:**
-- 캘린더·할일·개인 반성·매크로 데이터를 자동 합성하여 일기 생성 (수동 입력 제로)
-- 자정(00:00)에 자동으로 하루 데이터를 집계, 구조화된 일기 항목 생성
-- 감정 분석 없이 사실 기반 기록만 수행
+> 최종 정리일: 2026-04-21
+> 관리 정책: 문서는 DOCS.md 단일 파일로 유지
 
 ---
 
-## 2. 기술 스택
+## 1) 프로젝트 개요
 
-| 분류 | 기술 |
-|------|------|
-| Frontend | React 18 + Vite |
-| 상태 관리 | Zustand |
-| UI | Tailwind CSS 3 + Lucide React |
-| 드래그 앤 드롭 | @hello-pangea/dnd |
-| 백엔드 | Supabase (Auth, DB, Edge Functions) |
-| LLM | Groq API |
-| 데이터 | Twelve Data, Tavily Search, Kakao Local, Google APIs |
+MorningBrief.AI는 브라우저 새 탭(New Tab)에서 동작하는 개인 대시보드형 서비스다.
+사용자의 하루 맥락(날씨, 주식, 뉴스, 일정, 건강, 메모/질문)을 모아 AI 브리핑과 기록 흐름으로 연결한다.
+
+핵심 목표:
+
+1. 정보를 한 화면에서 즉시 확인
+2. 캐시 우선 렌더링으로 로딩 체감 개선
+3. 사용자별 설정/데이터를 안전하게 저장
+
+핵심 원칙:
+
+1. API 실패 시 fallback으로 UX 단절 최소화
+2. 사용자 데이터 격리(RLS)
+3. 비밀키는 Supabase Secrets에서만 관리
 
 ---
 
-## 3. 아키텍처
+## 2) 기술 스택 (현재 코드 기준)
 
-### 3.1 파일 구조
+### Frontend
 
-```
+- React 18
+- Vite 6
+- Tailwind CSS 3
+- Zustand
+- framer-motion
+- @hello-pangea/dnd
+- i18next / react-i18next
+
+### Backend / Infra
+
+- Supabase (Auth, Postgres, Edge Functions)
+- Edge Functions (TypeScript)
+- 외부 데이터 연동:
+
+1. Weather
+2. Twelve Data (stocks)
+3. Tavily (trends/news)
+4. Kakao Local
+5. Google Calendar / Google Fitness
+6. Groq (LLM)
+
+---
+
+## 3) 디렉토리 구조 요약
+
+```text
 src/
-├── App.jsx                    # 메인 앱, DND 레이아웃 관리
-├── components/
-│   ├── layout/
-│   │   ├── TopNav.jsx         # 헤더 (프로필, 시계, 검색, 테마, 즐겨찾기)
-│   │   ├── QuickLinks.jsx     # 즐겨찾기 링크
-│   │   ├── EditModeBanner.jsx # 드래그 활성화 배너
-│   │   └── FixedButtons.jsx   # FAB 스택
-│   ├── widgets/
-│   │   ├── BriefingWidget.jsx
-│   │   ├── CalendarWidget.jsx
-│   │   ├── DiaryCard.jsx
-│   │   ├── WeatherWidget.jsx
-│   │   ├── StocksWidget.jsx
-│   │   ├── TrendsWidget.jsx
-│   │   ├── NewsWidget.jsx
-│   │   ├── HealthWidget.jsx
-│   │   ├── TodoWidget.jsx
-│   │   ├── RestaurantsWidget.jsx
-│   │   ├── FoodRouletteWidget.jsx
-│   │   └── SmartWidgetContent.jsx
-│   ├── modals/
-│   │   ├── OnboardingModal.jsx
-│   │   ├── SettingsModal.jsx
-│   │   ├── NewsDetailModal.jsx
-│   │   └── BriefSettingsModal.jsx
-│   └── common/
-│       ├── DragHandle.jsx
-│       ├── WidgetCard.jsx
-│       └── AnalogClock.jsx
-├── store/
-│   ├── useAuthStore.js        # Google OAuth, 세션
-│   ├── useSettingsStore.js    # 테마, 브리핑, 시계 스타일
-│   ├── useWidgetStore.js      # 위젯 visibility, 레이아웃
-│   ├── useDataStore.js        # API 호출, 캐시
-│   ├── useTodoStore.js        # TODO (일반 + 고정, 일일 리셋)
-│   └── useDiaryStore.js       # 일기 entries, answers, 메모
-├── services/
-│   ├── aiService.js           # AI 브리핑 + 스마트 위젯 + 일기 생성
-│   └── supabaseClient.js      # Supabase 초기화
-├── hooks/
-│   └── useTheme.js            # isDark, cardCls, muted
-├── mock/
-│   └── data.js                # Mock 데이터 (fallback용)
-└── utils/
-    └── storage.js             # localStorage 유틸
+  App.jsx
+  components/
+    common/
+      ConfirmDialog.jsx
+      DragHandle.jsx
+      TimeInput.jsx
+      Toggle.jsx
+      WidgetCard.jsx
+    layout/
+      DashboardLayout.jsx
+      DatePanelContainer.jsx
+      DiaryPanel.jsx
+      EventPanel.jsx
+      FixedButtons.jsx
+      LoginScreen.jsx
+      QuickLinks.jsx
+      TaskPanel.jsx
+      TopNav.jsx
+    modals/
+      BriefSettingsModal.jsx
+      DiaryListModal.jsx
+      FirstLoginBriefingModal.jsx
+      NewsDetailModal.jsx
+      OnboardingModal.jsx
+      PINModal.jsx
+      SettingsModal.jsx
+    widgets/
+      BriefingWidget.jsx
+      CalendarWidget.jsx
+      DiaryCard.jsx
+      HealthWidget.jsx
+      NewsWidget.jsx
+      SmartWidgetContent.jsx
+      StocksWidget.jsx
+      TrendsWidget.jsx
+      WeatherWidget.jsx
+  services/
+    aiService.js
+  store/
+    useAuthStore.js
+    useDataStore.js
+    useDiaryStore.js
+    useGoogleCalendarStore.js
+    useQuickLinksStore.js
+    useSettingsStore.js
+    useTodoStore.js
+    useWidgetStore.js
 
 supabase/
-├── schema.sql
-└── functions/
-    ├── groq/          # LLM (Groq API)
-    ├── stocks/        # Twelve Data
-    ├── tavily/        # 뉴스/트렌드
-    ├── kakao-places/  # 맛집
-    ├── calendar/      # Google Calendar
-    ├── fitness/       # Google Fit
-    ├── smart-widget/  # 스마트 위젯
-    └── weather/       # 날씨
+  schema.sql
+  functions/
+    calendar/
+    fitness/
+    groq/
+    kakao-places/
+    smart-widget/
+    stocks/
+    tavily/
+    weather/
 ```
 
-### 3.2 데이터 흐름
+---
 
-```
-앱 시작
-  → onAuthStateChange → useAuthStore.handleAuthChange()
-  → isLoggedIn = true
-  → hydrateFromDB() (Settings, Widgets, Todo, Diary)
-  → fetchAll({ useExistingCache: true })  ← 캐시 우선, 스피너 없이 즉시 표시
-    → 각 fetch: DB api_cache 조회 → Edge Function → Mock fallback
-    → 응답 → api_cache + localStorage 저장
-  → 렌더링: col1(Briefing) | col2(Standard Widgets) | col3(Calendar)
-```
+## 4) 앱 초기화/실행 흐름
 
-### 3.3 캐시 TTL
+### 4.1 인증 부트스트랩
 
-| 위젯 | 소스 | TTL |
-|------|------|-----|
-| WeatherWidget | Weather API | 10분 |
-| StocksWidget | Twelve Data | 5분 |
-| TrendsWidget / NewsWidget | Tavily | 20분 |
-| RestaurantsWidget | Kakao Local | 20분 |
-| CalendarWidget | Google Calendar | 5분 |
-| HealthWidget | Google Fit | 15분 |
+App 초기화 시 인증은 아래 순서로 확정된다.
+
+1. mount 시 getSession() 명시 호출
+2. onAuthStateChange 구독으로 후속 이벤트 수신
+3. authBootstrapDone 이후 데이터 초기화 로직 진행
+
+의도:
+
+- 자동 세션 복원 타이밍 레이스 상황에서도 초기 로드가 멈추지 않게 함
+
+### 4.2 로그인 후 초기 데이터 로드
+
+조건: isLoggedIn=true && user.id 존재
+
+실행 순서:
+
+1. hydrateFromDB(Settings/Widget/Todo/Diary)
+2. fetchAll({ useExistingCache: true })
+3. AI 후속 처리(generateAiTodoOnLoad 등)
+
+### 4.3 주기 갱신
+
+1. 탭 visible 복귀 시 fetchAll({ useExistingCache: true })
+2. 5분 주기 폴링(visible일 때만)
+3. 위젯별 수동 새로고침 시 force=true로 캐시 우회
 
 ---
 
-## 4. 기능 요구사항
+## 5) 데이터 수집 및 캐시 로직
 
-### 4.1 AI 브리핑
+### 5.1 캐시 계층
 
-- 대시보드 로드 시 날씨·증시·뉴스·캘린더 기반 AI 브리핑 생성
-- 브리핑 톤(formal/casual), 길이(short/medium/long) 설정 가능
-- 자정 이후 첫 접속 시 자동으로 상세 브리핑 모달 표시 (하루 1회)
-- 스마트 위젯: 사용자 정의 키워드 기반 Groq 콘텐츠 생성, 20분 캐시
+1. 메모리 캐시: 위치 정보(짧은 TTL)
+2. DB 캐시: api_cache (사용자별)
+3. localStorage fallback
 
-### 4.2 일기 & 데일리 질문
+관련 키:
 
-- DiaryCard: 매일 새 질문 표시 (30일 이내 중복 없음)
-- 답변 blur 시 자동 저장 (Supabase)
-- 자정 합성: 체크된 할일·완료 캘린더 이벤트·답변·매크로 데이터 → Groq LLM → 사실 기반 일기
-- 합성 후 프리뷰 모달 표시, 30초 후 자동 저장
+- mb_last_access_time
+- mb_last_fetched_at
 
-### 4.3 캘린더 & Todo
+### 5.2 fetchAll 핵심 규칙
 
-- Google Calendar OAuth 연동 (read-only)
-- 이벤트·할일 체크박스 완료 처리 → 자정 일기에만 포함
-- 일반 TODO: 하루 후 삭제 / 고정 TODO(루틴): 매일 리셋
+1. useExistingCache=true면 기본적으로 force refresh를 하지 않음
+2. user_settings + widget_layouts 조회 후 visibleWidgets 결정
+3. visibleWidgets 기준 필요한 fetch만 병렬 실행
+4. 상태(apiStatus, loading, errors)를 일관되게 갱신
 
-### 4.4 위젯 시스템
+### 5.3 개별 fetch 공통 패턴
 
-- 1:3:3 레이아웃 (좌:BriefingWidget+DiaryCard / 중:Standard Widgets / 우:CalendarWidget)
-- 드래그 앤 드롭으로 중앙 열 위젯 순서 변경, Supabase 저장
-- Settings에서 위젯 visibility 토글 (Fixed 위젯 제외)
+1. cacheKey 계산
+2. force=false면 readApiCache 우선
+3. 캐시 hit 시 즉시 상태 반영 후 종료
+4. miss면 Edge Function 호출
+5. 성공 시 정규화 + writeApiCache
+6. 실패 시 mock fallback + 에러 상태 기록
 
-### 4.5 보안
+### 5.4 엔드포인트 매핑
 
-- 모든 서드파티 API 키는 Supabase Secrets Manager에만 저장
-- Supabase RLS로 사용자별 데이터 격리
-
----
-
-## 5. BriefingWidget 상세 다이얼로그 구현 명세 (v2)
-
-> `brief.txt` 내용 — 구현 완료 기준 (2026-03-xx)
-
-**확정 사항 요약:**
-
-| 항목 | 내용 |
-|------|------|
-| 확장 애니메이션 | 오버레이 방식, scale(0.5→1) + opacity (framer-motion) |
-| AI 호출 | Single Call → `{ summary, detail }` JSON 반환 |
-| 데이터 호출 | 하이브리드: 최초 1회 + 캐시 + 새로고침 시 재호출 |
-| 스크롤 제어 | `overflow:hidden` + `paddingRight` (Layout Shift 방지) |
-| 인사말 | 시간대별 3종 (05-12 오전 / 12-18 오후 / 18-05 저녁) |
-| 종료 | X 버튼 + 배경 클릭 |
-| 스켈레톤 UI | 문단 블록 + `animate-pulse` |
-
-**aiService.js 추가 함수:**
-- `formatCalEventsForAI(calEvents)`: 캘린더 이벤트 → `"HH:MM 제목"` 포맷 문자열
-- `getTimeGreeting()`: 시간대별 공식 인사말 반환
-- `generateDetailedBriefing({ tone, length, context })`: summary + detail 동시 반환
+- weather -> /functions/v1/weather
+- stocks -> /functions/v1/stocks
+- trends/news -> /functions/v1/tavily
+- places -> /functions/v1/kakao-places
+- calendar -> /functions/v1/calendar
+- fitness -> /functions/v1/fitness
+- AI(groq) -> /functions/v1/groq
 
 ---
 
-## 6. 개발 히스토리
+## 6) 위젯 시스템 요약
 
-### 6.1 v2 리팩토링 (완료)
+### 6.1 레이아웃 원칙
 
-- `LAYOUT_VERSION` 갱신 (기존 레이아웃 강제 리셋)
-- layout key: `left/center/right` → `col1/col2/col3`
-- 캘린더·Todo: `WIDGET_COMPONENTS`에서 제거 → 별도 고정 렌더링
-- DND: col1 ↔ col2 ↔ col3 자유 이동, 캘린더 제외
+DashboardLayout 기준:
 
-### 6.2 버그 수정 보고서 (2026-03-18)
+1. 브리핑 묶음(BriefingWidget + DiaryCard)은 핵심 블록
+2. 나머지 위젯은 설정 순서/가시성에 따라 slider deck 구성
+3. dense 위젯(news/trends/stocks/smart)은 단독 스택 처리 가능
 
-| 항목 | 상태 |
-|------|------|
-| 로그아웃 로직 (useAuthStore) | ✅ |
-| 시계 '날짜 상세' 스타일 (TopNav) | ✅ |
-| 레이아웃 초기화 `resetDndLayout()` | ✅ |
-| DND 이중 애니메이션(떨림) 해결 | ✅ |
-| NewsWidget 신규 생성 (MiniWidgetGrid 교체) | ✅ |
-| QuickLink 편집창 z-index → z-[9999] | ✅ |
+### 6.2 공통 카드 규칙
 
-### 6.3 캐시 최적화 & 무한 로딩 방지 (2026-04-04)
+WidgetCard 공통 기능:
 
-**문제:** 로그인 직후 fetchAll()이 모든 위젯을 동시에 `loading: true`로 세팅 → 무한 스피너
+1. 타이틀/아이콘/닫기/새로고침
+2. apiStatus 표시
+3. closeWidget(widgetId)로 vis=false 적용
 
-**수정 내용:**
-- `fetchAll(options = {})` 에 `useExistingCache` 옵션 추가
-  - `true`: 캐시 우선 (로그인 직후), loading 상태 없이 즉시 반환
-  - `false`: 기존 30분 stale 체크 (기본값)
-- 각 fetch 함수: loading 설정 전 캐시 먼저 확인 → 캐시 있으면 즉시 반환
-- App.jsx: `fetchAll()` → `fetchAll({ useExistingCache: true })`
+### 6.3 위젯별 역할
 
-**효과:**
+1. BriefingWidget
 
-| 상황 | Before | After |
-|------|--------|-------|
-| 로그인 직후 (캐시 O) | 스피너 30초 | UI 즉시 표시 (0.05초) |
-| 자동 새로고침 | 30분마다 | 없음 (수동만) |
+- AI 요약/상세 브리핑
+- tone/length 반영 및 재생성
+
+2. DiaryCard
+
+- 오늘 질문 응답 입력/저장
+- 날짜별 응답 목록 표시
+
+3. CalendarWidget
+
+- month/week/day 전환
+- DatePanelContainer 연동
+
+4. WeatherWidget
+
+- 현재 날씨 및 지표
+- 단위 설정 연동
+
+5. StocksWidget
+
+- 심볼 기반 시세
+- 심볼 변경 시 재조회
+
+6. TrendsWidget
+
+- 트렌드/출처/상세 모달
+
+7. NewsWidget
+
+- 뉴스 목록/요약/상세 모달
+
+8. HealthWidget
+
+- steps/sleep/calories/heart rate 요약
+
+9. SmartWidgetContent
+
+- 키워드 기반 개인화 콘텐츠
+- refresh/remove/외부 링크 동작
 
 ---
 
-## 7. 캘린더 기능 확장 (Progress)
+## 7) 캘린더/패널/일기 상태
 
-> `progress.txt` 내용 — Calendar Integration (구현 완료)
+DatePanelContainer는 EventPanel, TaskPanel, DiaryPanel을 통합 제공한다.
 
-**추가된 컴포넌트:**
-- `PINModal.jsx` — 4자리 PIN 입력/인증
-- `EventPanel.jsx` — 날짜별 구글 캘린더 이벤트 표시/추가
-- `TaskPanel.jsx` — 날짜별 Task 표시/추가/완료 처리
-- `DiaryPanel.jsx` — PIN 인증 후 일기 열람 + 메모 편집
-- `DiaryListModal.jsx` — 전체 일기 목록, 검색, 정렬
-- `DatePanelContainer.jsx` — Event|Task|Diary 3열 컨테이너
+현재 상태:
 
-**추가된 Store:**
-- `useGoogleCalendarStore.jsx` — events[], tasks[], selectedDate, PIN 인증 상태
-- `useDiaryStore` 확장 — PIN 상태 관리 (pinSet, isPinAuthenticated, verifyPIN, setPIN)
-
-**미완성 항목:**
-- `googleCalendarService.js` — Backend API 엔드포인트 연동
+1. 패널 UI와 PIN 인증 흐름은 구현됨
+2. useGoogleCalendarStore는 아직 Mock 기반
+3. 실 API 완전 연동은 후속 작업 항목
 
 ---
 
-## 8. Supabase 초기 설정 가이드
+## 8) 개인화 로직 (Smart/People)
 
-> `TODO.md` 내용 요약
+### 8.1 목적
 
-### 필요 환경 변수 (.env)
+Q&A 응답에서 관심 키워드를 추출하고 최근성 가중치로 누적해 검색/추천 품질을 높인다.
+
+### 8.2 키워드 추출 규칙
+
+1. AI 출력은 JSON 배열만 허용
+2. category는 고정 목록만 허용
+3. keyword는 검색 가능한 명사 형태로 정규화
+4. 무효 category, 빈 keyword는 제거
+
+고정 category:
+
+- food
+- place
+- content
+- shopping
+- lifestyle
+- mood
+- interest
+
+### 8.3 점수 계산
+
+30일 윈도우 가중치:
+
+$$
+score = \sum \frac{30 - elapsed\_days}{30}, \quad elapsed\_days < 30
+$$
+
+처리 흐름:
+
+1. 하루 Q&A 수집
+2. 자정 배치에서 키워드 추출
+3. score_log 적재
+4. 조회 시 합산/정렬
+5. 30일 초과 데이터 정리
+
+---
+
+## 9) 최근 이슈 반영 상태
+
+### 9.1 자동 세션 복원 시 공란 문제
+
+증상:
+
+- dev 실행 후 재로그인 전 위젯 공란
+
+반영 내용:
+
+1. authBootstrapDone 도입
+2. getSession() + onAuthStateChange 병행
+3. 초기화 fallback 경로 보강
+
+결과:
+
+- 자동 복원 경로 안정성 개선
+
+### 9.2 슬라이더 위젯 상세 모달 위치 오프셋
+
+원인:
+
+- transform 컨텍스트 내부 모달 렌더 영향
+
+반영 내용:
+
+1. 상세 모달 portal 렌더 방식 적용
+2. host 기반 표시 범위 정리
+
+결과:
+
+- 패널 이동 후에도 상세 모달 위치 일관성 확보
+
+---
+
+## 10) Supabase 설정 요약
+
+### 10.1 필수 환경 변수
 
 ```env
 VITE_SUPABASE_URL=https://xxxxx.supabase.co
 VITE_SUPABASE_ANON_KEY=eyJhbGci...
 ```
 
-### Supabase Google OAuth 설정 순서
+### 10.2 Google OAuth / Scope
 
-1. Supabase 대시보드 → Authentication → Providers → Google 활성화
-2. Google Cloud Console에서 OAuth 2.0 클라이언트 ID 발급
-   - 리디렉션 URI: `https://xxxxx.supabase.co/auth/v1/callback`
-   - Calendar API + Fitness API 활성화
-3. Additional OAuth Scopes:
-   ```
-   https://www.googleapis.com/auth/calendar.readonly
-   https://www.googleapis.com/auth/fitness.activity.read
-   ```
+1. Supabase Auth의 Google Provider 활성화
+2. OAuth callback URI 등록
+3. 필요한 scope 추가
 
-### DB 스키마 (schema.sql)
+권장 scope:
 
-테이블: `user_settings`, `widget_layouts`, `todos`, `diaries`, `api_cache`
+```text
+https://www.googleapis.com/auth/calendar.readonly
+https://www.googleapis.com/auth/fitness.activity.read
+```
 
-모든 테이블에 Supabase RLS 적용 (사용자별 데이터 격리)
+### 10.3 보안 원칙
+
+1. 서드파티 키는 Secrets Manager에서만 관리
+2. 클라이언트 코드 하드코딩 금지
+3. RLS로 사용자 데이터 분리
+
+---
+
+## 11) 운영 체크리스트
+
+### 11.1 실행 전
+
+1. 환경 변수 확인
+2. Auth/DB/RLS 정책 확인
+3. Edge Functions 배포 상태 확인
+
+### 11.2 런타임 확인
+
+1. 로그인 직후 위젯 즉시 렌더 여부
+2. 수동 새로고침(force=true) 정상 동작 여부
+3. 뉴스/트렌드 상세 모달 위치 정상 여부
+4. 캘린더/패널/PIN 흐름 정상 여부
+
+### 11.3 장애 시 우선 점검
+
+1. handleAuthChange 호출 여부
+2. user.id 세팅 여부
+3. fetchAll 진입 여부
+4. visibleWidgets 계산 결과
+5. edge 응답(ok/error/timeout) 로그
+
+---
+
+## 12) 문서 통합 출처
+
+이번 정리본은 아래 파일의 중복을 제거하고 최신 구현 기준으로 통합했다.
+
+1. DOCS.md(기존)
+2. README.md
+3. logic.txt
+4. logic for Personalization .txt
+5. widget.txt
+
+---
+
+## 13) 문서 관리 규칙
+
+1. 신규 문서는 임시 작성 후 DOCS.md로 병합
+2. 병합 완료 후 임시 문서는 삭제
+3. 동일 주제는 DOCS.md 내부 단일 섹션만 유지
