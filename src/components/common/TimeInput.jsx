@@ -2,41 +2,31 @@ import { useMemo } from "react";
 import { useTheme } from "../../hooks/useTheme";
 import { useSettingsStore } from "../../store/useSettingsStore";
 
-/**
- * TimeInput — styled hour/minute selects with 12hr/24hr toggle.
- *
- * Props:
- *   value     — "HH:MM" string (24-hr internal format) or ""
- *   onChange  — called with "HH:MM" string (24-hr) or ""
- *   required? — marks the selects required
- *   showFormatToggle? — shows 12h/24h toggle button (default: true)
- *   placeholder? — shown when value is empty (default: "--:--")
- */
-
-const MINUTES = Array.from({ length: 12 }, (_, i) =>
-	String(i * 5).padStart(2, "0"),
-);
-
 const to24 = (hour12, minute, period) => {
 	let h = Number(hour12);
 	if (period === "AM") {
 		if (h === 12) h = 0;
-	} else {
-		if (h !== 12) h += 12;
+	} else if (h !== 12) {
+		h += 12;
 	}
 	return `${String(h).padStart(2, "0")}:${minute}`;
 };
 
-const parse24 = (val) => {
-	if (!val || !val.includes(":")) return null;
-	const [hStr, mStr] = val.split(":");
-	return { h: Number(hStr), m: Number(mStr) };
+const parse24 = (value) => {
+	if (!value || !value.includes(":")) return null;
+	const [hours, minutes] = value.split(":");
+	return {
+		hours: Number(hours),
+		minutes: String(minutes || "00").padStart(2, "0"),
+	};
 };
 
-const snapMinute = (m) => {
-	const snapped = Math.round(m / 5) * 5;
-	return String(Math.min(snapped, 55)).padStart(2, "0");
-};
+const buildAllowedTimes = (minTime = "") =>
+	Array.from({ length: 24 * 12 }, (_, index) => {
+		const hours = String(Math.floor(index / 12)).padStart(2, "0");
+		const minutes = String((index % 12) * 5).padStart(2, "0");
+		return `${hours}:${minutes}`;
+	}).filter((time) => !minTime || time >= minTime);
 
 const selectCls =
 	"appearance-none text-center rounded-lg border px-2 py-2 text-sm outline-none transition-all focus:ring-2 cursor-pointer";
@@ -46,87 +36,154 @@ const TimeInput = ({
 	onChange,
 	required = false,
 	showFormatToggle = true,
+	force12Hour = false,
+	minTime = "",
 }) => {
 	const { isDark, inputCls } = useTheme();
-	const is12Hour = useSettingsStore((s) => s.is12Hour);
-	const setIs12Hour = useSettingsStore((s) => s.setIs12Hour);
-
-	const parsed = parse24(value);
+	const is12Hour = useSettingsStore((state) => state.is12Hour);
+	const setIs12Hour = useSettingsStore((state) => state.setIs12Hour);
+	const effectiveIs12Hour = force12Hour || is12Hour;
+	const allowedTimes = useMemo(() => buildAllowedTimes(minTime), [minTime]);
+	const normalizedValue = !value || !minTime || value >= minTime ? value : "";
+	const parsed = parse24(normalizedValue);
 	const hasValue = !!parsed;
 
-	/* Derive display values */
+	const availablePeriods = useMemo(() => {
+		if (!effectiveIs12Hour) return [];
+		const periods = [];
+		if (allowedTimes.some((time) => Number(time.slice(0, 2)) < 12)) {
+			periods.push("AM");
+		}
+		if (allowedTimes.some((time) => Number(time.slice(0, 2)) >= 12)) {
+			periods.push("PM");
+		}
+		return periods;
+	}, [allowedTimes, effectiveIs12Hour]);
+
+	const currentPeriod = useMemo(() => {
+		if (!effectiveIs12Hour) return "";
+		if (parsed) return parsed.hours < 12 ? "AM" : "PM";
+		return availablePeriods[0] || "AM";
+	}, [availablePeriods, effectiveIs12Hour, parsed]);
+
 	const displayHour = useMemo(() => {
 		if (!parsed) return "";
-		if (!is12Hour) return String(parsed.h).padStart(2, "0");
-		const h12 = parsed.h % 12 || 12;
-		return String(h12);
-	}, [parsed, is12Hour]);
+		if (!effectiveIs12Hour) return String(parsed.hours).padStart(2, "0");
+		return String(parsed.hours % 12 || 12);
+	}, [effectiveIs12Hour, parsed]);
 
-	const displayMinute = useMemo(() => {
-		if (!parsed) return "";
-		return snapMinute(parsed.m);
-	}, [parsed]);
+	const displayMinute = parsed?.minutes || "";
 
-	const displayPeriod = useMemo(() => {
-		if (!parsed) return "AM";
-		return parsed.h < 12 ? "AM" : "PM";
-	}, [parsed]);
-
-	/* Build hour options */
 	const hourOptions = useMemo(() => {
-		if (is12Hour) {
-			return [12, ...Array.from({ length: 11 }, (_, i) => i + 1)].map((h) =>
-				String(h),
-			);
-		}
-		return Array.from({ length: 24 }, (_, i) => String(i).padStart(2, "0"));
-	}, [is12Hour]);
+		const unique = [];
+		allowedTimes.forEach((time) => {
+			const hours24 = Number(time.slice(0, 2));
+			if (effectiveIs12Hour) {
+				const period = hours24 < 12 ? "AM" : "PM";
+				if (period !== currentPeriod) return;
+				const hour12 = String(hours24 % 12 || 12);
+				if (!unique.includes(hour12)) unique.push(hour12);
+				return;
+			}
 
-	const handleHourChange = (e) => {
-		const newHour = e.target.value;
-		const minute = displayMinute || "00";
-		if (is12Hour) {
-			onChange(to24(newHour, minute, displayPeriod));
-		} else {
-			onChange(`${newHour}:${minute}`);
-		}
-	};
+			const hour24 = String(hours24).padStart(2, "0");
+			if (!unique.includes(hour24)) unique.push(hour24);
+		});
+		return unique;
+	}, [allowedTimes, currentPeriod, effectiveIs12Hour]);
 
-	const handleMinuteChange = (e) => {
-		const newMin = e.target.value;
-		if (!hasValue) {
-			const fallbackHour = is12Hour ? "12" : "00";
-			onChange(
-				is12Hour
-					? to24(fallbackHour, newMin, "AM")
-					: `${fallbackHour}:${newMin}`,
-			);
+	const activeHour = displayHour || hourOptions[0] || "";
+
+	const minuteOptions = useMemo(() => {
+		const unique = [];
+		allowedTimes.forEach((time) => {
+			const hours24 = Number(time.slice(0, 2));
+			const minute = time.slice(3, 5);
+			if (effectiveIs12Hour) {
+				const period = hours24 < 12 ? "AM" : "PM";
+				const hour12 = String(hours24 % 12 || 12);
+				if (period !== currentPeriod || hour12 !== activeHour) return;
+			} else if (String(hours24).padStart(2, "0") !== activeHour) {
+				return;
+			}
+			if (!unique.includes(minute)) unique.push(minute);
+		});
+		return unique;
+	}, [activeHour, allowedTimes, currentPeriod, effectiveIs12Hour]);
+
+	const commitTime = (nextHour, nextMinute, nextPeriod = currentPeriod) => {
+		if (!nextHour) return;
+		const minute = nextMinute || minuteOptions[0] || "00";
+		if (effectiveIs12Hour) {
+			onChange(to24(nextHour, minute, nextPeriod || "AM"));
 			return;
 		}
-		if (is12Hour) {
-			onChange(to24(displayHour || "12", newMin, displayPeriod));
-		} else {
-			onChange(`${displayHour || "00"}:${newMin}`);
-		}
+		onChange(`${nextHour}:${minute}`);
 	};
 
-	const handlePeriodChange = (e) => {
-		const newPeriod = e.target.value;
-		const h = displayHour || "12";
-		const m = displayMinute || "00";
-		onChange(to24(h, m, newPeriod));
+	const handleHourChange = (event) => {
+		const nextHour = event.target.value;
+		const validMinutes = allowedTimes
+			.filter((time) => {
+				const hours24 = Number(time.slice(0, 2));
+				if (effectiveIs12Hour) {
+					const period = hours24 < 12 ? "AM" : "PM";
+					const hour12 = String(hours24 % 12 || 12);
+					return period === currentPeriod && hour12 === nextHour;
+				}
+				return time.slice(0, 2) === nextHour;
+			})
+			.map((time) => time.slice(3, 5));
+		const nextMinute = validMinutes.includes(displayMinute)
+			? displayMinute
+			: validMinutes[0];
+		commitTime(nextHour, nextMinute, currentPeriod);
+	};
+
+	const handleMinuteChange = (event) => {
+		const nextMinute = event.target.value;
+		const nextHour = displayHour || hourOptions[0];
+		commitTime(nextHour, nextMinute, currentPeriod);
+	};
+
+	const handlePeriodChange = (event) => {
+		const nextPeriod = event.target.value;
+		const nextHourOptions = [];
+		allowedTimes.forEach((time) => {
+			const hours24 = Number(time.slice(0, 2));
+			const period = hours24 < 12 ? "AM" : "PM";
+			const hour12 = String(hours24 % 12 || 12);
+			if (period === nextPeriod && !nextHourOptions.includes(hour12)) {
+				nextHourOptions.push(hour12);
+			}
+		});
+		const nextHour = nextHourOptions.includes(displayHour)
+			? displayHour
+			: nextHourOptions[0];
+		const nextMinuteOptions = allowedTimes
+			.filter((time) => {
+				const hours24 = Number(time.slice(0, 2));
+				const period = hours24 < 12 ? "AM" : "PM";
+				const hour12 = String(hours24 % 12 || 12);
+				return period === nextPeriod && hour12 === nextHour;
+			})
+			.map((time) => time.slice(3, 5));
+		const nextMinute = nextMinuteOptions.includes(displayMinute)
+			? displayMinute
+			: nextMinuteOptions[0];
+		commitTime(nextHour, nextMinute, nextPeriod);
 	};
 
 	const toggleFormat = () => {
 		setIs12Hour(!is12Hour);
-		/* Keep the current time value — it's always stored as 24hr internally */
 	};
 
-	const selectClassName = `${selectCls} ${inputCls} ${isDark ? "focus:ring-blue-500/30" : "focus:ring-blue-400/30"}`;
+	const selectClassName = `${selectCls} ${inputCls} ${
+		isDark ? "focus:ring-blue-500/30" : "focus:ring-blue-400/30"
+	}`;
 
 	return (
 		<div className="flex items-center gap-1.5">
-			{/* Hour */}
 			<select
 				value={displayHour}
 				onChange={handleHourChange}
@@ -135,19 +192,18 @@ const TimeInput = ({
 			>
 				{!hasValue && (
 					<option value="" disabled>
-						{is12Hour ? "hh" : "HH"}
+						{effectiveIs12Hour ? "hh" : "HH"}
 					</option>
 				)}
-				{hourOptions.map((h) => (
-					<option key={h} value={h}>
-						{h}
+				{hourOptions.map((hour) => (
+					<option key={hour} value={hour}>
+						{hour}
 					</option>
 				))}
 			</select>
 
 			<span className="font-bold text-sm opacity-60">:</span>
 
-			{/* Minute */}
 			<select
 				value={displayMinute}
 				onChange={handleMinuteChange}
@@ -159,31 +215,32 @@ const TimeInput = ({
 						mm
 					</option>
 				)}
-				{MINUTES.map((m) => (
-					<option key={m} value={m}>
-						{m}
+				{minuteOptions.map((minute) => (
+					<option key={minute} value={minute}>
+						{minute}
 					</option>
 				))}
 			</select>
 
-			{/* AM/PM */}
-			{is12Hour && (
+			{effectiveIs12Hour && (
 				<select
-					value={displayPeriod}
+					value={currentPeriod}
 					onChange={handlePeriodChange}
 					className={`${selectClassName} w-16`}
 				>
-					<option value="AM">AM</option>
-					<option value="PM">PM</option>
+					{availablePeriods.map((period) => (
+						<option key={period} value={period}>
+							{period}
+						</option>
+					))}
 				</select>
 			)}
 
-			{/* Format toggle */}
-			{showFormatToggle && (
+			{showFormatToggle && !force12Hour && (
 				<button
 					type="button"
 					onClick={toggleFormat}
-					title={`${is12Hour ? "24시간" : "12시간"} 형식으로 전환`}
+					title={`${is12Hour ? "24-hour" : "12-hour"} format`}
 					className={`text-[10px] font-medium px-2 py-1.5 rounded-lg border transition-colors whitespace-nowrap ${
 						isDark
 							? "border-morning-dark-hover text-morning-dark-muted hover:bg-morning-dark-hover"

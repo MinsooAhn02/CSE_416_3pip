@@ -2,6 +2,8 @@ import { create } from "zustand";
 import { load, save } from "../utils/storage";
 import { supabase } from "../lib/supabase";
 
+const PROVIDER_TOKEN_KEY = "mb_google_provider_token";
+
 export const useAuthStore = create((set, get) => ({
 	isLoggedIn: load("mb_login", false),
 	onboarded: load("mb_onboarded", false),
@@ -10,35 +12,54 @@ export const useAuthStore = create((set, get) => ({
 	selCats: load("mb_cats", []),
 	perms: load("mb_perms", { fit: false, cal: false }),
 	persona: load("mb_persona", null),
-	user: null, // { id, email, displayName, avatarUrl }
-	providerToken: null, // Google access token for Calendar/Fit
+	user: null,
+	providerToken: load(PROVIDER_TOKEN_KEY, null),
 
-	/* ── Supabase Auth ── */
 	login: async () => {
-		if (supabase) {
-			const { error } = await supabase.auth.signInWithOAuth({
-				provider: "google",
-				options: {
-					scopes: [
-						"https://www.googleapis.com/auth/calendar.readonly",
-						"https://www.googleapis.com/auth/fitness.activity.read",
-						"https://www.googleapis.com/auth/fitness.sleep.read",
-						"https://www.googleapis.com/auth/fitness.heart_rate.read",
-					].join(" "),
-					redirectTo: window.location.origin,
-				},
-			});
-			if (error) console.error("Supabase login error:", error.message);
-			// 실제 상태 세팅은 onAuthStateChange 리스너에서 처리
-		} else {
-			// Supabase 미설정 시 기존 로컬 데모 모드
+		if (!supabase) {
 			set({ isLoggedIn: true });
 			save("mb_login", true);
+			return true;
 		}
+
+		const { error } = await supabase.auth.signInWithOAuth({
+			provider: "google",
+			options: {
+				scopes: [
+					"https://www.googleapis.com/auth/calendar",
+					"https://www.googleapis.com/auth/tasks",
+					"https://www.googleapis.com/auth/fitness.activity.read",
+					"https://www.googleapis.com/auth/fitness.sleep.read",
+					"https://www.googleapis.com/auth/fitness.heart_rate.read",
+				].join(" "),
+				queryParams: {
+					access_type: "offline",
+					prompt: "consent",
+					include_granted_scopes: "true",
+				},
+				redirectTo: window.location.origin,
+			},
+		});
+
+		if (error) {
+			console.error("Supabase login error:", error.message);
+			return false;
+		}
+
+		return true;
+	},
+
+	reconnectGoogle: async () => {
+		set({ providerToken: null });
+		save(PROVIDER_TOKEN_KEY, null);
+		const didStart = await get().login();
+		if (didStart === false) {
+			throw new Error("Failed to reconnect Google");
+		}
+		return didStart;
 	},
 
 	logout: async () => {
-		// Clear state immediately for responsive UI
 		set({
 			isLoggedIn: false,
 			user: null,
@@ -47,8 +68,8 @@ export const useAuthStore = create((set, get) => ({
 		});
 		save("mb_login", false);
 		save("mb_onboarded", false);
+		save(PROVIDER_TOKEN_KEY, null);
 
-		// Then sign out from Supabase
 		if (supabase) {
 			try {
 				const { error } = await supabase.auth.signOut();
@@ -61,10 +82,11 @@ export const useAuthStore = create((set, get) => ({
 		}
 	},
 
-	/* Supabase Auth 상태 변경 시 호출 */
 	handleAuthChange: async (session) => {
 		if (session) {
 			const u = session.user;
+			const nextProviderToken =
+				session.provider_token || get().providerToken || load(PROVIDER_TOKEN_KEY, null);
 			const user = {
 				id: u.id,
 				email: u.email,
@@ -74,22 +96,29 @@ export const useAuthStore = create((set, get) => ({
 			set({
 				isLoggedIn: true,
 				user,
-				providerToken: session.provider_token || get().providerToken,
+				providerToken: nextProviderToken,
 			});
 			save("mb_login", true);
-
-			// DB에서 사용자 설정 불러오기
+			save(PROVIDER_TOKEN_KEY, nextProviderToken);
 			await get().loadUserSettings();
-		} else {
-			set({ isLoggedIn: false, user: null, providerToken: null });
-			save("mb_login", false);
+			return;
 		}
+
+		set({ isLoggedIn: false, user: null, providerToken: null });
+		save("mb_login", false);
+		save(PROVIDER_TOKEN_KEY, null);
 	},
 
-	/* provider token 보장 헬퍼 (calendar/fitness 라우팅용) */
 	ensureProviderToken: async () => {
 		const existing = get().providerToken;
 		if (existing) return existing;
+
+		const stored = load(PROVIDER_TOKEN_KEY, null);
+		if (stored) {
+			set({ providerToken: stored });
+			return stored;
+		}
+
 		if (!supabase) return null;
 
 		try {
@@ -97,16 +126,29 @@ export const useAuthStore = create((set, get) => ({
 				data: { session },
 			} = await supabase.auth.getSession();
 			const token = session?.provider_token ?? null;
-			if (token) set({ providerToken: token });
-			return token;
+			if (token) {
+				set({ providerToken: token });
+				save(PROVIDER_TOKEN_KEY, token);
+				return token;
+			}
+
+			const {
+				data: { session: refreshedSession },
+			} = await supabase.auth.refreshSession();
+			const refreshedToken = refreshedSession?.provider_token ?? null;
+			if (refreshedToken) {
+				set({ providerToken: refreshedToken });
+				save(PROVIDER_TOKEN_KEY, refreshedToken);
+			}
+			return refreshedToken;
 		} catch {
 			return null;
 		}
 	},
 
-	/* DB에서 사용자 설정 로드 */
 	loadUserSettings: async () => {
 		if (!supabase) return;
+
 		const {
 			data: { user },
 		} = await supabase.auth.getUser();
@@ -126,14 +168,13 @@ export const useAuthStore = create((set, get) => ({
 			});
 			save("mb_onboarded", true);
 			save("mb_persona", data.persona);
-		} else {
-			// 신규 유저: 온보딩 모달 표시
-			set({ onboarded: false, showOnboarding: true, obStep: 0 });
-			save("mb_onboarded", false);
+			return;
 		}
+
+		set({ onboarded: false, showOnboarding: true, obStep: 0 });
+		save("mb_onboarded", false);
 	},
 
-	/* ── Onboarding (기존 유지) ── */
 	setShowOnboarding: (v) => set({ showOnboarding: v }),
 	setObStep: (v) => set({ obStep: v }),
 	setPersona: (p) => {
@@ -159,7 +200,6 @@ export const useAuthStore = create((set, get) => ({
 		save("mb_perms", perms);
 		save("mb_persona", persona);
 
-		// Supabase DB에 저장
 		if (supabase) {
 			const {
 				data: { user },

@@ -1,221 +1,157 @@
 import { create } from "zustand";
 import { load, save } from "../utils/storage";
-import { supabase } from "../lib/supabase";
-import { mockTodos } from "../mock/data";
+import { formatLocalDate } from "../utils/date";
+import { materializeTasksForDate } from "../utils/taskRecurrence";
+import {
+	ALL_TASK_LIST_FILTER_ID,
+	filterTasksByTaskList,
+	useGoogleCalendarStore,
+} from "./useGoogleCalendarStore";
 
-const TODAY_KEY = "mb_todo_last_reset";
+const TODAY_KEY = "mb_task_last_reset";
+const TODO_CACHE_KEY = "mb_todos";
 
-const todayStamp = () => new Date().toISOString().slice(0, 10);
+const todayStamp = () => formatLocalDate();
 
-const normalizeTodo = (row) => ({
-	id: row.id,
-	text: row.text,
-	completed: row.completed ?? row.done ?? false,
-	isFixed: row.is_fixed ?? row.is_recurring ?? false,
+const normalizeTaskAsTodo = (task) => ({
+	id: task.id,
+	text: task.title || task.text || "",
+	title: task.title || task.text || "",
+	completed: !!task.completed,
+	date: task.occurrenceDate || task.date || "",
+	startTime: task.startTime || "",
+	endTime: task.endTime || "",
+	description: task.description || "",
+	taskListId: task.taskListId || "@default",
+	repeat: task.repeat || null,
 });
 
-const applyLocalDailyReset = (todos) =>
-	todos.filter((t) => t.isFixed).map((t) => ({ ...t, completed: false }));
+const getCurrentTodos = () =>
+	materializeTasksForDate(
+		filterTasksByTaskList(
+			useGoogleCalendarStore.getState().tasks || [],
+			useGoogleCalendarStore.getState().selectedTaskListFilter,
+		),
+		todayStamp(),
+	).map(normalizeTaskAsTodo);
+
+const syncTodosFromCalendarStore = (tasks = useGoogleCalendarStore.getState().tasks) => {
+	const filteredTasks = filterTasksByTaskList(
+		tasks || [],
+		useGoogleCalendarStore.getState().selectedTaskListFilter,
+	);
+	const todos = materializeTasksForDate(filteredTasks, todayStamp()).map(normalizeTaskAsTodo);
+	save(TODO_CACHE_KEY, todos);
+	useTodoStore.setState({ todos });
+	return todos;
+};
 
 export const useTodoStore = create((set, get) => ({
-	todos: load("mb_todos", mockTodos).map((t) => ({
-		id: t.id,
-		text: t.text,
-		completed: !!t.completed,
-		isFixed: !!t.isFixed,
-	})),
+	todos: getCurrentTodos().length > 0 ? getCurrentTodos() : load(TODO_CACHE_KEY, []),
 	newTodoText: "",
-	newRoutineText: "",
 	showAddTodo: false,
 
 	ensureDailyReset: async () => {
-		const lastReset = load(TODAY_KEY, "");
-		const today = todayStamp();
-		if (lastReset === today) return;
-
-		if (!supabase) {
-			const next = applyLocalDailyReset(get().todos);
-			set({ todos: next });
-			save("mb_todos", next);
-			save(TODAY_KEY, today);
-			return;
-		}
-
 		try {
-			const {
-				data: { user },
-			} = await supabase.auth.getUser();
-			if (!user) return;
+			const lastReset = load(TODAY_KEY, "");
+			const today = todayStamp();
+			if (lastReset === today) return;
 
-			// 일반 TODO는 하루 시작 시 초기화(삭제)합니다.
-			await supabase
-				.from("todos")
-				.delete()
-				.eq("user_id", user.id)
-				.or("is_fixed.is.null,is_fixed.eq.false");
-
-			// 고정 TODO는 다시 나타나도록 완료 상태만 리셋합니다.
-			await supabase
-				.from("todos")
-				.update({ completed: false, done: false })
-				.eq("user_id", user.id)
-				.eq("is_fixed", true);
+			if (useGoogleCalendarStore.getState().tasks.length === 0) {
+				await useGoogleCalendarStore.getState().fetchTasks({ skipLoading: true });
+			}
 
 			save(TODAY_KEY, today);
-		} catch (e) {
-			console.warn("Daily todo reset failed:", e.message);
+			syncTodosFromCalendarStore();
+		} catch (error) {
+			console.warn("Daily task sync failed:", error?.message || error);
 		}
 	},
 
-	/* DB에서 Todo 불러오기 */
 	hydrateFromDB: async () => {
-		await get().ensureDailyReset();
-		if (!supabase) return;
-		const {
-			data: { user },
-		} = await supabase.auth.getUser();
-		if (!user) return;
-		const { data } = await supabase
-			.from("todos")
-			.select("*")
-			.eq("user_id", user.id)
-			.order("created_at", { ascending: true });
-		const todos = (data || []).map(normalizeTodo);
-		set({ todos });
-		save("mb_todos", todos);
+		try {
+			await useGoogleCalendarStore.getState().fetchTasks({ skipLoading: true });
+			syncTodosFromCalendarStore();
+			await get().ensureDailyReset();
+			return get().todos;
+		} catch (error) {
+			console.warn("Task hydrate failed:", error?.message || error);
+			return get().todos;
+		}
 	},
 
-	toggleTodo: (id) =>
-		set((s) => {
-			const todos = s.todos.map((t) =>
-				t.id === id ? { ...t, completed: !t.completed } : t,
-			);
-			save("mb_todos", todos);
-			const toggled = todos.find((t) => t.id === id);
-			if (supabase && toggled) {
-				supabase
-					.from("todos")
-					.update({ completed: toggled.completed, done: toggled.completed })
-					.eq("id", id)
-					.then();
-			}
-			return { todos };
-		}),
+	toggleTodo: async (id) => {
+		const currentTodo = get().todos.find((todo) => todo.id === id);
+		if (!currentTodo) return;
+
+		await useGoogleCalendarStore.getState().updateTask(id, {
+			completed: !currentTodo.completed,
+			occurrenceDate: currentTodo.date || todayStamp(),
+		});
+		syncTodosFromCalendarStore();
+	},
 
 	addTodo: async (opts = {}) => {
 		const safeOpts =
 			opts && typeof opts === "object" && !("nativeEvent" in opts) ? opts : {};
 		const { newTodoText } = get();
-		const txt = (safeOpts.text ?? newTodoText).trim();
-		if (!txt) return;
-		const isFixed = !!safeOpts.isFixed;
+		const text = (safeOpts.text ?? newTodoText).trim();
+		if (!text) return;
 
-		const tempId = Date.now();
+		const date = safeOpts.date || todayStamp();
 
-		// Optimistic update: 로컬 상태를 먼저 반영
-		set((s) => {
-			const todos = [
-				...s.todos,
-				{ id: tempId, text: txt, completed: false, isFixed },
-			];
-			save("mb_todos", todos);
-			return {
-				todos,
-				newTodoText: safeOpts.text ? s.newTodoText : "",
-				newRoutineText: safeOpts.isFixed ? "" : s.newRoutineText,
-				showAddTodo: safeOpts.text ? s.showAddTodo : false,
-			};
+		await useGoogleCalendarStore.getState().addTask({
+			title: text,
+			description: safeOpts.description || "",
+			date,
+			startTime: safeOpts.startTime || "",
+			endTime: safeOpts.endTime || "",
+			completed: false,
+			taskListId:
+				useGoogleCalendarStore.getState().selectedTaskListFilter !== ALL_TASK_LIST_FILTER_ID
+					? useGoogleCalendarStore.getState().selectedTaskListFilter
+					: undefined,
 		});
 
-		// Supabase DB 동기화 (백그라운드)
-		if (supabase) {
-			try {
-				const {
-					data: { user },
-				} = await supabase.auth.getUser();
-				if (user) {
-					const { data, error } = await supabase
-						.from("todos")
-						.insert({
-							user_id: user.id,
-							text: txt,
-							completed: false,
-							done: false,
-							is_fixed: isFixed,
-						})
-						.select("id")
-						.single();
-					if (!error && data) {
-						// 임시 ID를 실제 UUID로 교체
-						set((s) => {
-							const todos = s.todos.map((t) =>
-								t.id === tempId ? { ...t, id: data.id } : t,
-							);
-							save("mb_todos", todos);
-							return { todos };
-						});
-					} else if (error) {
-						console.warn("Todo insert failed:", error.message);
-					}
-				}
-			} catch (e) {
-				console.warn("Todo insert failed:", e?.message || e);
-			}
-		}
+		syncTodosFromCalendarStore();
+		set((state) => ({
+			newTodoText: safeOpts.text ? state.newTodoText : "",
+			showAddTodo: safeOpts.text ? state.showAddTodo : false,
+		}));
 	},
 
-	addRecurringTodo: async () => {
-		const { newRoutineText, addTodo } = get();
-		await addTodo({ text: newRoutineText, isFixed: true });
+	deleteTodo: async (id) => {
+		await useGoogleCalendarStore.getState().deleteTask(id);
+		syncTodosFromCalendarStore();
 	},
 
-	deleteTodo: (id) =>
-		set((s) => {
-			const todos = s.todos.filter((t) => t.id !== id);
-			save("mb_todos", todos);
-			if (supabase) {
-				supabase.from("todos").delete().eq("id", id).then();
-			}
-			return { todos };
-		}),
+	setNewTodoText: (value) => set({ newTodoText: value }),
+	setShowAddTodo: (value) => set({ showAddTodo: value }),
 
-	archiveCompletedNonFixed: async () => {
-		if (!supabase) return;
-		try {
-			const {
-				data: { user },
-			} = await supabase.auth.getUser();
-			if (!user) return;
-			await supabase
-				.from("todos")
-				.delete()
-				.eq("user_id", user.id)
-				.eq("completed", true)
-				.or("is_fixed.is.null,is_fixed.eq.false");
-		} catch (e) {
-			console.warn("Archive completed todos failed:", e.message);
-		}
-	},
-
-	setNewTodoText: (v) => set({ newTodoText: v }),
-	setNewRoutineText: (v) => set({ newRoutineText: v }),
-	setShowAddTodo: (v) => set({ showAddTodo: v }),
-
-	/**
-	 * AI 추천 Todo 일괄 추가
-	 * @param {Array} aiTodos - [{ text: string }] 형식
-	 * TODO: 추후 실시간 업데이트 예정 - 일정 변경 시 자동 재생성
-	 */
 	addAiTodos: async (aiTodos = []) => {
 		if (!aiTodos.length) return;
-		const { todos } = get();
-		const existingTexts = new Set(todos.map((t) => t.text.toLowerCase()));
+
+		const existingTexts = new Set(
+			(get().todos || []).map((todo) => todo.text.toLowerCase()),
+		);
 
 		for (const item of aiTodos) {
-			const txt = (item.text || item).trim();
-			if (!txt || existingTexts.has(txt.toLowerCase())) continue;
-			await get().addTodo({ text: txt, isFixed: false });
-			existingTexts.add(txt.toLowerCase());
+			const text = String(item?.text || item || "").trim();
+			if (!text || existingTexts.has(text.toLowerCase())) continue;
+			await get().addTodo({
+				text,
+				date: item?.date || todayStamp(),
+			});
+			existingTexts.add(text.toLowerCase());
 		}
 	},
 }));
+
+useGoogleCalendarStore.subscribe((state, previousState) => {
+	if (
+		state.tasks !== previousState.tasks ||
+		state.selectedTaskListFilter !== previousState.selectedTaskListFilter
+	) {
+		syncTodosFromCalendarStore(state.tasks);
+	}
+});

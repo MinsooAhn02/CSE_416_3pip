@@ -1,8 +1,9 @@
 import { useState, useEffect, useMemo } from "react";
-import { X, Search, Lock, BookOpen, ChevronRight, ChevronLeft, Edit2, Save } from "lucide-react";
+import { X, Search, Lock, BookOpen, ChevronRight, ChevronLeft, Edit2, RotateCcw, Save } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useTheme } from "../../hooks/useTheme";
 import { useDiaryStore } from "../../store/useDiaryStore";
+import { useSettingsStore } from "../../store/useSettingsStore";
 import PINModal from "./PINModal";
 
 /**
@@ -16,7 +17,20 @@ import PINModal from "./PINModal";
  */
 const DiaryListModal = ({ onClose }) => {
 	const { isDark, cardCls, inputCls, hoverCls, secondaryBgCls, borderCls } = useTheme();
-	const { entries, getDiaryDates, isPinAuthenticatedSession, saveDiary, saveMemo } = useDiaryStore();
+	const {
+		entries,
+		getDiaryDates,
+		pinSet,
+		isPinAuthenticated,
+		pinAuthExpiresAt,
+		refreshPinAuthState,
+		clearPinSession,
+		saveDiary,
+		saveMemo,
+		revertDiaryToGenerated,
+	} = useDiaryStore();
+	const pinLockMode = useSettingsStore((state) => state.pinLockMode);
+	const pinRequired = pinSet && pinLockMode !== "off";
 
 	const [showPinModal, setShowPinModal] = useState(false);
 	const [searchQuery, setSearchQuery] = useState("");
@@ -31,14 +45,60 @@ const DiaryListModal = ({ onClose }) => {
 	const [isSaving, setIsSaving] = useState(false);
 
 	/* Check if PIN is authenticated */
-	const isAuthenticated = isPinAuthenticatedSession?.();
+	const isAuthenticated = !pinRequired || isPinAuthenticated;
+
+	useEffect(() => {
+		refreshPinAuthState?.();
+	}, [pinLockMode, refreshPinAuthState]);
 
 	/* Show PIN modal if not authenticated */
 	useEffect(() => {
+		if (!pinRequired) {
+			setShowPinModal(false);
+			return;
+		}
+
 		if (!isAuthenticated && !showPinModal) {
 			setShowPinModal(true);
 		}
-	}, [isAuthenticated, showPinModal]);
+	}, [pinRequired, isAuthenticated, showPinModal]);
+
+	useEffect(() => {
+		if (
+			!pinRequired ||
+			pinLockMode === "immediate" ||
+			!isAuthenticated ||
+			!pinAuthExpiresAt
+		) {
+			return undefined;
+		}
+
+		const remainingMs = pinAuthExpiresAt - Date.now();
+		if (remainingMs <= 0) {
+			refreshPinAuthState?.();
+			return undefined;
+		}
+
+		const timerId = window.setTimeout(() => {
+			refreshPinAuthState?.();
+		}, remainingMs + 50);
+
+		return () => window.clearTimeout(timerId);
+	}, [
+		pinRequired,
+		pinLockMode,
+		isAuthenticated,
+		pinAuthExpiresAt,
+		refreshPinAuthState,
+	]);
+
+	useEffect(() => {
+		return () => {
+			if (pinRequired && pinLockMode === "immediate" && isAuthenticated) {
+				clearPinSession();
+			}
+		};
+	}, [pinRequired, pinLockMode, isAuthenticated, clearPinSession]);
 
 	/* Get all diary dates */
 	const diaryDates = useMemo(() => {
@@ -52,7 +112,7 @@ const DiaryListModal = ({ onClose }) => {
 		let filtered = diaryDates.filter((dateStr) => {
 			const entry = entries[dateStr];
 			const diary = entry?.diary || "";
-			const memo = entry?.memo || "";
+			const memo = entry?.notes || entry?.memo || "";
 			return (
 				dateStr.includes(query) ||
 				diary.toLowerCase().includes(query) ||
@@ -88,7 +148,7 @@ const DiaryListModal = ({ onClose }) => {
 		setDetailDateStr(dateStr);
 		const entry = entries[dateStr];
 		setEditDiary(entry?.diary || "");
-		setEditMemo(entry?.memo || "");
+		setEditMemo(entry?.notes || entry?.memo || "");
 		setIsEditMode(false);
 	};
 
@@ -107,7 +167,7 @@ const DiaryListModal = ({ onClose }) => {
 			if (editDiary !== (entries[detailDateStr]?.diary || "")) {
 				await saveDiary(detailDateStr, editDiary);
 			}
-			if (editMemo !== (entries[detailDateStr]?.memo || "")) {
+			if (editMemo !== (entries[detailDateStr]?.notes || entries[detailDateStr]?.memo || "")) {
 				await saveMemo(detailDateStr, editMemo);
 			}
 			setIsEditMode(false);
@@ -116,6 +176,31 @@ const DiaryListModal = ({ onClose }) => {
 		}
 		setIsSaving(false);
 	};
+
+	const handleRevertDiary = async () => {
+		if (!detailDateStr) return;
+		setIsSaving(true);
+		try {
+			await revertDiaryToGenerated(detailDateStr);
+			const entry = entries[detailDateStr];
+			setEditDiary(entry?.aiGeneratedDiary || entry?.diary || "");
+			setIsEditMode(false);
+		} catch (err) {
+			console.error("Failed to revert diary:", err);
+		}
+		setIsSaving(false);
+	};
+
+	if (pinRequired && !isAuthenticated) {
+		if (!showPinModal) return null;
+		return (
+			<PINModal
+				mode={pinSet ? "verify" : "setup"}
+				onSuccess={() => setShowPinModal(false)}
+				onCancel={onClose}
+			/>
+		);
+	}
 
 	return (
 		<div
@@ -161,30 +246,6 @@ const DiaryListModal = ({ onClose }) => {
 								<X size={18} />
 							</button>
 						</div>
-
-						{/* PIN Modal */}
-						{showPinModal && !isAuthenticated && (
-							<PINModal
-								onSuccess={() => setShowPinModal(false)}
-								onCancel={onClose}
-							/>
-						)}
-
-						{/* Locked State */}
-						{!isAuthenticated && !showPinModal && (
-							<div className="flex flex-col items-center justify-center py-16 opacity-50">
-								<Lock size={40} className="mb-3" />
-								<p className="text-sm text-center">Diary list is protected</p>
-								<button
-									onClick={() => setShowPinModal(true)}
-									className={`mt-4 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-										isDark ? "bg-blue-600 hover:bg-blue-700 text-white" : "bg-blue-500 hover:bg-blue-600 text-white"
-									}`}
-								>
-									Unlock
-								</button>
-							</div>
-						)}
 
 						{/* Unlocked Content */}
 						{isAuthenticated && (
@@ -234,7 +295,7 @@ const DiaryListModal = ({ onClose }) => {
 										<div className="divide-y divide-current divide-opacity-10">
 											{filteredAndSorted.map((dateStr) => {
 												const entry = entries[dateStr];
-												const preview = formatPreview(entry?.diary || entry?.memo || "");
+												const preview = formatPreview(entry?.diary || entry?.notes || entry?.memo || "");
 
 												return (
 													<button
@@ -322,7 +383,7 @@ const DiaryListModal = ({ onClose }) => {
 												setIsEditMode(false);
 												const entry = entries[detailDateStr];
 												setEditDiary(entry?.diary || "");
-												setEditMemo(entry?.memo || "");
+												setEditMemo(entry?.notes || entry?.memo || "");
 											}}
 											className={`p-1 rounded-full transition-colors ${
 												hoverCls
@@ -334,6 +395,21 @@ const DiaryListModal = ({ onClose }) => {
 									</>
 								) : (
 									<>
+										{!!(
+											entries[detailDateStr]?.editedDiary?.trim() &&
+											entries[detailDateStr]?.aiGeneratedDiary?.trim()
+										) && (
+											<button
+												onClick={handleRevertDiary}
+												disabled={isSaving}
+												className={`p-1 rounded-full transition-colors ${
+													isDark ? "hover:bg-amber-500/20" : "hover:bg-amber-100"
+												} ${isSaving ? "opacity-50 cursor-not-allowed" : ""}`}
+												title="Revert to original AI diary"
+											>
+												<RotateCcw size={18} className="text-amber-500" />
+											</button>
+										)}
 										<button
 											onClick={() => setIsEditMode(true)}
 											className={`p-1 rounded-full transition-colors ${
@@ -373,12 +449,12 @@ const DiaryListModal = ({ onClose }) => {
 									</div>
 									<div className="space-y-2">
 										<label className={`text-xs font-semibold ${isDark ? "text-green-400" : "text-green-600"}`}>
-											Notes
+											Memo
 										</label>
 										<textarea
 											value={editMemo}
 											onChange={(e) => setEditMemo(e.target.value)}
-											placeholder="Add notes or reflections..."
+											placeholder="Add memo or reflections..."
 											className={`w-full h-24 px-3 py-2 rounded-lg text-sm outline-none border transition-all focus:ring-2 focus:ring-green-500/30 resize-none ${inputCls}`}
 										/>
 									</div>
@@ -399,7 +475,7 @@ const DiaryListModal = ({ onClose }) => {
 									{editMemo && (
 										<div className="space-y-2">
 											<div className={`text-xs font-semibold ${isDark ? "text-green-300" : "text-green-600"}`}>
-												Notes
+												Memo
 											</div>
 											<p className={`text-sm leading-relaxed whitespace-pre-wrap ${isDark ? "text-gray-300" : "text-gray-700"}`}>
 												{editMemo}

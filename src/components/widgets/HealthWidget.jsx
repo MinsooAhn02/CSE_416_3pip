@@ -1,17 +1,53 @@
-import { Activity } from "lucide-react";
+import { Activity, RefreshCw, RefreshCcw } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useTheme } from "../../hooks/useTheme";
 import { useDataStore } from "../../store/useDataStore";
+import { useAuthStore } from "../../store/useAuthStore";
 import WidgetCard from "../common/WidgetCard";
 
 const HealthWidget = () => {
 	const { isDark, muted, secondaryBgCls } = useTheme();
 	const { t } = useTranslation();
 	const healthData = useDataStore((s) => s.healthData);
+	const loading = useDataStore((s) => s.loading.health);
+	const error = useDataStore((s) => s.errors.health);
+	const apiStatus = useDataStore((s) => s.apiStatus.health ?? null);
+	const fetchHealth = useDataStore((s) => s.fetchHealth);
+	const getLastUpdatedMinutes = useDataStore((s) => s.getLastUpdatedMinutes);
+	const reconnectGoogle = useAuthStore((s) => s.reconnectGoogle);
+
+	const showReconnectGoogle =
+		error === "Google Health connection expired. Reconnect Google to sync Health again.";
+
+	const formatLastUpdated = (minutes) => {
+		if (minutes == null) return t("common.before_refresh");
+		if (minutes <= 0) return t("common.just_now");
+		return t("common.minutes_ago", { count: minutes });
+	};
+
+	const handleReconnectGoogle = async () => {
+		try {
+			await reconnectGoogle();
+		} catch (err) {
+			console.error("Failed to reconnect Google for health:", err);
+		}
+	};
 
 	return (
-		<WidgetCard title={t("widgets.health.title")} icon={Activity} widgetId="health">
-			{healthData ? (
+		<WidgetCard
+			title={t("widgets.health.title")}
+			icon={Activity}
+			widgetId="health"
+			headerMeta={formatLastUpdated(getLastUpdatedMinutes("health"))}
+			onRefresh={() => fetchHealth(undefined, true)}
+			refreshing={!!loading}
+			refreshIcon={RefreshCw}
+			apiStatus={apiStatus}
+			apiError={error}
+		>
+			{loading ? (
+				<p className="text-sm opacity-50">{t("widgets.health.loading")}</p>
+			) : healthData ? (
 				<div className="space-y-3">
 					<div className="flex justify-between items-center">
 						<span className="text-xs">🚶 {t("widgets.health.steps")}</span>
@@ -68,9 +104,22 @@ const HealthWidget = () => {
 							<p className={`text-[10px] ${muted}`}>{t("widgets.health.cups")}</p>
 						</div>
 					</div>
-					<p className={`text-[10px] text-center mt-1 ${muted}`}>
-						{t("widgets.health.google_fit_notice")}
-					</p>
+					{showReconnectGoogle && (
+						<div className="pt-1 flex justify-center">
+							<button
+								type="button"
+								onClick={handleReconnectGoogle}
+								className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[11px] font-semibold transition-colors ${
+									isDark
+										? "bg-white/10 text-white hover:bg-white/15"
+										: "bg-slate-100 text-slate-700 hover:bg-slate-200"
+								}`}
+							>
+								<RefreshCcw size={12} />
+								Reconnect Google
+							</button>
+						</div>
+					)}
 				</div>
 			) : (
 				<p className="text-sm opacity-50">{t("widgets.health.loading")}</p>

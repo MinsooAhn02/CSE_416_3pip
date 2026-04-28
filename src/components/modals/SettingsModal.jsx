@@ -13,17 +13,22 @@ import {
 	Calendar,
 	Timer,
 	ListOrdered,
+	Lock,
 } from "lucide-react";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 import { useTheme } from "../../hooks/useTheme";
-import { useSettingsStore } from "../../store/useSettingsStore";
+import {
+	PIN_LOCK_OPTIONS,
+	useSettingsStore,
+} from "../../store/useSettingsStore";
 import { useWidgetStore } from "../../store/useWidgetStore";
 import { useAuthStore } from "../../store/useAuthStore";
-import { useTodoStore } from "../../store/useTodoStore";
+import { useDiaryStore } from "../../store/useDiaryStore";
 import { WIDGET_LIST, STANDARD_WIDGETS, DEFAULT_PRIORITY_ORDER } from "../../constants";
 import { save } from "../../utils/storage";
 import Toggle from "../common/Toggle";
 import ConfirmDialog from "../common/ConfirmDialog";
+import PINModal from "./PINModal";
 
 // Logout button with confirm dialog and loading state
 const LogoutButton = ({ logout, setShowSettings }) => {
@@ -83,13 +88,17 @@ const SettingsModal = () => {
 		clockStyle,
 		priorityOrder,
 		showFirstLoginBriefing,
+		diaryLanguage,
 		setShowSettings,
 		setSettingsTab,
 		setTheme,
 		setBgImage,
 		removeBg,
+		pinLockMode,
 		setClockStyle,
 		setPriorityOrder,
+		setPinLockMode,
+		setDiaryLanguage,
 		setShowFirstLoginBriefing,
 	} = useSettingsStore();
 	const {
@@ -104,24 +113,33 @@ const SettingsModal = () => {
 		removeSmartWidget,
 	} = useWidgetStore();
 	const { logout, setShowOnboarding, setObStep } = useAuthStore();
-	const todos = useTodoStore((s) => s.todos);
-	const newRoutineText = useTodoStore((s) => s.newRoutineText);
-	const setNewRoutineText = useTodoStore((s) => s.setNewRoutineText);
-	const addRecurringTodo = useTodoStore((s) => s.addRecurringTodo);
-	const deleteTodo = useTodoStore((s) => s.deleteTodo);
+	const pinSet = useDiaryStore((s) => s.pinSet);
+	const applyPinLockMode = useDiaryStore((s) => s.applyPinLockMode);
 	const setOnboarded = (v) => {
 		useAuthStore.setState({ onboarded: v });
 		save("mb_onboarded", v);
 	};
-	const recurringTodos = todos.filter((t) => t.isFixed);
-
 	const bgRef = useRef(null);
 
 	// Confirm dialog state: null | { title, message, onConfirm }
 	const [confirmState, setConfirmState] = useState(null);
+	const [showPinModal, setShowPinModal] = useState(false);
+	const [pinModalMode, setPinModalMode] = useState("setup");
+	const pinLockOptions = PIN_LOCK_OPTIONS.filter(
+		(option) => option.id !== "off",
+	);
 	const openConfirm = (title, message, onConfirm) =>
 		setConfirmState({ title, message, onConfirm });
 	const closeConfirm = () => setConfirmState(null);
+
+	const handlePinLockModeChange = (mode) => {
+		setPinLockMode(mode);
+		applyPinLockMode(mode);
+	};
+	const openPinFlow = (mode) => {
+		setPinModalMode(mode);
+		setShowPinModal(true);
+	};
 
 	// Get widget labels for priority display
 	const getWidgetLabel = (widgetId) => {
@@ -149,7 +167,7 @@ const SettingsModal = () => {
 	};
 
 	return (
-		<div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+		<div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[20500] p-4">
 			<div
 				className={`w-full max-w-2xl rounded-3xl shadow-2xl border overflow-hidden ${
 					isDark
@@ -173,10 +191,10 @@ const SettingsModal = () => {
 							{ id: "widgets", label: "위젯 관리" },
 							{ id: "smart", label: "스마트 위젯" },
 							{ id: "priority", label: "데이터 우선순위" },
-							{ id: "routine", label: "고정 TODO" },
 							{ id: "clock", label: "시계 스타일" },
 							{ id: "briefing", label: "AI 브리핑" },
 							{ id: "theme", label: "테마" },
+								{ id: "diary", label: "Diary" },
 							{ id: "profile", label: "프로필" },
 						].map((tab) => (
 							<button
@@ -328,11 +346,11 @@ const SettingsModal = () => {
 								</div>
 							</div>
 						)}
-						{settingsTab === "routine" && (
+						{false && settingsTab === "routine" && (
 							<div className="space-y-4">
 								<p className={`text-xs mb-2 ${muted}`}>
-									매일 반복할 루틴 TODO를 등록합니다. 일반 TODO는 일일 리셋 시
-									초기화되고, 루틴 TODO는 자동으로 다시 나타납니다.
+									매일 반복할 루틴 Task를 등록합니다. 일반 Task는 일일 리셋 시
+									초기화되고, 루틴 Task는 자동으로 다시 나타납니다.
 								</p>
 
 								<div className="flex gap-2">
@@ -513,6 +531,301 @@ const SettingsModal = () => {
 								</div>
 							</div>
 						)}
+						{settingsTab === "diary" && (
+							<div className="space-y-6">
+								<div>
+									<p className="text-sm font-medium mb-2">Diary settings</p>
+									<p className={`text-xs mb-4 ${muted}`}>
+										Manage diary protection and choose which language newly generated diaries should use.
+									</p>
+								</div>
+
+								<>
+										<div
+											className={`p-4 rounded-xl border ${isDark ? "bg-white/5 border-white/10" : "bg-gray-50 border-gray-200"}`}
+										>
+											<div className="flex items-start justify-between gap-4 flex-wrap">
+												<div className="flex items-start gap-3 flex-1 min-w-0">
+													<div
+														className={`p-2 rounded-lg ${isDark ? "bg-blue-500/15" : "bg-blue-100"}`}
+													>
+														<Lock size={18} className="text-blue-500" />
+													</div>
+													<div className="flex-1 min-w-0 space-y-1">
+														<div className="flex items-center justify-between gap-3">
+															<p className="text-sm font-medium">
+																{pinSet ? "PIN is set" : "PIN is not set"}
+															</p>
+															<div className="flex flex-col items-end gap-1">
+																<Toggle
+																	on={pinSet}
+																	onToggle={() =>
+																		openPinFlow(pinSet ? "disable" : "setup")
+																	}
+																/>
+																<p className={`text-[11px] ${muted}`}>
+																	{pinSet ? "PIN on" : "PIN off"}
+																</p>
+															</div>
+														</div>
+														<p className={`text-xs mt-1 ${muted}`}>
+															{pinSet
+																? "You can change your PIN, disable it, or adjust the lock timing below."
+																: "Once you set a PIN, PIN change and lock timing controls will appear here."}
+														</p>
+													</div>
+												</div>
+
+												<div className="flex flex-col items-end gap-2">
+													{pinSet && (
+														<button
+															onClick={() => openPinFlow("change")}
+															className={`px-3 py-2 rounded-lg text-sm font-medium border transition-colors ${
+																isDark
+																	? "border-white/15 bg-white/5 hover:bg-white/10"
+																	: "border-gray-200 bg-white hover:bg-gray-50"
+															}`}
+														>
+															Change PIN
+														</button>
+													)}
+												</div>
+											</div>
+										</div>
+
+										<div
+											className={`p-4 rounded-xl border ${isDark ? "bg-white/5 border-white/10" : "bg-gray-50 border-gray-200"}`}
+										>
+											<div className="space-y-3">
+												<div>
+													<p className="text-sm font-medium">Generation language</p>
+													<p className={`text-xs mt-1 ${muted}`}>
+														Choose the language used when AI creates a new diary entry.
+													</p>
+												</div>
+
+												<div className="grid gap-2">
+													{[
+														{
+															id: "app",
+															label: "Follow app language",
+															description:
+																"Use the current UI language each time a diary is generated.",
+														},
+														{
+															id: "ko",
+															label: "한국어",
+															description:
+																"Always generate diary titles and summaries in Korean.",
+														},
+														{
+															id: "en",
+															label: "English",
+															description:
+																"Always generate diary titles and summaries in English.",
+														},
+													].map((option) => {
+														const selected = diaryLanguage === option.id;
+														return (
+															<button
+																key={option.id}
+																onClick={() => setDiaryLanguage(option.id)}
+																className={`w-full rounded-xl border px-4 py-3 text-left transition-all ${
+																	selected
+																		? isDark
+																			? "border-blue-400 bg-blue-500/15"
+																			: "border-blue-500 bg-blue-50"
+																		: isDark
+																			? "border-white/10 bg-white/5 hover:bg-white/10"
+																			: "border-gray-200 bg-white hover:bg-gray-50"
+																}`}
+															>
+																<div className="flex items-center justify-between gap-3">
+																	<p className="text-sm font-medium">{option.label}</p>
+																	{selected && (
+																		<span
+																			className={`text-[11px] font-semibold ${
+																				isDark ? "text-blue-300" : "text-blue-600"
+																			}`}
+																		>
+																			Selected
+																		</span>
+																	)}
+																</div>
+																<p className={`text-xs mt-1 ${muted}`}>
+																	{option.description}
+																</p>
+															</button>
+														);
+													})}
+												</div>
+											</div>
+										</div>
+
+										{pinSet && (
+									<div
+										className={`p-4 rounded-xl border ${isDark ? "bg-white/5 border-white/10" : "bg-gray-50 border-gray-200"}`}
+									>
+										<div className="space-y-3">
+											<div>
+												<p className="text-sm font-medium">Lock timing</p>
+												<p className={`text-xs mt-1 ${muted}`}>
+													Choose how long diary stays unlocked after a successful PIN check.
+												</p>
+											</div>
+
+											<div className="grid gap-2">
+												{pinLockOptions.map((option) => {
+													const selected = pinLockMode === option.id;
+													return (
+														<button
+															key={option.id}
+															onClick={() => handlePinLockModeChange(option.id)}
+															className={`w-full rounded-xl border px-4 py-3 text-left transition-all ${
+																selected
+																	? isDark
+																		? "border-blue-400 bg-blue-500/15"
+																		: "border-blue-500 bg-blue-50"
+																	: isDark
+																		? "border-white/10 bg-white/5 hover:bg-white/10"
+																		: "border-gray-200 bg-white hover:bg-gray-50"
+															}`}
+														>
+															<div className="flex items-center justify-between gap-3">
+																<p className="text-sm font-medium">{option.label}</p>
+																{selected && (
+																	<span
+																		className={`text-[11px] font-semibold ${
+																			isDark ? "text-blue-300" : "text-blue-600"
+																		}`}
+																	>
+																		Selected
+																	</span>
+																)}
+															</div>
+															<p className={`text-xs mt-1 ${muted}`}>
+																{option.description}
+															</p>
+														</button>
+													);
+												})}
+											</div>
+
+											<p className={`text-xs ${muted}`}>
+												{pinLockMode === "off"
+													? "PIN exists, but diary protection is currently off. Choose a lock time to turn it back on."
+													: pinLockMode === "immediate"
+														? "Diary locks again as soon as you close it."
+														: "After you unlock diary once, it stays open for the selected amount of time."}
+											</p>
+											</div>
+										</div>
+										)}
+								</>
+							</div>
+						)}
+						{false && settingsTab === "privacy" && (
+							<div className="space-y-6">
+								<div>
+									<p className="text-sm font-medium mb-2">Diary PIN</p>
+									<p className={`text-xs mb-4 ${muted}`}>
+										일기와 일기 목록을 4자리 PIN으로 보호합니다.
+									</p>
+								</div>
+
+								<div
+									className={`p-4 rounded-xl border ${isDark ? "bg-white/5 border-white/10" : "bg-gray-50 border-gray-200"}`}
+								>
+									<div className="flex items-start justify-between gap-4">
+										<div className="flex items-start gap-3">
+											<div
+												className={`p-2 rounded-lg ${isDark ? "bg-blue-500/15" : "bg-blue-100"}`}
+											>
+												<Lock size={18} className="text-blue-500" />
+											</div>
+											<div>
+												<p className="text-sm font-medium">
+													{pinSet ? "PIN이 설정되어 있어요" : "PIN이 아직 설정되지 않았어요"}
+												</p>
+												<p className={`text-xs mt-1 ${muted}`}>
+													{pinSet
+														? "현재 PIN을 확인한 뒤 새 PIN으로 변경할 수 있어요."
+														: "처음 diary를 열기 전에 PIN을 먼저 설정하게 됩니다."}
+												</p>
+											</div>
+										</div>
+
+										<button
+											onClick={() => {
+												setPinModalMode(pinSet ? "change" : "setup");
+												setShowPinModal(true);
+											}}
+											className="px-3 py-2 rounded-lg text-sm font-medium bg-blue-500 hover:bg-blue-600 text-white transition-colors"
+										>
+											{pinSet ? "PIN 변경" : "PIN 설정"}
+										</button>
+									</div>
+								</div>
+
+								<div
+									className={`p-4 rounded-xl border ${isDark ? "bg-white/5 border-white/10" : "bg-gray-50 border-gray-200"}`}
+								>
+									<div className="space-y-3">
+										<div>
+											<p className="text-sm font-medium">잠금 방식</p>
+											<p className={`text-xs mt-1 ${muted}`}>
+												Diary PIN을 언제 다시 요구할지 정할 수 있어요.
+											</p>
+										</div>
+
+										<div className="grid gap-2">
+											{PIN_LOCK_OPTIONS.map((option) => {
+												const selected = pinLockMode === option.id;
+												return (
+													<button
+														key={option.id}
+														onClick={() => handlePinLockModeChange(option.id)}
+														className={`w-full rounded-xl border px-4 py-3 text-left transition-all ${
+															selected
+																? isDark
+																	? "border-blue-400 bg-blue-500/15"
+																	: "border-blue-500 bg-blue-50"
+																: isDark
+																	? "border-white/10 bg-white/5 hover:bg-white/10"
+																	: "border-gray-200 bg-white hover:bg-gray-50"
+														}`}
+													>
+														<div className="flex items-center justify-between gap-3">
+															<p className="text-sm font-medium">{option.label}</p>
+															{selected && (
+																<span
+																	className={`text-[11px] font-semibold ${
+																		isDark ? "text-blue-300" : "text-blue-600"
+																	}`}
+																>
+																	선택됨
+																</span>
+															)}
+														</div>
+														<p className={`text-xs mt-1 ${muted}`}>
+															{option.description}
+														</p>
+													</button>
+												);
+											})}
+										</div>
+
+										<p className={`text-xs ${muted}`}>
+											{pinLockMode === "off"
+												? "PIN을 꺼두면 diary와 diary list를 바로 열 수 있어요."
+												: pinSet
+													? "PIN은 유지되고, 잠금 타이밍만 바뀝니다."
+													: "잠금 방식을 켜두면 diary에 처음 들어갈 때 PIN 설정 팝업이 바로 열립니다."}
+										</p>
+									</div>
+								</div>
+							</div>
+						)}
 						{settingsTab === "profile" && (
 							<div className="space-y-6">
 								<div className="flex items-center gap-4">
@@ -668,6 +981,13 @@ const SettingsModal = () => {
 					onCancel={closeConfirm}
 				/>
 			)}
+				{showPinModal && (
+					<PINModal
+						mode={pinModalMode}
+						onSuccess={() => setShowPinModal(false)}
+						onCancel={() => setShowPinModal(false)}
+					/>
+				)}
 		</div>
 	);
 };

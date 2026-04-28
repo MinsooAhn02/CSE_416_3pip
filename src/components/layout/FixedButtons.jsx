@@ -3,6 +3,7 @@ import { Settings, Plus, X, Sparkles } from "lucide-react";
 import { useTheme } from "../../hooks/useTheme";
 import { useSettingsStore } from "../../store/useSettingsStore";
 import { useWidgetStore } from "../../store/useWidgetStore";
+import { useDiaryStore } from "../../store/useDiaryStore";
 
 const FixedButtons = () => {
 	const { isDark, inputCls, muted, cardCls } = useTheme();
@@ -10,6 +11,7 @@ const FixedButtons = () => {
 	const newKeyword = useWidgetStore((s) => s.newKeyword);
 	const setNewKeyword = useWidgetStore((s) => s.setNewKeyword);
 	const addSmartWidget = useWidgetStore((s) => s.addSmartWidget);
+	const pinModalVisible = useDiaryStore((s) => s.pinModalVisible);
 
 	const [showPopup, setShowPopup] = useState(false);
 	const popupRef = useRef(null);
@@ -36,6 +38,8 @@ const FixedButtons = () => {
 			? "bg-white/5 hover:bg-white/15 border-white/10"
 			: "bg-white/50 hover:bg-white/80 border-gray-200"
 	}`;
+
+	if (pinModalVisible) return null;
 
 	return (
 		<div className="fixed bottom-6 right-6 z-30 flex flex-col gap-3 items-end">

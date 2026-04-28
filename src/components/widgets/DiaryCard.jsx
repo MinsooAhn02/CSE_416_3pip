@@ -2,8 +2,9 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useTheme } from "../../hooks/useTheme";
 import { useDiaryStore } from "../../store/useDiaryStore";
+import { formatLocalDate } from "../../utils/date";
 
-const todayStr = () => new Date().toISOString().slice(0, 10);
+const todayStr = () => formatLocalDate();
 
 const DiaryCard = () => {
 	const { cardCls, cardShadowCls, isDark, inputCls, secondaryBgCls } =

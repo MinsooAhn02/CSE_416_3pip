@@ -45,20 +45,10 @@ serve(async (req) => {
 
 		if (!res.ok) {
 			const errText = await res.text();
-			// 403 = Fitness API not enabled or no scopes
-			if (res.status === 403) {
-				return new Response(
-					JSON.stringify({
-						steps: 0,
-						calories: 0,
-						heartRate: 0,
-						sleep: 0,
-						note: "Google Fit 권한이 없습니다. 수동 입력을 사용하세요.",
-					}),
-					{ headers: { ...corsHeaders, "Content-Type": "application/json" } },
-				);
-			}
-			throw new Error(`Google Fit ${res.status}: ${errText}`);
+			const error = new Error(`Google Fit ${res.status}: ${errText}`);
+			// @ts-ignore propagate upstream status for clearer client errors
+			error.status = res.status;
+			throw error;
 		}
 
 		const data = await res.json();
@@ -99,7 +89,7 @@ serve(async (req) => {
 		);
 	} catch (e) {
 		return new Response(JSON.stringify({ error: e.message }), {
-			status: 400,
+			status: e?.status || 400,
 			headers: { ...corsHeaders, "Content-Type": "application/json" },
 		});
 	}

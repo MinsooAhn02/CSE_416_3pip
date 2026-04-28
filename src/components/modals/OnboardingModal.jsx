@@ -87,8 +87,8 @@ const OnboardingModal = () => {
 								{
 									key: "cal",
 									icon: <Calendar size={20} className="text-blue-400" />,
-									label: "Google Calendar",
-									desc: "일정 확인 및 리마인더",
+									label: "Google Calendar & Tasks",
+									desc: "일정 이벤트와 Task 연동",
 								},
 							].map((item) => (
 								<div

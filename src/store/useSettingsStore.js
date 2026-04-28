@@ -5,6 +5,58 @@ import { supabase } from "../lib/supabase";
 import { DEFAULT_PRIORITY_ORDER } from "../constants";
 import i18n from "../l10n/i18n";
 
+export const DEFAULT_PIN_LOCK_MODE = "immediate";
+export const DEFAULT_DIARY_LANGUAGE = "app";
+
+export const PIN_LOCK_OPTIONS = [
+	{
+		id: "off",
+		label: "PIN 해제",
+		description: "Diary를 열 때 PIN을 묻지 않습니다.",
+	},
+	{
+		id: "immediate",
+		label: "바로 잠금",
+		description: "Diary를 닫으면 바로 다시 PIN을 입력해야 합니다.",
+	},
+	{
+		id: "5m",
+		label: "5분 뒤 잠금",
+		description: "마지막 PIN 인증 후 5분 동안 유지됩니다.",
+	},
+	{
+		id: "30m",
+		label: "30분 뒤 잠금",
+		description: "마지막 PIN 인증 후 30분 동안 유지됩니다.",
+	},
+	{
+		id: "1h",
+		label: "1시간 뒤 잠금",
+		description: "마지막 PIN 인증 후 1시간 동안 유지됩니다.",
+	},
+	{
+		id: "3h",
+		label: "3시간 뒤 잠금",
+		description: "마지막 PIN 인증 후 3시간 동안 유지됩니다.",
+	},
+	{
+		id: "6h",
+		label: "6시간 뒤 잠금",
+		description: "마지막 PIN 인증 후 6시간 동안 유지됩니다.",
+	},
+];
+
+const PIN_LOCK_TIMEOUT_MS = {
+	"5m": 5 * 60 * 1000,
+	"30m": 30 * 60 * 1000,
+	"1h": 60 * 60 * 1000,
+	"3h": 3 * 60 * 60 * 1000,
+	"6h": 6 * 60 * 60 * 1000,
+};
+
+export const getPinLockTimeoutMs = (mode) =>
+	PIN_LOCK_TIMEOUT_MS[mode] ?? null;
+
 /* Fires a single "saved" toast, debounced by toast id so rapid
  * changes don't stack. Kept inside the store so every setter
  * shares the same UX. */
@@ -50,6 +102,8 @@ export const useSettingsStore = create((set, get) => ({
 	tone: load("mb_tone", "friendly"),
 	bLen: load("mb_blen", "medium"),
 	voiceOn: load("mb_voice", false),
+	pinLockMode: load("mb_pin_lock_mode", DEFAULT_PIN_LOCK_MODE),
+	diaryLanguage: load("mb_diary_language", DEFAULT_DIARY_LANGUAGE),
 	
 	// Data Priority (REQ-US-006)
 	priorityOrder: load("mb_priority_order", DEFAULT_PRIORITY_ORDER),
@@ -104,6 +158,10 @@ export const useSettingsStore = create((set, get) => ({
 			patch.voiceOn = data.voice_on;
 			save("mb_voice", data.voice_on);
 		}
+		if (data.pin_lock_mode) {
+			patch.pinLockMode = data.pin_lock_mode;
+			save("mb_pin_lock_mode", data.pin_lock_mode);
+		}
 		if (data.bg_image !== undefined) {
 			patch.bgImage = data.bg_image;
 			save("mb_bg", data.bg_image);
@@ -151,7 +209,11 @@ export const useSettingsStore = create((set, get) => ({
 		notifySaved();
 	},
 	setShowSettings: (v) => set({ showSettings: v }),
-	setSettingsTab: (t) => set({ settingsTab: t }),
+	setSettingsTab: (t) =>
+		set({
+			settingsTab:
+				t === "routine" ? "widgets" : t === "privacy" ? "diary" : t,
+		}),
 	setShowBriefSettings: (v) => set({ showBriefSettings: v }),
 	setTone: (t) => {
 		set({ tone: t });
@@ -169,6 +231,22 @@ export const useSettingsStore = create((set, get) => ({
 		set({ voiceOn: v });
 		save("mb_voice", v);
 		syncSettings({ voice_on: v });
+		notifySaved();
+	},
+	setPinLockMode: (mode) => {
+		if (!PIN_LOCK_OPTIONS.some((option) => option.id === mode)) return;
+		set({ pinLockMode: mode });
+		save("mb_pin_lock_mode", mode);
+		syncSettings({ pin_lock_mode: mode });
+		notifySaved();
+	},
+	setDiaryLanguage: (language) => {
+		const normalized =
+			language === "ko" || language === "en" || language === "app"
+				? language
+				: DEFAULT_DIARY_LANGUAGE;
+		set({ diaryLanguage: normalized });
+		save("mb_diary_language", normalized);
 		notifySaved();
 	},
 	setClockStyle: (s) => {

@@ -1,301 +1,1155 @@
 import { create } from "zustand";
+import { supabase } from "../lib/supabase";
+import { load, save } from "../utils/storage";
+import { formatLocalDate } from "../utils/date";
+import { buildEventRecurrence, parseEventRepeat } from "../utils/eventRepeat";
+import { useAuthStore } from "./useAuthStore";
 
-/**
- * useGoogleCalendarStore - Manages Google Calendar Events and Tasks
- * 
- * BUG FIX #3: JSON Fetch Error Resolution
- * Since backend API is not yet implemented, this store uses Mock Data
- * to simulate events and tasks. Replace fetchEventsAndTasks with real API calls
- * once backend endpoints are ready (POST /api/calendar/events, GET /api/calendar/tasks, etc.)
- */
+const EDGE_TIMEOUT_MS = 25000;
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const LOCAL_EVENTS_KEY = "mb_calendar_events";
+const LOCAL_TASKS_KEY = "mb_google_tasks";
+const TASK_LIST_FILTER_KEY = "mb_task_list_filter";
+const TASK_META_OPEN = "[MB_META]";
+const TASK_META_CLOSE = "[/MB_META]";
+export const GOOGLE_SYNC_AUTH_ERROR =
+	"Google connection expired. Reconnect Google to sync Events and Tasks again.";
+export const ALL_TASK_LIST_FILTER_ID = "@all";
+const FALLBACK_TASK_LISTS = [{ id: "@default", title: "My Tasks" }];
 
-/* ── Mock Data for Development ── */
-const MOCK_EVENTS = [
-	{
-		id: "evt1",
-		title: "Team Standup",
-		date: "2026-03-27",
-		startTime: "09:00",
-		endTime: "09:30",
-		location: "Meeting Room A",
-		description: "Daily standup meeting with the team",
-	},
-	{
-		id: "evt2",
-		title: "Client Call",
-		date: "2026-03-27",
-		startTime: "14:00",
-		endTime: "15:00",
-		location: "Zoom",
-		description: "Q2 planning discussion",
-	},
-	{
-		id: "evt3",
-		title: "Project Review",
-		date: "2026-03-28",
-		startTime: "15:30",
-		endTime: "16:30",
-		location: "Conference Room B",
-		description: "Calendar feature review",
-	},
-];
+const readLocalEvents = () => load(LOCAL_EVENTS_KEY, []);
+const writeLocalEvents = (events) => save(LOCAL_EVENTS_KEY, events);
+const readLocalTasks = () => load(LOCAL_TASKS_KEY, []);
+const writeLocalTasks = (tasks) => save(LOCAL_TASKS_KEY, tasks);
+const normalizeTaskListFilterId = (value) =>
+	String(value || ALL_TASK_LIST_FILTER_ID).trim() || ALL_TASK_LIST_FILTER_ID;
+const readTaskListFilter = () => load(TASK_LIST_FILTER_KEY, ALL_TASK_LIST_FILTER_ID);
+const writeTaskListFilter = (value) =>
+	save(TASK_LIST_FILTER_KEY, normalizeTaskListFilterId(value));
+const getLocalTimeZone = () =>
+	Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
 
-const MOCK_TASKS = [
-	{
-		id: "task1",
-		title: "Finish API implementation",
-		date: "2026-03-27",
-		startTime: "17:00",
-		endTime: "18:00",
-		description: "Complete Google Calendar API integration",
-		completed: false,
-	},
-	{
-		id: "task2",
-		title: "Code review",
-		date: "2026-03-27",
-		startTime: "18:00",
-		endTime: "19:00",
-		description: "Review pull request #42",
-		completed: false,
-	},
-	{
-		id: "task3",
-		title: "Update documentation",
-		date: "2026-03-28",
-		startTime: "12:00",
-		endTime: "13:00",
-		description: "Add API endpoint docs",
-		completed: true,
-	},
-];
+const pad2 = (value) => String(value).padStart(2, "0");
+const hasRealTaskLists = (lists = []) =>
+	Array.isArray(lists) && lists.some((list) => list?.id && list.id !== "@default");
+
+const normalizeTaskListsPayload = (payload) => {
+	if (!Array.isArray(payload)) return FALLBACK_TASK_LISTS;
+
+	const looksLikeTaskLists = payload.every((item) => {
+		if (!item || typeof item !== "object") return false;
+		const hasId = typeof item.id === "string" && item.id.trim().length > 0;
+		const hasTitle = typeof item.title === "string";
+		const looksLikeTask =
+			"taskListId" in item || "status" in item || "completed" in item || "notes" in item;
+		return hasId && hasTitle && !looksLikeTask;
+	});
+
+	if (!looksLikeTaskLists) return FALLBACK_TASK_LISTS;
+
+	return payload.length > 0 ? payload : FALLBACK_TASK_LISTS;
+};
+
+const resolveTaskListFilterId = (filterId, lists = FALLBACK_TASK_LISTS) => {
+	const normalizedFilterId = normalizeTaskListFilterId(filterId);
+	if (normalizedFilterId === ALL_TASK_LIST_FILTER_ID) return normalizedFilterId;
+	const availableIds = new Set(
+		(Array.isArray(lists) ? lists : [])
+			.map((list) => String(list?.id || "").trim())
+			.filter(Boolean),
+	);
+	return availableIds.has(normalizedFilterId)
+		? normalizedFilterId
+		: ALL_TASK_LIST_FILTER_ID;
+};
+
+export const filterTasksByTaskList = (tasks = [], filterId = ALL_TASK_LIST_FILTER_ID) => {
+	const normalizedFilterId = normalizeTaskListFilterId(filterId);
+	if (normalizedFilterId === ALL_TASK_LIST_FILTER_ID) {
+		return Array.isArray(tasks) ? tasks : [];
+	}
+
+	return (Array.isArray(tasks) ? tasks : []).filter(
+		(task) =>
+			String(task?.taskListId || FALLBACK_TASK_LISTS[0]?.id || "@default").trim() ===
+			normalizedFilterId,
+	);
+};
+
+const formatLocalTime = (input) => {
+	if (!input) return "";
+	if (typeof input === "string" && /^\d{2}:\d{2}$/.test(input)) return input;
+	if (typeof input === "string" && /^\d{4}-\d{2}-\d{2}$/.test(input)) return "";
+
+	const date = input instanceof Date ? new Date(input) : new Date(input);
+	if (Number.isNaN(date.getTime())) return "";
+
+	return `${pad2(date.getHours())}:${pad2(date.getMinutes())}`;
+};
+
+const extractDateString = (input) => {
+	if (!input) return "";
+	if (typeof input === "string" && /^\d{4}-\d{2}-\d{2}$/.test(input)) return input;
+	return formatLocalDate(input);
+};
+
+const extractTaskDateString = (input) => {
+	if (!input) return "";
+	if (typeof input === "string") {
+		const match = input.match(/^(\d{4}-\d{2}-\d{2})/);
+		if (match) return match[1];
+	}
+	return extractDateString(input);
+};
+
+const getMonthWindow = (anchor = new Date()) => {
+	const date = anchor instanceof Date ? new Date(anchor) : new Date(anchor);
+	const monthStart = new Date(date.getFullYear(), date.getMonth(), 1);
+	const monthEnd = new Date(date.getFullYear(), date.getMonth() + 1, 0, 23, 59, 59, 999);
+	const monthKey = `${monthStart.getFullYear()}-${pad2(monthStart.getMonth() + 1)}`;
+
+	return {
+		monthKey,
+		timeMin: monthStart.toISOString(),
+		timeMax: monthEnd.toISOString(),
+	};
+};
+
+const parseTaskNotes = (notes = "") => {
+	const raw = String(notes || "");
+	const match = raw.match(
+		new RegExp(
+			`${TASK_META_OPEN.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(.*?)${TASK_META_CLOSE.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`,
+			"s",
+		),
+	);
+
+	if (!match) {
+		return {
+			description: raw.trim(),
+			meta: {},
+		};
+	}
+
+	let meta = {};
+	try {
+		meta = JSON.parse(match[1]);
+	} catch {
+		meta = {};
+	}
+
+	const description = raw.replace(match[0], "").trim();
+	return { description, meta };
+};
+
+const buildTaskNotes = ({
+	description = "",
+	startTime = "",
+	endTime = "",
+	repeat = null,
+	dueDate = "",
+	deadline = "",
+	completedDates = [],
+}) => {
+	const cleanDescription = String(description || "").trim();
+	const meta = {};
+	const normalizedDueDate = String(dueDate || deadline || "").trim();
+	const normalizedCompletedDates = Array.from(
+		new Set(
+			(Array.isArray(completedDates) ? completedDates : []).filter((date) =>
+				typeof date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(date),
+			),
+		),
+	).sort();
+
+	if (startTime) meta.startTime = startTime;
+	if (endTime) meta.endTime = endTime;
+	if (repeat && repeat.type && repeat.type !== "none") meta.repeat = repeat;
+	if (normalizedDueDate) meta.dueDate = normalizedDueDate;
+	if (normalizedCompletedDates.length > 0) meta.completedDates = normalizedCompletedDates;
+
+	if (Object.keys(meta).length === 0) {
+		return cleanDescription || undefined;
+	}
+
+	return `${TASK_META_OPEN}${JSON.stringify(meta)}${TASK_META_CLOSE}${cleanDescription ? `\n\n${cleanDescription}` : ""}`;
+};
+
+const toLocalDateTimeIso = (dateStr, timeStr = "00:00") => {
+	if (!dateStr) return undefined;
+	const [hours = "00", minutes = "00"] = String(timeStr || "00:00").split(":");
+	const localDate = new Date(`${dateStr}T00:00:00`);
+	localDate.setHours(Number(hours), Number(minutes), 0, 0);
+	return localDate.toISOString();
+};
+
+const toTaskDueIso = (dateStr) => {
+	if (!dateStr) return undefined;
+	return `${dateStr}T00:00:00.000Z`;
+};
+
+const toTaskCompletedIso = (input = new Date()) => {
+	const date = input instanceof Date ? input : new Date(input);
+	return Number.isNaN(date.getTime()) ? new Date().toISOString() : date.toISOString();
+};
+
+const normalizeCompletedDates = (dates = []) =>
+	Array.from(
+		new Set(
+			(Array.isArray(dates) ? dates : []).filter(
+				(date) => typeof date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(date),
+			),
+	),
+).sort();
+
+const hasTaskRepeat = (repeat) => !!(repeat?.type && repeat.type !== "none");
+const hasOwn = (value, key) =>
+	!!value && Object.prototype.hasOwnProperty.call(value, key);
+
+const normalizeAttendees = (attendees = []) =>
+	(Array.isArray(attendees) ? attendees : [])
+		.map((attendee) => {
+			if (!attendee) return null;
+			const email = String(attendee.email || "").trim();
+			if (!email) return null;
+			return {
+				email,
+				displayName: String(attendee.displayName || "").trim() || "",
+				responseStatus:
+					String(attendee.responseStatus || "needsAction").trim() ||
+					"needsAction",
+				optional: !!attendee.optional,
+			};
+		})
+		.filter(Boolean);
+
+const normalizeReminderOverrides = (overrides = []) =>
+	(Array.isArray(overrides) ? overrides : [])
+		.map((override) => {
+			if (!override) return null;
+			const minutes = Number(override.minutes ?? NaN);
+			if (!Number.isFinite(minutes) || minutes < 0) return null;
+			return {
+				method: String(override.method || "popup").trim() === "email" ? "email" : "popup",
+				minutes,
+			};
+		})
+		.filter(Boolean);
+
+const normalizeEvent = (event) => {
+	const start = event?.start ?? event?.startTime ?? null;
+	const end = event?.end ?? event?.endTime ?? null;
+	const allDay =
+		event?.allDay ?? (typeof start === "string" && /^\d{4}-\d{2}-\d{2}$/.test(start));
+	const attendees = normalizeAttendees(event?.attendees);
+	const reminderOverrides = normalizeReminderOverrides(
+		event?.reminderOverrides || event?.reminders?.overrides || [],
+	);
+	const remindersUseDefault =
+		event?.remindersUseDefault ?? event?.reminders?.useDefault ?? true;
+	const meetLink = String(event?.meetLink || event?.hangoutLink || "").trim() || "";
+	const conferenceStatus =
+		String(event?.conferenceStatus || "").trim() ||
+		event?.conferenceData?.createRequest?.status?.statusCode ||
+		null;
+
+	return {
+		id: event?.id,
+		title:
+			typeof event?.title === "string"
+				? event.title
+				: typeof event?.summary === "string"
+					? event.summary
+					: "",
+		date: event?.date || extractDateString(start || end || new Date()),
+		startTime: allDay ? "" : formatLocalTime(start),
+		endTime: allDay ? "" : formatLocalTime(end),
+		start: start || null,
+		end: end || null,
+		allDay: !!allDay,
+		location: event?.location || "",
+		description: event?.description || "",
+		attendees,
+		visibility: event?.visibility || "default",
+		availability:
+			String(event?.availability || "").trim() === "free" ||
+			event?.transparency === "transparent"
+				? "free"
+				: "busy",
+		meetLink,
+		addGoogleMeet:
+			event?.addGoogleMeet ?? !!(meetLink || conferenceStatus),
+		conferenceStatus,
+		remindersUseDefault: remindersUseDefault !== false,
+		reminderOverrides,
+		sendUpdates: event?.sendUpdates ?? true,
+		recurrence: Array.isArray(event?.recurrence) ? event.recurrence : [],
+		repeat:
+			event?.repeat ||
+			parseEventRepeat(
+				Array.isArray(event?.recurrence) ? event.recurrence : [],
+				event?.date || extractDateString(start || end || new Date()),
+			),
+		recurringEventId: String(event?.recurringEventId || "").trim() || null,
+		originalStartTime:
+			event?.originalStartTime ||
+			event?.originalStart?.dateTime ||
+			event?.originalStart?.date ||
+			null,
+		seriesEventId:
+			String(event?.seriesEventId || event?.recurringEventId || event?.id || "").trim() ||
+			null,
+	};
+};
+
+const normalizeTask = (task) => {
+	const { description: notesDescription, meta } = parseTaskNotes(
+		task?.notes || task?.description || "",
+	);
+	const date =
+		task?.date ||
+		extractTaskDateString(task?.due || "") ||
+		extractDateString(task?.updated || "");
+	const description = hasOwn(task, "description")
+		? String(task?.description || "").trim()
+		: notesDescription;
+	const repeat = hasOwn(task, "repeat") ? task?.repeat || null : meta.repeat || null;
+	const completed =
+		typeof task?.completed === "boolean"
+			? task.completed
+			: String(task?.status || "").toLowerCase() === "completed";
+	const completedAt =
+		typeof task?.completedAt === "string" && task.completedAt.trim()
+			? task.completedAt.trim()
+			: typeof task?.completed === "string" && task.completed.trim()
+				? task.completed.trim()
+				: "";
+	const startTime = hasOwn(task, "startTime")
+		? String(task?.startTime || "").trim()
+		: meta.startTime || "";
+	const endTime = hasOwn(task, "endTime")
+		? String(task?.endTime || "").trim()
+		: meta.endTime || "";
+	const dueDate = hasOwn(task, "dueDate")
+		? String(task?.dueDate || "").trim()
+		: hasOwn(task, "deadline")
+			? String(task?.deadline || "").trim()
+			: meta.dueDate || meta.deadline || task?.deadline || "";
+	const completedDates = hasOwn(task, "completedDates")
+		? normalizeCompletedDates(task?.completedDates || [])
+		: normalizeCompletedDates(meta.completedDates || task?.completedDates || []);
+
+	return {
+		id: task?.id,
+		taskListId: task?.taskListId || "@default",
+		title: task?.title || task?.text || "",
+		text: task?.title || task?.text || "",
+		date,
+		due: task?.due || (date ? toTaskDueIso(date) : null),
+		startTime: startTime || "",
+		endTime,
+		description,
+		completed: hasTaskRepeat(repeat) ? false : completed,
+		completedAt: hasTaskRepeat(repeat) ? "" : completedAt,
+		isFixed: !!meta.isFixed || !!task?.isFixed,
+		notes: task?.notes || "",
+		updated: task?.updated || null,
+		repeat,
+		dueDate,
+		completedDates,
+	};
+};
+
+const getProviderToken = async () =>
+	useAuthStore.getState().ensureProviderToken?.();
+
+const isGoogleAuthErrorMessage = (message = "") => {
+	const normalized = String(message || "").toLowerCase();
+	return (
+		normalized.includes("google oauth token required") ||
+		normalized.includes("insufficient") ||
+		normalized.includes("permission") ||
+		normalized.includes("autherror") ||
+		normalized.includes("unauthorized") ||
+		normalized.includes("access token") ||
+		normalized.includes("403") ||
+		normalized.includes("401")
+	);
+};
+
+const getGoogleSyncErrorMessage = (error, fallbackMessage) => {
+	const message = error?.message || fallbackMessage;
+	return isGoogleAuthErrorMessage(message)
+		? GOOGLE_SYNC_AUTH_ERROR
+		: message;
+};
+
+const parseEdgeResponse = async (response) => {
+	const text = await response.text().catch(() => "");
+	if (!text) return null;
+
+	try {
+		return JSON.parse(text);
+	} catch {
+		return text;
+	}
+};
+
+const invokeGoogleFunction = async (name, body) => {
+	if (!supabase || !SUPABASE_URL || !SUPABASE_ANON_KEY) return null;
+
+	const controller = new AbortController();
+	const timerId = window.setTimeout(() => controller.abort(), EDGE_TIMEOUT_MS);
+	try {
+		const response = await fetch(`${SUPABASE_URL}/functions/v1/${name}`, {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+				apikey: SUPABASE_ANON_KEY,
+				Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+			},
+			body: JSON.stringify(body),
+			signal: controller.signal,
+		});
+
+		const payload = await parseEdgeResponse(response);
+		if (!response.ok) {
+			const detail =
+				typeof payload === "string"
+					? payload
+					: payload?.error || payload?.message || JSON.stringify(payload || {});
+			throw new Error(`HTTP ${response.status}: ${detail}`);
+		}
+
+		return payload;
+	} catch (error) {
+		if (error?.name === "AbortError") {
+			throw new Error(`Edge function timeout after ${EDGE_TIMEOUT_MS}ms`);
+		}
+		throw error;
+	} finally {
+		window.clearTimeout(timerId);
+	}
+};
+
+const eventMatchesMonth = (event, monthKey) => {
+	if (!monthKey) return true;
+	return String(event?.date || "").slice(0, 7) === monthKey;
+};
 
 export const useGoogleCalendarStore = create((set, get) => ({
-	/* State */
-	events: [],
-	tasks: [],
+	events: readLocalEvents().map(normalizeEvent),
+	tasks: readLocalTasks().map(normalizeTask),
+	taskLists: [],
+	taskListsLoaded: false,
+	selectedTaskListFilter: normalizeTaskListFilterId(readTaskListFilter()),
 	selectedDate: null,
+	loadedMonthKey: null,
+	tasksLoaded: false,
 	loading: false,
 	error: null,
 	pinAuthenticated: false,
-	
-	/* Actions */
-	
-	/**
-	 * Set the selected date (NO filtering - store always has all data)
-	 * 
-	 * PHASE 14 FIX: Removed date-based fetching from setSelectedDate.
-	 * Data is now fetched once at app init with fetchEventsAndTasks().
-	 */
+
 	setSelectedDate: (dateStr) => {
 		set({ selectedDate: dateStr });
 	},
 
-	/**
-	 * Fetch ALL events and tasks (not filtered by date)
-	 * 
-	 * This loads the complete dataset so calendar dot indicators can show
-	 * whether any date has events/tasks without needing to select that date.
-	 * 
-	 * PHASE 14 FIX: Changed from date-specific fetching to loading all data upfront.
-	 * This ensures events/tasks dots are always visible on the calendar.
-	 */
-	fetchEventsAndTasks: async () => {
-		set({ loading: true, error: null });
-		
-		// Simulate network delay
-		await new Promise(resolve => setTimeout(resolve, 300));
-		
+	setSelectedTaskListFilter: (taskListFilterId) => {
+		const resolvedFilterId = resolveTaskListFilterId(
+			taskListFilterId,
+			get().taskLists.length > 0 ? get().taskLists : FALLBACK_TASK_LISTS,
+		);
+		writeTaskListFilter(resolvedFilterId);
+		set({ selectedTaskListFilter: resolvedFilterId });
+	},
+
+	fetchEvents: async (options = {}) => {
+		const { date = get().selectedDate || formatLocalDate(), force = false, skipLoading = false } =
+			options;
+		const { monthKey, timeMin, timeMax } = getMonthWindow(`${date}T00:00:00`);
+
+		if (!skipLoading) {
+			if (!force && get().loadedMonthKey === monthKey && get().events.length > 0) {
+				return get().events;
+			}
+			set({ loading: true, error: null });
+		}
+
 		try {
-			// Load ALL events and tasks (no date filtering)
-			// In production, this would call the backend API
-			set({
-				events: MOCK_EVENTS,
-				tasks: MOCK_TASKS,
-				loading: false,
-				error: null,
+			if (!supabase) {
+				const localEvents = readLocalEvents()
+					.map(normalizeEvent)
+					.filter((event) => eventMatchesMonth(event, monthKey));
+				set({ events: localEvents, loadedMonthKey: monthKey, error: null });
+				return localEvents;
+			}
+			const token = await getProviderToken();
+			if (!token) throw new Error(GOOGLE_SYNC_AUTH_ERROR);
+
+			const data = await invokeGoogleFunction("events", {
+				token,
+				action: "list",
+				timeMin,
+				timeMax,
 			});
+
+			const events = Array.isArray(data) ? data.map(normalizeEvent) : [];
+			set({ events, loadedMonthKey: monthKey, error: null });
+			writeLocalEvents(events);
+			return events;
 		} catch (err) {
+			const message = getGoogleSyncErrorMessage(
+				err,
+				"Failed to load calendar events.",
+			);
+			const cachedEvents = readLocalEvents()
+				.map(normalizeEvent)
+				.filter((event) => eventMatchesMonth(event, monthKey));
 			set({
-				error: err.message,
-				loading: false,
-				events: [],
-				tasks: [],
+				events: cachedEvents,
+				loadedMonthKey: monthKey,
+				error: message,
 			});
+			throw err;
+		} finally {
+			if (!skipLoading) {
+				set({ loading: false });
+			}
 		}
 	},
 
-	/**
-	 * Add a new event (Mock implementation)
-	 * 
-	 * When backend is ready, replace with:
-	 * const response = await fetch("/api/calendar/events", {
-	 *   method: "POST",
-	 *   headers: { "Content-Type": "application/json" },
-	 *   body: JSON.stringify(eventData),
-	 * });
-	 */
+	fetchTasks: async (options = {}) => {
+		const { skipLoading = false } = options;
+		if (!skipLoading) {
+			set({ loading: true, error: null });
+		}
+
+		try {
+			if (!supabase) {
+				const localTasks = readLocalTasks().map(normalizeTask);
+				set({ tasks: localTasks, tasksLoaded: true, error: null });
+				return localTasks;
+			}
+			const token = await getProviderToken();
+			if (!token) throw new Error(GOOGLE_SYNC_AUTH_ERROR);
+
+			const [listsData, data] = await Promise.all([
+				get().taskListsLoaded && hasRealTaskLists(get().taskLists)
+					? Promise.resolve(get().taskLists)
+					: invokeGoogleFunction("tasks", {
+						token,
+						action: "listTaskLists",
+					}).catch(() => FALLBACK_TASK_LISTS),
+				invokeGoogleFunction("tasks", {
+					token,
+					action: "list",
+					showCompleted: true,
+					showHidden: true,
+					allTaskLists: true,
+				}),
+			]);
+
+			const tasks = Array.isArray(data) ? data.map(normalizeTask) : [];
+			const taskLists = normalizeTaskListsPayload(listsData);
+			const selectedTaskListFilter = resolveTaskListFilterId(
+				get().selectedTaskListFilter,
+				taskLists,
+			);
+			writeTaskListFilter(selectedTaskListFilter);
+			set({
+				tasks,
+				tasksLoaded: true,
+				taskLists,
+				taskListsLoaded: true,
+				selectedTaskListFilter,
+				error: null,
+			});
+			writeLocalTasks(tasks);
+			return tasks;
+		} catch (err) {
+			const message = getGoogleSyncErrorMessage(
+				err,
+				"Failed to load Google Tasks.",
+			);
+			const cachedTasks = readLocalTasks().map(normalizeTask);
+			set({ tasks: cachedTasks, tasksLoaded: true, error: message });
+			throw err;
+		} finally {
+			if (!skipLoading) {
+				set({ loading: false });
+			}
+		}
+	},
+
+	fetchTaskLists: async () => {
+		if (get().taskListsLoaded && hasRealTaskLists(get().taskLists)) {
+			return get().taskLists;
+		}
+		try {
+			if (!supabase) {
+				const selectedTaskListFilter = resolveTaskListFilterId(
+					get().selectedTaskListFilter,
+					FALLBACK_TASK_LISTS,
+				);
+				writeTaskListFilter(selectedTaskListFilter);
+				set({
+					taskLists: FALLBACK_TASK_LISTS,
+					taskListsLoaded: true,
+					selectedTaskListFilter,
+				});
+				return FALLBACK_TASK_LISTS;
+			}
+			const token = await getProviderToken();
+			if (!token) {
+				const selectedTaskListFilter = resolveTaskListFilterId(
+					get().selectedTaskListFilter,
+					FALLBACK_TASK_LISTS,
+				);
+				writeTaskListFilter(selectedTaskListFilter);
+				set({
+					taskLists: FALLBACK_TASK_LISTS,
+					taskListsLoaded: true,
+					selectedTaskListFilter,
+				});
+				return FALLBACK_TASK_LISTS;
+			}
+			const data = await invokeGoogleFunction("tasks", {
+				token,
+				action: "listTaskLists",
+			});
+			const lists = normalizeTaskListsPayload(data);
+			const selectedTaskListFilter = resolveTaskListFilterId(
+				get().selectedTaskListFilter,
+				lists,
+			);
+			writeTaskListFilter(selectedTaskListFilter);
+			set({ taskLists: lists, taskListsLoaded: true, selectedTaskListFilter });
+			return lists;
+		} catch {
+			const selectedTaskListFilter = resolveTaskListFilterId(
+				get().selectedTaskListFilter,
+				FALLBACK_TASK_LISTS,
+			);
+			writeTaskListFilter(selectedTaskListFilter);
+			set({
+				taskLists: FALLBACK_TASK_LISTS,
+				taskListsLoaded: true,
+				selectedTaskListFilter,
+			});
+			return FALLBACK_TASK_LISTS;
+		}
+	},
+
+	createTaskList: async (title) => {
+		const trimmedTitle = String(title || "").trim();
+		if (!trimmedTitle) {
+			throw new Error("Task list title is required.");
+		}
+
+		set({ loading: true, error: null });
+		try {
+			let created = {
+				id: `list_${Date.now()}`,
+				title: trimmedTitle,
+				updated: new Date().toISOString(),
+			};
+
+			if (supabase) {
+				const token = await getProviderToken();
+				if (!token) throw new Error(GOOGLE_SYNC_AUTH_ERROR);
+				const data = await invokeGoogleFunction("tasks", {
+					token,
+					action: "createTaskList",
+					title: trimmedTitle,
+				});
+				created = {
+					id: String(data?.id || created.id).trim() || created.id,
+					title: String(data?.title || trimmedTitle).trim() || trimmedTitle,
+					updated: data?.updated || created.updated,
+				};
+			}
+
+			const existingTaskLists = Array.isArray(get().taskLists)
+				? get().taskLists.filter((list) => list?.id && list.id !== created.id)
+				: [];
+			const taskLists = [...existingTaskLists, created];
+			set({
+				taskLists,
+				taskListsLoaded: true,
+			});
+			return created;
+		} catch (err) {
+			set({
+				error: getGoogleSyncErrorMessage(err, "Failed to create task list."),
+			});
+			throw err;
+		} finally {
+			set({ loading: false });
+		}
+	},
+
+	fetchEventsAndTasks: async (options = {}) => {
+		const { date = get().selectedDate || formatLocalDate(), force = false } = options;
+		const { monthKey } = getMonthWindow(`${date}T00:00:00`);
+
+		if (!force && get().loadedMonthKey === monthKey && get().tasksLoaded) {
+			return { events: get().events, tasks: get().tasks };
+		}
+
+		set({ loading: true, error: null });
+		try {
+			const [events, tasks] = await Promise.all([
+				get().fetchEvents({ date, force, skipLoading: true }),
+				get().fetchTasks({ skipLoading: true }),
+			]);
+			return { events, tasks };
+		} catch (err) {
+			set({ error: err?.message || "Failed to load calendar data." });
+			throw err;
+		} finally {
+			set({ loading: false });
+		}
+	},
+
+	readEvent: async (eventId) => {
+		if (!eventId) return null;
+
+		try {
+			if (!supabase) {
+				const localEvent = readLocalEvents()
+					.map(normalizeEvent)
+					.find((event) => event.id === eventId);
+				return localEvent || null;
+			}
+
+			const token = await getProviderToken();
+			if (!token) throw new Error(GOOGLE_SYNC_AUTH_ERROR);
+
+			const data = await invokeGoogleFunction("events", {
+				token,
+				action: "read",
+				eventId,
+			});
+			return data ? normalizeEvent(data) : null;
+		} catch (err) {
+			set({
+				error: getGoogleSyncErrorMessage(err, "Failed to load event details."),
+			});
+			throw err;
+		}
+	},
+
 	addEvent: async (eventData) => {
 		set({ loading: true, error: null });
 		try {
-			// Simulate network delay
-			await new Promise(resolve => setTimeout(resolve, 200));
-			
-			const newEvent = {
-				id: `evt_${Date.now()}`,
+			const normalizedEvent = normalizeEvent({
 				...eventData,
-			};
-			
-			set((state) => ({
-				events: [...state.events, newEvent],
-				loading: false,
-			}));
-			return newEvent;
+				recurrence:
+					eventData?.recurrence ||
+					buildEventRecurrence(eventData?.repeat, eventData?.date),
+			});
+
+			let created = normalizedEvent;
+			if (supabase) {
+				const token = await getProviderToken();
+				if (!token) throw new Error(GOOGLE_SYNC_AUTH_ERROR);
+				const data = await invokeGoogleFunction("events", {
+					token,
+					action: "create",
+					...normalizedEvent,
+					timeZone: getLocalTimeZone(),
+				});
+				created = normalizeEvent(data);
+				await get().fetchEvents({
+					date: normalizedEvent.date || get().selectedDate || formatLocalDate(),
+					force: true,
+					skipLoading: true,
+				});
+			} else {
+				created = {
+					...normalizedEvent,
+					id: `evt_${Date.now()}`,
+					start:
+						normalizedEvent.start ||
+						(normalizedEvent.date && normalizedEvent.startTime
+							? toLocalDateTimeIso(normalizedEvent.date, normalizedEvent.startTime)
+							: normalizedEvent.date),
+					end:
+						normalizedEvent.end ||
+						(normalizedEvent.date && normalizedEvent.endTime
+							? toLocalDateTimeIso(normalizedEvent.date, normalizedEvent.endTime)
+							: normalizedEvent.date),
+				};
+			}
+
+			if (!supabase) {
+				const allLocalEvents = [
+					...readLocalEvents().filter((event) => event.id !== created.id),
+					created,
+				];
+				writeLocalEvents(allLocalEvents);
+				set((state) => ({
+					events: [...state.events.filter((event) => event.id !== created.id), created],
+				}));
+			}
+			return created;
 		} catch (err) {
 			set({
-				error: err.message,
-				loading: false,
+				error: getGoogleSyncErrorMessage(err, "Failed to create event."),
 			});
 			throw err;
+		} finally {
+			set({ loading: false });
 		}
 	},
 
-	/**
-	 * Add a new task (Mock implementation)
-	 */
-	addTask: async (taskData) => {
-		set({ loading: true, error: null });
-		try {
-			// Simulate network delay
-			await new Promise(resolve => setTimeout(resolve, 200));
-			
-			const newTask = {
-				id: `task_${Date.now()}`,
-				...taskData,
-				completed: false,
-			};
-			
-			set((state) => ({
-				tasks: [...state.tasks, newTask],
-				loading: false,
-			}));
-			return newTask;
-		} catch (err) {
-			set({
-				error: err.message,
-				loading: false,
-			});
-			throw err;
-		}
-	},
-
-	/**
-	 * Update an existing event (Mock implementation)
-	 */
 	updateEvent: async (eventId, updates) => {
 		set({ loading: true, error: null });
 		try {
-			// Simulate network delay
-			await new Promise(resolve => setTimeout(resolve, 200));
-			
-			set((state) => ({
-				events: state.events.map((e) =>
-					e.id === eventId ? { ...e, ...updates } : e
-				),
-				loading: false,
-			}));
+			const current = get().events.find((event) => event.id === eventId);
+			const merged = normalizeEvent({
+				...(current || {}),
+				...(updates || {}),
+				id: eventId,
+				recurrence:
+					updates?.recurrence ||
+					buildEventRecurrence(
+						updates?.repeat !== undefined ? updates.repeat : current?.repeat,
+						updates?.date || current?.date,
+					),
+			});
+
+			let updated = merged;
+			if (supabase) {
+				const token = await getProviderToken();
+				if (!token) throw new Error(GOOGLE_SYNC_AUTH_ERROR);
+				const data = await invokeGoogleFunction("events", {
+					token,
+					action: "update",
+					eventId,
+					...merged,
+					timeZone: getLocalTimeZone(),
+				});
+				updated = normalizeEvent(data);
+				await get().fetchEvents({
+					date: merged.date || get().selectedDate || formatLocalDate(),
+					force: true,
+					skipLoading: true,
+				});
+			}
+
+			if (!supabase) {
+				const allLocalEvents = readLocalEvents()
+					.map(normalizeEvent)
+					.filter((event) => event.id !== eventId)
+					.concat(updated);
+				writeLocalEvents(allLocalEvents);
+				set((state) => ({
+					events: state.events.map((event) =>
+						event.id === eventId ? updated : event,
+					),
+				}));
+			}
+			return updated;
 		} catch (err) {
 			set({
-				error: err.message,
-				loading: false,
+				error: getGoogleSyncErrorMessage(err, "Failed to update event."),
 			});
 			throw err;
+		} finally {
+			set({ loading: false });
 		}
 	},
 
-	/**
-	 * Update an existing task (Mock implementation)
-	 */
-	updateTask: async (taskId, updates) => {
-		set({ loading: true, error: null });
-		try {
-			// Simulate network delay
-			await new Promise(resolve => setTimeout(resolve, 200));
-			
-			set((state) => ({
-				tasks: state.tasks.map((t) =>
-					t.id === taskId ? { ...t, ...updates } : t
-				),
-				loading: false,
-			}));
-		} catch (err) {
-			set({
-				error: err.message,
-				loading: false,
-			});
-			throw err;
-		}
-	},
-
-	/**
-	 * Delete an event (Mock implementation)
-	 */
 	deleteEvent: async (eventId) => {
 		set({ loading: true, error: null });
 		try {
-			// Simulate network delay
-			await new Promise(resolve => setTimeout(resolve, 200));
-			
-			set((state) => ({
-				events: state.events.filter((e) => e.id !== eventId),
-				loading: false,
-			}));
+			const current = get().events.find((event) => event.id === eventId);
+			if (supabase) {
+				const token = await getProviderToken();
+				if (!token) throw new Error(GOOGLE_SYNC_AUTH_ERROR);
+				await invokeGoogleFunction("events", {
+					token,
+					action: "delete",
+					eventId,
+				});
+				await get().fetchEvents({
+					date: current?.date || get().selectedDate || formatLocalDate(),
+					force: true,
+					skipLoading: true,
+				});
+			}
+
+			if (!supabase) {
+				const nextLocalEvents = readLocalEvents()
+					.map(normalizeEvent)
+					.filter((event) => event.id !== eventId);
+				writeLocalEvents(nextLocalEvents);
+				set((state) => ({
+					events: state.events.filter((event) => event.id !== eventId),
+				}));
+			}
 		} catch (err) {
 			set({
-				error: err.message,
-				loading: false,
+				error: getGoogleSyncErrorMessage(err, "Failed to delete event."),
 			});
 			throw err;
+		} finally {
+			set({ loading: false });
 		}
 	},
 
-	/**
-	 * Delete a task (Mock implementation)
-	 */
+	addTask: async (taskData) => {
+		set({ loading: true, error: null });
+		try {
+			const repeat = taskData.repeat ?? null;
+			const normalizedTask = normalizeTask({
+				...taskData,
+				repeat,
+				dueDate: taskData.dueDate ?? taskData.deadline ?? "",
+				completedDates:
+					hasTaskRepeat(repeat) && Array.isArray(taskData.completedDates)
+						? taskData.completedDates
+						: [],
+			});
+			const taskListId = taskData.taskListId || normalizedTask.taskListId || "@default";
+			const payload = {
+				title: normalizedTask.title,
+				notes: buildTaskNotes(normalizedTask),
+				due: toTaskDueIso(normalizedTask.date || formatLocalDate()),
+				status:
+					hasTaskRepeat(normalizedTask.repeat)
+						? "needsAction"
+						: normalizedTask.completed
+							? "completed"
+							: "needsAction",
+				completed:
+					hasTaskRepeat(normalizedTask.repeat) || !normalizedTask.completed
+						? null
+						: normalizedTask.completedAt || toTaskCompletedIso(),
+			};
+
+			let created = {
+				...normalizedTask,
+				id: `task_${Date.now()}`,
+				due: payload.due,
+				taskListId,
+			};
+
+			if (supabase) {
+				const token = await getProviderToken();
+				if (!token) throw new Error(GOOGLE_SYNC_AUTH_ERROR);
+				const data = await invokeGoogleFunction("tasks", {
+					token,
+					action: "create",
+					taskListId,
+					...payload,
+				});
+				created = normalizeTask({
+					...normalizedTask,
+					...data,
+					taskListId,
+					notes: data?.notes ?? payload.notes,
+					due: data?.due ?? payload.due,
+					status: data?.status ?? payload.status,
+					completedAt: data?.completedAt ?? data?.completed ?? payload.completed,
+				});
+			}
+
+			const nextTasks = [
+				...readLocalTasks().map(normalizeTask).filter((task) => task.id !== created.id),
+				created,
+			];
+			writeLocalTasks(nextTasks);
+			set((state) => ({
+				tasks: [...state.tasks.filter((task) => task.id !== created.id), created],
+			}));
+			return created;
+		} catch (err) {
+			set({
+				error: getGoogleSyncErrorMessage(err, "Failed to create task."),
+			});
+			throw err;
+		} finally {
+			set({ loading: false });
+		}
+	},
+
+	updateTask: async (taskId, updates) => {
+		set({ loading: true, error: null });
+		try {
+			const current = get().tasks.find((task) => task.id === taskId);
+			const mergedRaw = { ...(current || {}), ...(updates || {}), id: taskId };
+			const nextRepeat =
+				updates?.repeat !== undefined ? updates.repeat : (current?.repeat ?? null);
+			const isRepeatingTask = hasTaskRepeat(nextRepeat);
+			const occurrenceDate =
+				String(
+					updates?.occurrenceDate ||
+						current?.occurrenceDate ||
+						mergedRaw?.occurrenceDate ||
+						mergedRaw?.date ||
+						current?.date ||
+						"",
+				).trim() || "";
+			const completedDatesSet = new Set(
+				normalizeCompletedDates(
+					updates?.completedDates !== undefined
+						? updates.completedDates
+						: current?.completedDates ?? mergedRaw?.completedDates ?? [],
+				),
+			);
+
+			if (isRepeatingTask && updates?.completed !== undefined && occurrenceDate) {
+				if (updates.completed) completedDatesSet.add(occurrenceDate);
+				else completedDatesSet.delete(occurrenceDate);
+			}
+
+			const merged = normalizeTask({
+				...mergedRaw,
+				completed:
+					isRepeatingTask
+						? false
+						: updates?.completed !== undefined
+							? updates.completed
+							: current?.completed ?? false,
+				completedAt:
+					isRepeatingTask
+						? ""
+						: updates?.completed !== undefined
+							? updates.completed
+								? current?.completedAt || toTaskCompletedIso()
+								: ""
+							: current?.completedAt || mergedRaw?.completedAt || "",
+				repeat: nextRepeat,
+				dueDate:
+					updates?.dueDate !== undefined
+						? updates.dueDate
+						: updates?.deadline !== undefined
+							? updates.deadline
+							: (current?.dueDate ?? current?.deadline ?? ""),
+				completedDates: isRepeatingTask ? [...completedDatesSet] : [],
+			});
+			const taskListId = updates?.taskListId || current?.taskListId || merged.taskListId || "@default";
+			const currentTaskListId =
+				current?.taskListId || merged.taskListId || "@default";
+			const payload = {
+				title: merged.title,
+				notes: buildTaskNotes(merged),
+				due: toTaskDueIso(merged.date || formatLocalDate()),
+				status:
+					hasTaskRepeat(merged.repeat)
+						? "needsAction"
+						: merged.completed
+							? "completed"
+							: "needsAction",
+				completed:
+					hasTaskRepeat(merged.repeat) || !merged.completed
+						? null
+						: merged.completedAt || toTaskCompletedIso(),
+			};
+
+			let updated = { ...merged, due: payload.due, taskListId };
+			if (supabase) {
+				const token = await getProviderToken();
+				if (!token) throw new Error(GOOGLE_SYNC_AUTH_ERROR);
+				if (currentTaskListId !== taskListId) {
+					await invokeGoogleFunction("tasks", {
+						token,
+						action: "move",
+						taskId,
+						sourceTaskListId: currentTaskListId,
+						destinationTaskListId: taskListId,
+					});
+				}
+				const data = await invokeGoogleFunction("tasks", {
+					token,
+					action: "update",
+					taskId,
+					taskListId,
+					...payload,
+				});
+				updated = normalizeTask({
+					...merged,
+					...data,
+					taskListId,
+					notes: data?.notes ?? payload.notes,
+					due: data?.due ?? payload.due,
+					status: data?.status ?? payload.status,
+					completedAt: data?.completedAt ?? data?.completed ?? payload.completed,
+				});
+			}
+
+			const nextLocalTasks = readLocalTasks()
+				.map(normalizeTask)
+				.filter((task) => task.id !== taskId)
+				.concat(updated);
+			writeLocalTasks(nextLocalTasks);
+			set((state) => ({
+				tasks: state.tasks.map((task) => (task.id === taskId ? updated : task)),
+			}));
+			return updated;
+		} catch (err) {
+			set({
+				error: getGoogleSyncErrorMessage(err, "Failed to update task."),
+			});
+			throw err;
+		} finally {
+			set({ loading: false });
+		}
+	},
+
 	deleteTask: async (taskId) => {
 		set({ loading: true, error: null });
 		try {
-			// Simulate network delay
-			await new Promise(resolve => setTimeout(resolve, 200));
-			
+			const current = get().tasks.find((task) => task.id === taskId);
+
+			if (supabase) {
+				const token = await getProviderToken();
+				if (!token) throw new Error(GOOGLE_SYNC_AUTH_ERROR);
+				await invokeGoogleFunction("tasks", {
+					token,
+					action: "delete",
+					taskId,
+					taskListId: current?.taskListId || "@default",
+				});
+			}
+
+			const nextLocalTasks = readLocalTasks()
+				.map(normalizeTask)
+				.filter((task) => task.id !== taskId);
+			writeLocalTasks(nextLocalTasks);
 			set((state) => ({
-				tasks: state.tasks.filter((t) => t.id !== taskId),
-				loading: false,
+				tasks: state.tasks.filter((task) => task.id !== taskId),
 			}));
 		} catch (err) {
 			set({
-				error: err.message,
-				loading: false,
+				error: getGoogleSyncErrorMessage(err, "Failed to delete task."),
 			});
 			throw err;
+		} finally {
+			set({ loading: false });
 		}
 	},
 
-	/**
-	 * Clear all events and tasks
-	 */
 	clearData: () => {
+		writeLocalEvents([]);
+		writeLocalTasks([]);
 		set({
 			events: [],
 			tasks: [],
+			taskLists: [],
+			selectedTaskListFilter: ALL_TASK_LIST_FILTER_ID,
 			selectedDate: null,
+			loadedMonthKey: null,
+			tasksLoaded: false,
+			taskListsLoaded: false,
 			error: null,
 		});
+		writeTaskListFilter(ALL_TASK_LIST_FILTER_ID);
 	},
 
-	/**
-	 * Set PIN authenticated state
-	 */
 	setPinAuthenticated: (isAuthenticated) => {
 		set({ pinAuthenticated: isAuthenticated });
 	},

@@ -4,9 +4,9 @@ import { load, save } from "../utils/storage";
 import { supabase } from "../lib/supabase";
 import { generateSmartWidgetData } from "../services/aiService";
 import { useAuthStore } from "./useAuthStore";
-import { useDataStore } from "./useDataStore";
 import { DEFAULT_VIS, DEFAULT_LAYOUTS, WIDGET_LIST } from "../constants";
 import i18n from "../l10n/i18n";
+import { buildPersonaContext } from "../utils/personaContext";
 
 const LAYOUT_VERSION = 14;
 const BUILTIN_IDS = new Set(WIDGET_LIST.map((w) => w.id));
@@ -137,17 +137,9 @@ export const useWidgetStore = create((set, get) => ({
 
 		try {
 			const authState = useAuthStore.getState();
-			const dataState = useDataStore.getState();
 			const providerToken = await authState.ensureProviderToken?.();
 			const data = await generateSmartWidgetData(kw, {
-				persona: {
-					persona:
-						authState.persona ?? dataState.onboardingProfile?.persona ?? null,
-					age: dataState.onboardingProfile?.age ?? null,
-					interests:
-						dataState.onboardingProfile?.interests ?? authState.selCats ?? [],
-					job: null,
-				},
+				persona: buildPersonaContext(),
 				token: providerToken ?? authState.providerToken ?? null,
 			});
 			if (!data) throw new Error("No smart widget data returned");

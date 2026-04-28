@@ -7,12 +7,12 @@ import { useTheme } from "../../hooks/useTheme";
 import { useSettingsStore } from "../../store/useSettingsStore";
 import { useDataStore } from "../../store/useDataStore";
 import { useTodoStore } from "../../store/useTodoStore";
-import { useDiaryStore } from "../../store/useDiaryStore";
 import {
 	generateDetailedBriefing,
 	getTimeGreeting,
 } from "../../services/aiService";
 import { mockBriefings } from "../../mock/data";
+import { buildPersonaContext } from "../../utils/personaContext";
 
 /** 스켈레톤 라인 컴포넌트 */
 const SkeletonLine = ({ width = "100%" }) => (
@@ -61,14 +61,6 @@ const BriefingWidget = () => {
 	// activeWidgetIds는 useDataStore에서 세팅됨 (fetchAll → set activeWidgetIds)
 	const activeWidgetIds = useDataStore((s) => s.activeWidgetIds) || [];
 	const todos = useTodoStore((s) => s.todos);
-
-	const getDiary = useDiaryStore((s) => s.getDiary);
-	const yesterdayMemo = useMemo(() => {
-		const yesterday = new Date();
-		yesterday.setDate(yesterday.getDate() - 1);
-		const dateStr = yesterday.toISOString().slice(0, 10);
-		return getDiary(dateStr)?.memo || "";
-	}, [getDiary]);
 
 	// Store briefings for all lengths: { short: {...}, medium: {...}, long: {...} }
 	const [briefingVersions, setBriefingVersions] = useState({
@@ -128,7 +120,7 @@ const BriefingWidget = () => {
 				calEvents,
 				todos,
 				activeWidgetIds,
-				yesterdayMemo,
+				persona: buildPersonaContext({ includeMemo: false }),
 			};
 
 			// Generate all three versions in parallel
@@ -366,12 +358,6 @@ const BriefingWidget = () => {
 					)}
 				</div>
 
-				{yesterdayMemo && (
-					<p className={`mt-3 text-[10px] ${muted}`}>
-						{t("briefing.yesterday_memo_applied")}
-					</p>
-				)}
-
 				<p className={`mt-4 text-[10px] ${muted} text-center`}>
 					{t("briefing.click_for_detail")}
 				</p>
@@ -500,20 +486,6 @@ const BriefingWidget = () => {
 											</motion.div>
 										)}
 									</AnimatePresence>
-
-									{yesterdayMemo && (
-										<div
-											className={`mt-4 p-3 rounded-lg ${
-												isDark
-													? "bg-morning-dark-cardSecondary"
-													: "bg-morning-light-hover/10"
-											}`}
-										>
-											<p className={`text-xs ${muted}`}>
-												{t("briefing.yesterday_memo_applied")}
-											</p>
-										</div>
-									)}
 
 									{lastGenerated && (
 										<p className={`text-[10px] ${muted} text-right`}>

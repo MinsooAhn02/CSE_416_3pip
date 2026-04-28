@@ -4,6 +4,7 @@ import { useTheme } from "../../hooks/useTheme";
 import { useSettingsStore } from "../../store/useSettingsStore";
 import { useWidgetStore } from "../../store/useWidgetStore";
 import { useDataStore } from "../../store/useDataStore";
+import { useDiaryStore } from "../../store/useDiaryStore";
 import { DEFAULT_PRIORITY_ORDER } from "../../constants";
 
 import BriefingWidget from "../widgets/BriefingWidget";
@@ -32,6 +33,8 @@ const SmartWidget = ({ keyword }) => <SmartWidgetContent keyword={keyword} />;
 
 const EDGE_HOVER_THRESHOLD = 24;
 const EDGE_HOVER_COOLDOWN_MS = 650;
+const WHEEL_PANEL_THRESHOLD = 32;
+const WHEEL_NAV_COOLDOWN_MS = 420;
 
 const chunkArray = (items, size) => {
 	if (!Array.isArray(items) || items.length === 0) return [];
@@ -65,11 +68,14 @@ const DashboardLayout = () => {
 	const trendsResults = useDataStore((s) => s.trendsResults);
 	const newsResults = useDataStore((s) => s.newsResults);
 	const stocks = useDataStore((s) => s.stocks);
+	const pinModalVisible = useDiaryStore((s) => s.pinModalVisible);
 	const priorityOrder =
 		useSettingsStore((s) => s.priorityOrder) || DEFAULT_PRIORITY_ORDER;
 	const [activePanel, setActivePanel] = useState(0);
 	const [cardsPerView, setCardsPerView] = useState(2);
 	const lastEdgeTriggerAt = useRef(0);
+	const lastWheelTriggerAt = useRef(0);
+	const suppressEdgeHoverUntil = useRef(0);
 
 	const expandedWidgetOrder = useMemo(() => {
 		const normalized = [];
@@ -220,6 +226,7 @@ const DashboardLayout = () => {
 	const handleWindowEdgeHover = useCallback(
 		(event) => {
 			const now = Date.now();
+			if (now < suppressEdgeHoverUntil.current) return;
 			if (now - lastEdgeTriggerAt.current < EDGE_HOVER_COOLDOWN_MS) return;
 
 			const cursorX = event.clientX;
@@ -246,6 +253,43 @@ const DashboardLayout = () => {
 		return () => window.removeEventListener("mousemove", handleWindowEdgeHover);
 	}, [handleWindowEdgeHover]);
 
+	const handleDeckWheel = useCallback(
+		(event) => {
+			const interactiveTarget = event.target?.closest?.(
+				"input, textarea, select, [contenteditable='true']",
+			);
+			if (interactiveTarget) return;
+
+			const horizontalIntent = event.shiftKey ? event.deltaY : event.deltaX;
+			if (Math.abs(horizontalIntent) < WHEEL_PANEL_THRESHOLD) return;
+
+			const now = Date.now();
+			if (now - lastEdgeTriggerAt.current < EDGE_HOVER_COOLDOWN_MS) {
+				event.preventDefault();
+				return;
+			}
+			if (now - lastWheelTriggerAt.current < WHEEL_NAV_COOLDOWN_MS) {
+				event.preventDefault();
+				return;
+			}
+
+			const direction = horizontalIntent > 0 ? 1 : -1;
+			const canMoveLeft = direction < 0 && activePanel > 0;
+			const canMoveRight = direction > 0 && activePanel < totalPanels - 1;
+
+			if (!canMoveLeft && !canMoveRight) {
+				event.preventDefault();
+				return;
+			}
+
+			lastWheelTriggerAt.current = now;
+			suppressEdgeHoverUntil.current = now + EDGE_HOVER_COOLDOWN_MS;
+			event.preventDefault();
+			movePanel(direction);
+		},
+		[activePanel, movePanel, totalPanels],
+	);
+
 	const dotCount = totalPanels;
 	const slideTranslate = activePanel * (100 / cardsPerView);
 	const cardBasis = `${100 / cardsPerView}%`;
@@ -260,44 +304,47 @@ const DashboardLayout = () => {
 				<section
 					className="relative min-h-0 pb-3 xl:col-start-3"
 					data-widget-overlay-host="true"
+					onWheel={handleDeckWheel}
 				>
-					<div className="absolute -top-11 right-2 z-20 flex items-center gap-2 xl:-top-12">
-						<button
-							type="button"
-							onClick={() => movePanel(-1)}
-							disabled={activePanel === 0}
-							className={`h-9 w-9 rounded-full border flex items-center justify-center transition-all ${
-								activePanel === 0
-									? "cursor-not-allowed opacity-40"
-									: "opacity-90 hover:opacity-100"
-							} ${
-								isDark
-									? `bg-morning-dark-card ${borderCls}`
-									: "bg-white border-gray-200"
-							}`}
-							aria-label="Previous widget panel"
-						>
-							<ChevronLeft size={16} />
-						</button>
+					{!pinModalVisible && (
+						<div className="absolute -top-11 right-2 z-20 flex items-center gap-2 xl:-top-12">
+							<button
+								type="button"
+								onClick={() => movePanel(-1)}
+								disabled={activePanel === 0}
+								className={`h-9 w-9 rounded-full border flex items-center justify-center transition-all ${
+									activePanel === 0
+										? "cursor-not-allowed opacity-40"
+										: "opacity-90 hover:opacity-100"
+								} ${
+									isDark
+										? `bg-morning-dark-card ${borderCls}`
+										: "bg-white border-gray-200"
+								}`}
+								aria-label="Previous widget panel"
+							>
+								<ChevronLeft size={16} />
+							</button>
 
-						<button
-							type="button"
-							onClick={() => movePanel(1)}
-							disabled={activePanel === totalPanels - 1}
-							className={`h-9 w-9 rounded-full border flex items-center justify-center transition-all ${
-								activePanel === totalPanels - 1
-									? "cursor-not-allowed opacity-40"
-									: "opacity-90 hover:opacity-100"
-							} ${
-								isDark
-									? `bg-morning-dark-card ${borderCls}`
-									: "bg-white border-gray-200"
-							}`}
-							aria-label="Next widget panel"
-						>
-							<ChevronRight size={16} />
-						</button>
-					</div>
+							<button
+								type="button"
+								onClick={() => movePanel(1)}
+								disabled={activePanel === totalPanels - 1}
+								className={`h-9 w-9 rounded-full border flex items-center justify-center transition-all ${
+									activePanel === totalPanels - 1
+										? "cursor-not-allowed opacity-40"
+										: "opacity-90 hover:opacity-100"
+								} ${
+									isDark
+										? `bg-morning-dark-card ${borderCls}`
+										: "bg-white border-gray-200"
+								}`}
+								aria-label="Next widget panel"
+							>
+								<ChevronRight size={16} />
+							</button>
+						</div>
+					)}
 
 					<div className="overflow-hidden pt-1 pb-2">
 						<div

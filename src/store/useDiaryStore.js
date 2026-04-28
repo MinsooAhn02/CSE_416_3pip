@@ -1,68 +1,134 @@
 import { create } from "zustand";
 import { load, save } from "../utils/storage";
 import { supabase } from "../lib/supabase";
-
-/**
- * useDiaryStore — 일기/메모/다이어리 답변 상태 관리
- *
- * entries: { [date]: { diary: string, memo: string } }
- * diaryAnswers: { [date]: string[] }  ← DiaryCard에서 이동
- * wasActiveToday: boolean ← 오늘 접속했는지 플래그
- */
+import { formatLocalDate, parseDateString } from "../utils/date";
+import {
+	DEFAULT_PIN_LOCK_MODE,
+	getPinLockTimeoutMs,
+	useSettingsStore,
+} from "./useSettingsStore";
 
 const STORAGE_KEY = "mb_diary_entries";
 const ANSWERS_KEY = "mb_diary_answers";
 const ACTIVE_KEY = "mb_last_access_date";
-const PIN_KEY = "mb_diary_pin"; // 4-digit PIN stored locally
-const PIN_AUTH_SESSION_KEY = "mb_diary_pin_auth"; // Session-based PIN auth state
+const PIN_KEY = "mb_diary_pin";
+const PIN_AUTH_SESSION_KEY = "mb_diary_pin_auth";
+const PIN_AUTH_EXPIRES_AT_KEY = "mb_diary_pin_auth_expires_at";
 
-const todayStr = () => new Date().toISOString().slice(0, 10);
+const todayStr = () => formatLocalDate();
 
-/**
- * REFINEMENT #6: Mock Diary Data for Testing
- * Provides realistic diary entries for specific dates to test:
- * - Locked/unlocked UI states
- * - Conditional rendering when diary exists
- * - Empty state handling when diary is missing
- */
-const MOCK_DIARY_ENTRIES = {
-	"2026-03-27": { // Today
-		diary: "Today was quite productive. I managed to complete all the calendar refinements and UI improvements. The team's feedback on the conditional diary layout was very positive. Looking forward to testing with users tomorrow.",
-		memo: "Remember to send the refined UI screenshots to stakeholders for final approval."
-	},
-	"2026-03-26": { // Yesterday
-		diary: "A good day for feature development. Implemented the save buttons for Events and Tasks panels. The clean lock UI looks much better without the blur effect. Testing the new date highlighting revealed some edge cases we need to handle.",
-		memo: "Follow up with backend team about Google Calendar API implementation timeline."
-	},
-	"2026-03-25": { // 2 days ago
-		diary: "Started working on the conditional diary panel feature. When there's no diary entry, the Events and Tasks panels should expand to fill the full width. This is a significant UX improvement. Also began addressing the clipping issues with the Add buttons.",
-		memo: "Test the 2-column layout thoroughly on mobile and tablet screens."
-	},
+const getEntryNotes = (entry = {}) =>
+	String(entry.notes || entry.memo || "").trim();
+
+const getPinLockMode = () =>
+	useSettingsStore.getState().pinLockMode || DEFAULT_PIN_LOCK_MODE;
+
+const parseStoredExpiry = (value) => {
+	if (typeof value === "number" && Number.isFinite(value)) return value;
+	if (typeof value === "string" && value.trim()) {
+		const parsed = Number(value);
+		return Number.isFinite(parsed) ? parsed : null;
+	}
+	return null;
 };
 
-/**
- * Load diary entries: merge mock data with stored data (stored data takes precedence)
- */
+const getStoredPinExpiry = () =>
+	parseStoredExpiry(load(PIN_AUTH_EXPIRES_AT_KEY, null));
+
+const isPinExpiryValid = (expiresAt) =>
+	typeof expiresAt === "number" && expiresAt > Date.now();
+
+const clearPersistedPinSession = () => {
+	save(PIN_AUTH_SESSION_KEY, false);
+	save(PIN_AUTH_EXPIRES_AT_KEY, null);
+};
+
+const getInitialPinSessionState = () => {
+	const pinLockMode = getPinLockMode();
+
+	if (pinLockMode === "off") {
+		clearPersistedPinSession();
+		return { isPinAuthenticated: true, pinAuthExpiresAt: null };
+	}
+
+	if (pinLockMode === "immediate") {
+		clearPersistedPinSession();
+		return { isPinAuthenticated: false, pinAuthExpiresAt: null };
+	}
+
+	const expiresAt = getStoredPinExpiry();
+	if (isPinExpiryValid(expiresAt)) {
+		return { isPinAuthenticated: true, pinAuthExpiresAt: expiresAt };
+	}
+
+	clearPersistedPinSession();
+	return { isPinAuthenticated: false, pinAuthExpiresAt: null };
+};
+
+const normalizeEntry = (entry = {}) => {
+	const aiGeneratedDiary =
+		entry.aiGeneratedDiary || entry.ai_generated_diary || entry.diary || "";
+	const editedDiary = entry.editedDiary || entry.edited_diary || "";
+	const diary = editedDiary || aiGeneratedDiary || "";
+
+	return {
+		diary,
+		aiGeneratedDiary,
+		editedDiary,
+		notes: getEntryNotes(entry),
+		memo: getEntryNotes(entry),
+	};
+};
+
+const MOCK_DIARY_ENTRIES = {
+	"2026-03-27": normalizeEntry({
+		diary:
+			"Today was quite productive. I managed to complete all the calendar refinements and UI improvements. The team's feedback on the conditional diary layout was very positive. Looking forward to testing with users tomorrow.",
+		memo: "Remember to send the refined UI screenshots to stakeholders for final approval.",
+	}),
+	"2026-03-26": normalizeEntry({
+		diary:
+			"A good day for feature development. Implemented the save buttons for Events and Tasks panels. The clean lock UI looks much better without the blur effect. Testing the new date highlighting revealed some edge cases we need to handle.",
+		memo: "Follow up with backend team about Google Calendar API implementation timeline.",
+	}),
+	"2026-03-25": normalizeEntry({
+		diary:
+			"Started working on the conditional diary panel feature. When there's no diary entry, the Events and Tasks panels should expand to fill the full width. This is a significant UX improvement. Also began addressing the clipping issues with the Add buttons.",
+		memo: "Test the 2-column layout thoroughly on mobile and tablet screens.",
+	}),
+};
+
 const getInitialEntries = () => {
 	const storedEntries = load(STORAGE_KEY, {});
-	return { ...MOCK_DIARY_ENTRIES, ...storedEntries }; // Stored entries override mock
+	const mergedEntries = { ...MOCK_DIARY_ENTRIES, ...storedEntries };
+
+	return Object.fromEntries(
+		Object.entries(mergedEntries).map(([dateStr, entry]) => [
+			dateStr,
+			normalizeEntry(entry),
+		]),
+	);
 };
 
-export const useDiaryStore = create((set, get) => ({
-	/* ── 상태 ── */
-	entries: getInitialEntries(),                // { "2026-03-18": { diary: "...", memo: "..." } }
-	diaryAnswers: load(ANSWERS_KEY, {}),        // { "2026-03-18": ["답변1", "답변2"] }
-	wasActiveToday: load(ACTIVE_KEY, "") === todayStr(),
-	
-	/* ── PIN Authentication State ── */
-	pinSet: !!load(PIN_KEY, null),              // Whether a PIN has been set by user
-	isPinAuthenticated: load(PIN_AUTH_SESSION_KEY, false), // Session-based auth state
+const saveEntriesLocally = (entries) => {
+	save(STORAGE_KEY, entries);
+	return entries;
+};
 
-	/* ── PIN Management ── */
-	/**
-	 * Initialize PIN on first use (or reset)
-	 * @param {string} pin - 4-digit PIN
-	 */
+const initialPinSessionState = getInitialPinSessionState();
+
+export const useDiaryStore = create((set, get) => ({
+	entries: getInitialEntries(),
+	diaryAnswers: load(ANSWERS_KEY, {}),
+	wasActiveToday: load(ACTIVE_KEY, "") === todayStr(),
+	pinModalVisible: false,
+
+	pinSet: !!load(PIN_KEY, null),
+	isPinAuthenticated: initialPinSessionState.isPinAuthenticated,
+	pinAuthExpiresAt: initialPinSessionState.pinAuthExpiresAt,
+
+	setPinModalVisible: (visible) => set({ pinModalVisible: visible }),
+
 	setPIN: (pin) => {
 		if (!/^\d{4}$/.test(pin)) {
 			throw new Error("PIN must be exactly 4 digits");
@@ -71,144 +137,309 @@ export const useDiaryStore = create((set, get) => ({
 		set({ pinSet: true });
 	},
 
-	/**
-	 * Verify PIN and authenticate user
-	 * @param {string} pin - 4-digit PIN to verify
-	 * @returns {boolean} - true if PIN is correct
-	 */
 	verifyPIN: (pin) => {
-		let storedPin = load(PIN_KEY, null);
-		if (!storedPin) {
-			// If no PIN is set, set this as the initial PIN
-			get().setPIN(pin);
-			storedPin = pin; // Use the newly set PIN for comparison
-		}
-		
+		const storedPin = load(PIN_KEY, null);
+		if (!storedPin) return false;
+
 		const isCorrect = storedPin === pin;
 		if (isCorrect) {
+			const pinLockMode = getPinLockMode();
+
+			if (pinLockMode === "off") {
+				clearPersistedPinSession();
+				set({ isPinAuthenticated: true, pinAuthExpiresAt: null });
+				return true;
+			}
+
+			if (pinLockMode === "immediate") {
+				clearPersistedPinSession();
+				set({ isPinAuthenticated: true, pinAuthExpiresAt: null });
+				return true;
+			}
+
+			const timeoutMs = getPinLockTimeoutMs(pinLockMode);
+			const expiresAt = timeoutMs ? Date.now() + timeoutMs : null;
 			save(PIN_AUTH_SESSION_KEY, true);
-			set({ isPinAuthenticated: true });
+			save(PIN_AUTH_EXPIRES_AT_KEY, expiresAt);
+			set({ isPinAuthenticated: true, pinAuthExpiresAt: expiresAt });
 		}
 		return isCorrect;
 	},
 
-	/**
-	 * Clear PIN authentication for current session
-	 */
 	clearPinAuth: () => {
-		save(PIN_AUTH_SESSION_KEY, false);
-		set({ isPinAuthenticated: false });
+		clearPersistedPinSession();
+		set({
+			isPinAuthenticated: getPinLockMode() === "off",
+			pinAuthExpiresAt: null,
+		});
 	},
 
-	/**
-	 * Check if PIN is authenticated in current session
-	 */
+	refreshPinAuthState: () => {
+		const pinLockMode = getPinLockMode();
+
+		if (pinLockMode === "off") {
+			clearPersistedPinSession();
+			if (!get().isPinAuthenticated || get().pinAuthExpiresAt !== null) {
+				set({ isPinAuthenticated: true, pinAuthExpiresAt: null });
+			}
+			return true;
+		}
+
+		if (pinLockMode === "immediate") {
+			clearPersistedPinSession();
+			if (get().pinAuthExpiresAt !== null) {
+				set({ pinAuthExpiresAt: null });
+			}
+			return !!get().isPinAuthenticated;
+		}
+
+		const expiresAt = getStoredPinExpiry() ?? get().pinAuthExpiresAt;
+		if (isPinExpiryValid(expiresAt)) {
+			if (
+				!get().isPinAuthenticated ||
+				get().pinAuthExpiresAt !== expiresAt
+			) {
+				set({ isPinAuthenticated: true, pinAuthExpiresAt: expiresAt });
+			}
+			return true;
+		}
+
+		clearPersistedPinSession();
+		if (get().isPinAuthenticated || get().pinAuthExpiresAt !== null) {
+			set({ isPinAuthenticated: false, pinAuthExpiresAt: null });
+		}
+		return false;
+	},
+
 	isPinAuthenticatedSession: () => {
-		return get().isPinAuthenticated;
+		const pinLockMode = getPinLockMode();
+		if (pinLockMode === "off") return true;
+		if (pinLockMode === "immediate") return !!get().isPinAuthenticated;
+
+		const expiresAt = getStoredPinExpiry() ?? get().pinAuthExpiresAt;
+		return isPinExpiryValid(expiresAt);
 	},
 
-	/**
-	 * Reset PIN (for account recovery)
-	 */
+	applyPinLockMode: (pinLockMode) => {
+		if (pinLockMode === "off") {
+			clearPersistedPinSession();
+			set({ isPinAuthenticated: true, pinAuthExpiresAt: null });
+			return;
+		}
+
+		if (pinLockMode === "immediate") {
+			clearPersistedPinSession();
+			set({ pinAuthExpiresAt: null });
+			return;
+		}
+
+		const timeoutMs = getPinLockTimeoutMs(pinLockMode);
+		const shouldCarrySession = Boolean(
+			get().pinSet && get().isPinAuthenticated && timeoutMs,
+		);
+
+		if (!shouldCarrySession) {
+			clearPersistedPinSession();
+			set({ isPinAuthenticated: false, pinAuthExpiresAt: null });
+			return;
+		}
+
+		const expiresAt = Date.now() + timeoutMs;
+		save(PIN_AUTH_SESSION_KEY, true);
+		save(PIN_AUTH_EXPIRES_AT_KEY, expiresAt);
+		set({ isPinAuthenticated: true, pinAuthExpiresAt: expiresAt });
+	},
+
 	resetPIN: () => {
 		save(PIN_KEY, null);
-		save(PIN_AUTH_SESSION_KEY, false);
-		set({ pinSet: false, isPinAuthenticated: false });
+		clearPersistedPinSession();
+		set({
+			pinSet: false,
+			isPinAuthenticated: getPinLockMode() === "off",
+			pinAuthExpiresAt: null,
+		});
 	},
 
-	/**
-	 * Clear PIN auth session WITHOUT resetting the PIN itself
-	 * (Used when closing diary or switching dates)
-	 */
 	clearPinSession: () => {
-		save(PIN_AUTH_SESSION_KEY, false);
-		set({ isPinAuthenticated: false });
+		clearPersistedPinSession();
+		set({
+			isPinAuthenticated: getPinLockMode() === "off",
+			pinAuthExpiresAt: null,
+		});
 	},
 
-	/* ── 접속 기록 ── */
 	markActive: () => {
 		save(ACTIVE_KEY, todayStr());
 		set({ wasActiveToday: true });
 	},
 
-	/** 특정 날짜에 접속했었는지 확인 */
 	wasActiveOn: (dateStr) => {
-		// localStorage에  날짜별 접속 기록이 없으므로
-		// 마지막 접속 날짜와 비교하여 판단
 		const lastAccess = load(ACTIVE_KEY, "");
 		return lastAccess === dateStr;
 	},
 
-	/* ── 일기 관리 ── */
-	/** 특정 날짜의 일기를 가져옴 */
-	getDiary: (dateStr) => {
-		return get().entries[dateStr] || null;
+	getDiary: (dateStr) => get().entries[dateStr] || null,
+
+	saveGeneratedDiary: async (dateStr, diaryText) => {
+		set((state) => {
+			const prevEntry = normalizeEntry(state.entries[dateStr]);
+			const entries = {
+				...state.entries,
+				[dateStr]: normalizeEntry({
+					...prevEntry,
+					diary: diaryText,
+					aiGeneratedDiary: diaryText,
+					editedDiary: "",
+				}),
+			};
+			return { entries: saveEntriesLocally(entries) };
+		});
+
+		if (!supabase) return;
+
+		try {
+			const {
+				data: { user },
+			} = await supabase.auth.getUser();
+			if (!user) return;
+
+			await supabase.from("diaries").upsert(
+				{
+					user_id: user.id,
+					date: dateStr,
+					ai_generated_diary: diaryText,
+					edited_diary: null,
+					updated_at: new Date().toISOString(),
+				},
+				{ onConflict: "user_id,date" },
+			);
+		} catch (error) {
+			console.warn("Generated diary save to DB failed:", error?.message);
+		}
 	},
 
-	/** AI가 생성한 일기를 저장 */
 	saveDiary: async (dateStr, diaryText) => {
-		set((s) => {
+		const nextDiary = diaryText.trim();
+		const currentEntry = normalizeEntry(get().entries[dateStr]);
+		const originalDiary = currentEntry.aiGeneratedDiary || currentEntry.diary || "";
+		const editedDiary = nextDiary === originalDiary ? "" : nextDiary;
+
+		set((state) => {
+			const prevEntry = normalizeEntry(state.entries[dateStr]);
 			const entries = {
-				...s.entries,
-				[dateStr]: { ...s.entries[dateStr], diary: diaryText },
+				...state.entries,
+				[dateStr]: normalizeEntry({
+					...prevEntry,
+					diary: editedDiary || originalDiary,
+					aiGeneratedDiary: originalDiary,
+					editedDiary,
+				}),
 			};
-			save(STORAGE_KEY, entries);
-			return { entries };
+			return { entries: saveEntriesLocally(entries) };
 		});
 
-		// Supabase DB 동기화 (가능한 경우)
-		if (supabase) {
-			try {
-				const { data: { user } } = await supabase.auth.getUser();
-				if (user) {
-					await supabase.from("diaries").upsert({
-						user_id: user.id,
-						date: dateStr,
-						diary_text: diaryText,
-						updated_at: new Date().toISOString(),
-					}, { onConflict: "user_id,date" });
-				}
-			} catch (e) {
-				console.warn("Diary save to DB failed:", e?.message);
-			}
+		if (!supabase) return;
+
+		try {
+			const {
+				data: { user },
+			} = await supabase.auth.getUser();
+			if (!user) return;
+
+			await supabase.from("diaries").upsert(
+				{
+					user_id: user.id,
+					date: dateStr,
+					edited_diary: editedDiary || null,
+					updated_at: new Date().toISOString(),
+				},
+				{ onConflict: "user_id,date" },
+			);
+		} catch (error) {
+			console.warn("Diary edit save to DB failed:", error?.message);
 		}
 	},
 
-	/* ── 메모 관리 ── */
-	/** 특정 날짜의 메모를 저장 */
-	saveMemo: async (dateStr, memoText) => {
-		set((s) => {
+	revertDiaryToGenerated: async (dateStr) => {
+		const currentEntry = normalizeEntry(get().entries[dateStr]);
+		const originalDiary = currentEntry.aiGeneratedDiary || "";
+
+		set((state) => {
+			const prevEntry = normalizeEntry(state.entries[dateStr]);
 			const entries = {
-				...s.entries,
-				[dateStr]: { ...s.entries[dateStr], memo: memoText },
+				...state.entries,
+				[dateStr]: normalizeEntry({
+					...prevEntry,
+					diary: originalDiary,
+					editedDiary: "",
+				}),
 			};
-			save(STORAGE_KEY, entries);
-			return { entries };
+			return { entries: saveEntriesLocally(entries) };
 		});
 
-		// Supabase DB 동기화 (가능한 경우)
-		if (supabase) {
-			try {
-				const { data: { user } } = await supabase.auth.getUser();
-				if (user) {
-					await supabase.from("diaries").upsert({
-						user_id: user.id,
-						date: dateStr,
-						memo: memoText,
-						updated_at: new Date().toISOString(),
-					}, { onConflict: "user_id,date" });
-				}
-			} catch (e) {
-				console.warn("Memo save to DB failed:", e?.message);
-			}
+		if (!supabase) return;
+
+		try {
+			const {
+				data: { user },
+			} = await supabase.auth.getUser();
+			if (!user) return;
+
+			await supabase.from("diaries").upsert(
+				{
+					user_id: user.id,
+					date: dateStr,
+					edited_diary: null,
+					updated_at: new Date().toISOString(),
+				},
+				{ onConflict: "user_id,date" },
+			);
+		} catch (error) {
+			console.warn("Diary revert failed:", error?.message);
 		}
 	},
 
-	/* ── DiaryCard 답변 관리 ── */
-	/** 답변 추가 (DiaryCard에서 호출) */
+	saveNotes: async (dateStr, notesText) => {
+		set((state) => {
+			const prevEntry = normalizeEntry(state.entries[dateStr]);
+			const entries = {
+				...state.entries,
+				[dateStr]: normalizeEntry({
+					...prevEntry,
+					notes: notesText,
+					memo: notesText,
+				}),
+			};
+			return { entries: saveEntriesLocally(entries) };
+		});
+
+		if (!supabase) return;
+
+		try {
+			const {
+				data: { user },
+			} = await supabase.auth.getUser();
+			if (!user) return;
+
+			await supabase.from("diaries").upsert(
+				{
+					user_id: user.id,
+					date: dateStr,
+					memo: notesText,
+					updated_at: new Date().toISOString(),
+				},
+				{ onConflict: "user_id,date" },
+			);
+		} catch (error) {
+			console.warn("Memo save to DB failed:", error?.message);
+		}
+	},
+
+	saveMemo: async (dateStr, memoText) => get().saveNotes(dateStr, memoText),
+
 	addAnswer: (dateStr, text) => {
-		set((s) => {
-			const answers = { ...s.diaryAnswers };
+		set((state) => {
+			const answers = { ...state.diaryAnswers };
 			if (!answers[dateStr]) answers[dateStr] = [];
 			answers[dateStr] = [...answers[dateStr], text];
 			save(ANSWERS_KEY, answers);
@@ -216,42 +447,90 @@ export const useDiaryStore = create((set, get) => ({
 		});
 	},
 
-	/** 특정 날짜의 답변 가져오기 */
-	getAnswers: (dateStr) => {
-		return get().diaryAnswers[dateStr] || [];
+	getAnswers: (dateStr) => get().diaryAnswers[dateStr] || [],
+
+	getNotes: (dateStr) => getEntryNotes(get().entries[dateStr]),
+	getMemo: (dateStr) => getEntryNotes(get().entries[dateStr]),
+
+	getRecentNotes: ({
+		beforeDate = null,
+		limit = 5,
+		days = 14,
+		includeSameDate = false,
+	} = {}) => {
+		const anchor = beforeDate
+			? parseDateString(beforeDate)
+			: parseDateString(formatLocalDate());
+
+		return Object.entries(get().entries)
+			.map(([dateStr, entry]) => ({
+				date: dateStr,
+				notes: getEntryNotes(entry),
+			}))
+			.filter((entry) => entry.notes)
+			.filter((entry) => {
+				if (Number.isNaN(anchor.getTime())) return true;
+				const entryDate = parseDateString(entry.date);
+				if (Number.isNaN(entryDate.getTime())) return false;
+				const diffDays =
+					(anchor.getTime() - entryDate.getTime()) / (24 * 60 * 60 * 1000);
+				if (diffDays < 0 || diffDays > days) return false;
+				if (!includeSameDate && diffDays === 0) return false;
+				return true;
+			})
+			.sort((left, right) => right.date.localeCompare(left.date))
+			.slice(0, limit);
 	},
 
-	/* ── DB에서 일기 데이터 불러오기 ── */
+	getRecentNotesSummary: (options = {}) =>
+		get()
+			.getRecentNotes(options)
+			.map((entry) => `${entry.date}: ${entry.notes}`)
+			.join(" | "),
+	getRecentMemoSummary: (options = {}) => get().getRecentNotesSummary(options),
+
 	hydrateFromDB: async () => {
 		if (!supabase) return;
+
 		try {
-			const { data: { user } } = await supabase.auth.getUser();
+			const {
+				data: { user },
+			} = await supabase.auth.getUser();
 			if (!user) return;
 
 			const { data } = await supabase
 				.from("diaries")
-				.select("date, diary_text, memo")
+				.select("date, ai_generated_diary, edited_diary, diary_text, memo")
 				.eq("user_id", user.id);
 
-			if (data && data.length > 0) {
-				const entries = { ...get().entries };
-				for (const row of data) {
-					entries[row.date] = {
-						diary: row.diary_text || entries[row.date]?.diary || "",
-						memo: row.memo || entries[row.date]?.memo || "",
-					};
-				}
-				set({ entries });
-				save(STORAGE_KEY, entries);
+			if (!data || data.length === 0) return;
+
+			const entries = { ...get().entries };
+			for (const row of data) {
+				const prevEntry = normalizeEntry(entries[row.date]);
+				entries[row.date] = normalizeEntry({
+					...prevEntry,
+					aiGeneratedDiary:
+						row.ai_generated_diary ||
+						row.diary_text ||
+						prevEntry.aiGeneratedDiary ||
+						prevEntry.diary ||
+						"",
+					editedDiary: row.edited_diary || prevEntry.editedDiary || "",
+					notes: row.memo || prevEntry.notes || prevEntry.memo || "",
+					memo: row.memo || prevEntry.notes || prevEntry.memo || "",
+				});
 			}
-		} catch (e) {
-			console.warn("Diary hydrate failed:", e?.message);
+
+			set({ entries });
+			saveEntriesLocally(entries);
+		} catch (error) {
+			console.warn("Diary hydrate failed:", error?.message);
 		}
 	},
 
-	/** 일기가 있는 날짜 목록 반환 (캘린더 dot 표시용) */
 	getDiaryDates: () => {
 		const entries = get().entries;
-		return Object.keys(entries).filter((d) => entries[d]?.diary);
+		return Object.keys(entries).filter((dateStr) => entries[dateStr]?.diary);
 	},
 }));

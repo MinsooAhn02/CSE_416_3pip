@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { supabase } from "../lib/supabase";
 import { load, save } from "../utils/storage";
 import { DEFAULT_VIS } from "../constants";
+import { formatLocalDate } from "../utils/date";
 import { useSettingsStore } from "./useSettingsStore";
 import { useAuthStore } from "./useAuthStore";
 import {
@@ -353,6 +354,45 @@ const normalizeHealthData = (raw) => {
 		water: 0,
 		waterGoal: 8,
 	};
+};
+
+const GOOGLE_HEALTH_AUTH_ERROR =
+	"Google Health connection expired. Reconnect Google to sync Health again.";
+
+const GOOGLE_HEALTH_API_DISABLED_ERROR =
+	"Google Fitness API is disabled for this Google Cloud project. Enable it in Google Cloud, wait a few minutes, then reconnect Google.";
+
+const isGoogleHealthAuthErrorMessage = (message = "") => {
+	const normalized = String(message || "").toLowerCase();
+	return (
+		normalized.includes("google oauth token required") ||
+		normalized.includes("unauthorized") ||
+		normalized.includes("access token") ||
+		normalized.includes("permission") ||
+		normalized.includes("insufficient") ||
+		normalized.includes("401")
+	);
+};
+
+const isGoogleHealthApiDisabledMessage = (message = "") => {
+	const normalized = String(message || "").toLowerCase();
+	return (
+		normalized.includes("accessnotconfigured") ||
+		normalized.includes("service_disabled") ||
+		normalized.includes("fitness api has not been used") ||
+		normalized.includes("google fit 403") ||
+		normalized.includes("google fit api has not been used")
+	);
+};
+
+const getGoogleHealthErrorMessage = (message = "") => {
+	if (isGoogleHealthApiDisabledMessage(message)) {
+		return GOOGLE_HEALTH_API_DISABLED_ERROR;
+	}
+	if (isGoogleHealthAuthErrorMessage(message)) {
+		return GOOGLE_HEALTH_AUTH_ERROR;
+	}
+	return message || "Failed to load Google Health data.";
 };
 
 /* ══════════════════════════════════════════════
@@ -865,11 +905,10 @@ export const useDataStore = create((set, get) => ({
 				return;
 			}
 
-			const data = await invokeEdge("calendar", { token, todayOnly: true });
+			const data = await invokeEdge("events", { token, todayOnly: true });
 			if (data && Array.isArray(data)) {
 				// 프론트에서도 오늘 일정만 필터링 (안전장치)
-				const now = new Date();
-				const todayStr = now.toISOString().slice(0, 10);
+				const todayStr = formatLocalDate();
 				const todayEvents = data.filter((ev) => {
 					const start = ev.start;
 					if (!start) return false;
@@ -904,8 +943,17 @@ export const useDataStore = create((set, get) => ({
 		if (!supabase) {
 			const mock = await mockFetchHealthData();
 			set({ healthData: mock });
+			get().setApiStatus("health", "error");
+			set((s) => ({
+				errors: { ...s.errors, health: "Supabase is not configured, so Health is using mock data." },
+			}));
 			return;
 		}
+
+		set((s) => ({
+			loading: { ...s.loading, health: true },
+			errors: { ...s.errors, health: null },
+		}));
 
 		try {
 			const cacheKey = "health_default";
@@ -915,38 +963,63 @@ export const useDataStore = create((set, get) => ({
 				if (dbCached?.data) {
 					set({ healthData: dbCached.data });
 					cacheIt("health", dbCached.data);
+					get().markFetched("health", dbCached.fetchedAt);
+					get().setApiStatus("health", "ok");
 					return;
 				}
 			}
 
-			const {
-				data: { session },
-			} = await supabase.auth.getSession();
-			const token = session?.provider_token;
+			const token = await useAuthStore.getState().ensureProviderToken?.();
 			if (!token) {
 				const mock = await mockFetchHealthData();
-				set({ healthData: mock });
+				set({ healthData: cached("health", mock) });
+				set((s) => ({
+					errors: { ...s.errors, health: GOOGLE_HEALTH_AUTH_ERROR },
+				}));
+				get().markFetched("health");
+				get().setApiStatus("health", "error");
 				return;
 			}
 
-			const data = await invokeEdge("fitness", { token });
-			if (data) {
-				const normalized = normalizeHealthData(data);
+			const edge = await invokeEdgeDetailed("fitness", { token });
+			if (edge?.ok && edge.data) {
+				const normalized = normalizeHealthData(edge.data);
 				set({ healthData: normalized });
 				cacheIt("health", normalized);
 				await writeApiCache(cacheKey, normalized, userId);
-			} else {
-				const mock = await mockFetchHealthData();
-				set({ healthData: cached("health", mock) });
+				get().markFetched("health");
+				get().setApiStatus("health", "ok");
+				return;
 			}
+
+			const errMsg = getGoogleHealthErrorMessage(
+				edge?.data?.error || edge?.error || "Failed to load Google Health data.",
+			);
+			set((s) => ({
+				errors: { ...s.errors, health: errMsg },
+			}));
+			const mock = await mockFetchHealthData();
+			set({ healthData: cached("health", mock) });
+			get().markFetched("health");
+			get().setApiStatus("health", "error");
 		} catch (e) {
 			console.warn("fetchHealth failed:", e?.message || e);
+			const errMsg = getGoogleHealthErrorMessage(
+				e?.message || "Failed to load Google Health data.",
+			);
+			set((s) => ({
+				errors: { ...s.errors, health: errMsg },
+			}));
 			try {
 				const mock = await mockFetchHealthData();
 				set({ healthData: cached("health", mock) });
 			} catch {
 				/* mock 실패 무시 */
 			}
+			get().markFetched("health");
+			get().setApiStatus("health", "error");
+		} finally {
+			set((s) => ({ loading: { ...s.loading, health: false } }));
 		}
 	},
 

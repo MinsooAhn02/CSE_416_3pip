@@ -5,11 +5,11 @@ import { useTheme } from "../../hooks/useTheme";
 import { useSettingsStore } from "../../store/useSettingsStore";
 import { useDataStore } from "../../store/useDataStore";
 import { useTodoStore } from "../../store/useTodoStore";
-import { useDiaryStore } from "../../store/useDiaryStore";
 import {
 	generateDetailedBriefing,
 	getTimeGreeting,
 } from "../../services/aiService";
+import { buildPersonaContext } from "../../utils/personaContext";
 
 /**
  * First-Login Daily Briefing Modal (REQ-WS-006)
@@ -33,15 +33,6 @@ const FirstLoginBriefingModal = () => {
 	const trends = useDataStore((s) => s.trends);
 	const calEvents = useDataStore((s) => s.calEvents);
 	const todos = useTodoStore((s) => s.todos);
-	const getDiary = useDiaryStore((s) => s.getDiary);
-
-	// Yesterday's memo for context
-	const yesterdayMemo = useMemo(() => {
-		const yesterday = new Date();
-		yesterday.setDate(yesterday.getDate() - 1);
-		const dateStr = yesterday.toISOString().slice(0, 10);
-		return getDiary(dateStr)?.memo || "";
-	}, [getDiary]);
 
 	// State
 	const [briefing, setBriefing] = useState(null);
@@ -64,7 +55,7 @@ const FirstLoginBriefingModal = () => {
 					trends,
 					calEvents,
 					todos,
-					yesterdayMemo,
+					persona: buildPersonaContext({ includeMemo: false }),
 				};
 				const result = await generateDetailedBriefing({ 
 					context, 
@@ -83,7 +74,7 @@ const FirstLoginBriefingModal = () => {
 		};
 
 		generateBriefing();
-	}, [showFirstLoginModal, weather, stocks, trends, calEvents, todos, tone, length, yesterdayMemo]);
+	}, [showFirstLoginModal, weather, stocks, trends, calEvents, todos, tone, length]);
 
 	// Countdown timer for dismiss button (REQ-AJ-004: block dismissal for 10 seconds)
 	useEffect(() => {
@@ -130,7 +121,7 @@ const FirstLoginBriefingModal = () => {
 				trends,
 				calEvents,
 				todos,
-				yesterdayMemo,
+				persona: buildPersonaContext({ includeMemo: false }),
 			};
 			const result = await generateDetailedBriefing({ 
 				context, 
@@ -256,16 +247,6 @@ const FirstLoginBriefingModal = () => {
 						</p>
 					)}
 
-					{/* Yesterday memo indicator */}
-					{yesterdayMemo && (
-						<div className={`mt-6 p-4 rounded-xl ${
-							isDark ? "bg-morning-dark-cardSecondary" : "bg-morning-light-hover/10"
-						}`}>
-							<p className={`text-xs ${muted}`}>
-								✨ 어제 남긴 메모가 오늘 브리핑에 반영되었습니다
-							</p>
-						</div>
-					)}
 				</div>
 
 				{/* Footer */}

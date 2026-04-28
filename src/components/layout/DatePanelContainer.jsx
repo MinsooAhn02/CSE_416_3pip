@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { X, BookOpen } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { useTheme } from "../../hooks/useTheme";
+import { useDiaryStore } from "../../store/useDiaryStore";
 import EventPanel from "./EventPanel";
 import TaskPanel from "./TaskPanel";
 import DiaryPanel from "./DiaryPanel";
@@ -23,24 +25,24 @@ import DiaryPanel from "./DiaryPanel";
  * @param {{ selectedDate: string | null, onClose: () => void }} props
  */
 const DatePanelContainer = ({ selectedDate, onClose }) => {
+	const { t, i18n } = useTranslation();
 	const { isDark, cardSecondaryCls, hoverCls } = useTheme();
+	const getDiary = useDiaryStore((s) => s.getDiary);
 	const [showDiaryModal, setShowDiaryModal] = useState(false);
 
 	if (!selectedDate) return null;
 
+	const hasDiary = !!getDiary(selectedDate)?.diary?.trim();
+
 	/* Format date for display */
 	const formatDate = (dateStr) => {
 		const d = new Date(dateStr + "T00:00:00");
-		const days = [
-			"Sunday",
-			"Monday",
-			"Tuesday",
-			"Wednesday",
-			"Thursday",
-			"Friday",
-			"Saturday",
-		];
-		return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")} (${days[d.getDay()]})`;
+		return d.toLocaleDateString(i18n.language === "ko" ? "ko-KR" : "en-US", {
+			year: "numeric",
+			month: "long",
+			day: "numeric",
+			weekday: "long",
+		});
 	};
 
 	const isFutureDate = (() => {
@@ -63,7 +65,7 @@ const DatePanelContainer = ({ selectedDate, onClose }) => {
 			{/* Header with Date and Close Button */}
 			<div className="flex items-center justify-between mb-3">
 				<div>
-					<h2 className="font-bold text-base">Date Details</h2>
+					<h2 className="font-bold text-base">{t("calendar.date_details")}</h2>
 					<p
 						className={`mt-0.5 text-xs ${isDark ? "text-gray-400" : "text-gray-600"}`}
 					>
@@ -76,9 +78,18 @@ const DatePanelContainer = ({ selectedDate, onClose }) => {
 							type="button"
 							onClick={() => setShowDiaryModal(true)}
 							className={`p-2 rounded-lg transition-colors ${hoverCls}`}
-							title="Open diary for this date"
+							title={t("calendar.open_diary_for_date")}
 						>
-							<BookOpen size={20} className="text-blue-500" />
+							<BookOpen
+								size={20}
+								className={
+									hasDiary
+										? "text-blue-500"
+										: isDark
+											? "text-gray-500"
+											: "text-gray-400"
+								}
+							/>
 						</button>
 					)}
 					<button

@@ -91,6 +91,7 @@ const scoreSignals = ({ context, timeProfile }) => {
 	const personaText = [
 		persona?.persona,
 		persona?.job,
+		persona?.memo,
 		...(Array.isArray(persona?.interests) ? persona.interests : []),
 	]
 		.filter(Boolean)
@@ -397,9 +398,6 @@ export async function generateDetailedBriefing({ tone, length, context, priority
 		"- 공식적이고 정중한 어체 사용",
 		"- JSON만 반환하고 다른 텍스트는 작성하지 마세요.",
 		"",
-		context?.yesterdayMemo
-			? `사용자가 전날 남긴 메모를 참고하세요: "${context.yesterdayMemo}"`
-			: "",
 		"",
 		"=== 컨텍스트 데이터 ===",
 		JSON.stringify(contextWithPriority, null, 2),
@@ -487,9 +485,6 @@ export async function generateBriefing({ tone, length, context }) {
 		"반드시 정확히 3줄로 작성하세요. 각 줄은 한 문장으로, 불릿/번호/제목 없이 작성하세요.",
 		"응답은 순수 텍스트만 작성하세요.",
 		// 전날 메모가 있으면 참고 지시 추가
-		context?.yesterdayMemo
-			? `사용자가 전날 남긴 메모를 참고하여 브리핑에 반영하세요:\n"${context.yesterdayMemo}"`
-			: "",
 		JSON.stringify(contextWithPriority, null, 2),
 	]
 		.filter(Boolean)
@@ -541,6 +536,9 @@ export async function generateSmartWidgetData(keyword, context = {}) {
 			"- emoji: 키워드를 가장 잘 나타내는 이모지 1개",
 			"- bullets: 현재 시점에서 '${keyword}'에 대해 알아야 할 핵심 포인트 3개 (각 1~2문장)",
 			"- 한국어로 작성",
+			context?.persona?.memo
+				? `- 사용자의 최근 Memo 성향도 참고: ${context.persona.memo}`
+				: "",
 		].join("\n"),
 		temperature: 0.5,
 	});
@@ -667,16 +665,409 @@ export async function generateAiTodo(calEvents = [], existingTodos = []) {
 	return [];
 }
 
+const DIARY_DATE_FORMATTER_KO = new Intl.DateTimeFormat("ko-KR", {
+	year: "numeric",
+	month: "long",
+	day: "numeric",
+});
+
+const normalizeDiaryLineText = (value, fallback = "") => {
+	const text = String(value || "").trim();
+	if (!text || text === "(no title)") return fallback;
+	return text.replace(/\s+/g, " ");
+};
+
+const formatDiaryDateLabel = (dateStr) => {
+	if (!dateStr) return "";
+	const date = new Date(`${dateStr}T00:00:00`);
+	return Number.isNaN(date.getTime())
+		? dateStr
+		: DIARY_DATE_FORMATTER_KO.format(date);
+};
+
+const extractTimeLabel = (value) => {
+	const raw = String(value || "").trim();
+	if (!raw) return "";
+	if (/^\d{2}:\d{2}$/.test(raw)) return raw;
+	const isoMatch = raw.match(/T(\d{2}):(\d{2})/);
+	if (isoMatch) return `${isoMatch[1]}:${isoMatch[2]}`;
+	return "";
+};
+
+const buildDiaryEventLines = (events = []) =>
+	(Array.isArray(events) ? events : [])
+		.map((event) => {
+			const title = normalizeDiaryLineText(
+				event?.title || event?.summary,
+				"제목 없는 일정",
+			);
+			const start = extractTimeLabel(event?.startTime || event?.start);
+			const end = extractTimeLabel(event?.endTime || event?.end);
+			const timeLabel = start && end ? `${start}-${end}` : start || end || "종일";
+			return {
+				sortKey: start || end || "00:00",
+				line: `${timeLabel} ${title}`,
+			};
+		})
+		.sort((left, right) => left.sortKey.localeCompare(right.sortKey))
+		.map((item) => item.line);
+
+const buildDiaryCompletedTaskLines = (todos = []) =>
+	(Array.isArray(todos) ? todos : [])
+		.map((todo) => {
+			const title = normalizeDiaryLineText(
+				todo?.title || todo?.text,
+				"제목 없는 할 일",
+			);
+			const timeLabel = extractTimeLabel(todo?.startTime || todo?.endTime);
+			return {
+				sortKey: timeLabel || "99:99",
+				line: timeLabel ? `${timeLabel} ${title}` : title,
+			};
+		})
+		.sort((left, right) => left.sortKey.localeCompare(right.sortKey))
+		.map((item) => item.line);
+
+const buildDiaryFallbackTitle = ({
+	scheduleLines = [],
+	completedLines = [],
+	wasActiveDay = false,
+}) => {
+	if (completedLines.length > 0 && scheduleLines.length > 0) {
+		return "일정과 완료가 겹친 날";
+	}
+	if (completedLines.length > 0) {
+		return "완료가 남은 하루";
+	}
+	if (scheduleLines.length > 0) {
+		return "일정이 이어진 하루";
+	}
+	return wasActiveDay ? "기록이 적은 하루" : "조용한 하루";
+};
+
+const buildWeatherSummary = (weather) => {
+	if (!weather || typeof weather !== "object") return "";
+	const temp =
+		weather?.temp ?? weather?.temperature ?? weather?.currentTemp ?? null;
+	const condition = normalizeDiaryLineText(
+		weather?.condition ||
+			weather?.description ||
+			weather?.summary ||
+			weather?.main,
+	);
+	return [temp !== null && temp !== undefined ? `${temp}°C` : "", condition]
+		.filter(Boolean)
+		.join(" ");
+};
+
+const buildDiaryFallbackSummary = ({
+	formattedDate,
+	scheduleLines = [],
+	completedLines = [],
+	weather,
+	memo = "",
+	diaryAnswers = [],
+	wasActiveDay = false,
+}) => {
+	const sentences = [];
+
+	if (scheduleLines.length > 0) {
+		sentences.push(`${formattedDate}에는 ${scheduleLines.join(", ")} 일정이 있었다.`);
+	} else {
+		sentences.push(`${formattedDate}에는 기록된 일정이 없었다.`);
+	}
+
+	if (completedLines.length > 0) {
+		sentences.push(`완료한 일은 ${completedLines.join(", ")}였다.`);
+	} else if (wasActiveDay) {
+		sentences.push("완료로 표시된 할 일은 없었다.");
+	}
+
+	const weatherSummary = buildWeatherSummary(weather);
+	if (weatherSummary) {
+		sentences.push(`날씨 기록은 ${weatherSummary}였다.`);
+	}
+
+	const firstAnswer = normalizeDiaryLineText(diaryAnswers?.[0] || "");
+	if (firstAnswer) {
+		sentences.push(`하루 질문 답변에는 "${firstAnswer}"가 남아 있었다.`);
+	}
+
+	const memoText = normalizeDiaryLineText(memo);
+	if (memoText) {
+		sentences.push(`Memo에는 "${memoText}"가 남아 있었다.`);
+	}
+
+	if (!wasActiveDay) {
+		sentences.push("앱 접속 기록이 없어 자동 수집된 데이터만 정리했다.");
+	}
+
+	return sentences.slice(0, 4).join(" ");
+};
+
+const buildDiaryText = ({
+	title,
+	formattedDate,
+	scheduleLines = [],
+	completedLines = [],
+	summary,
+}) =>
+	[
+		`제목: ${title}`,
+		`날짜: ${formattedDate}`,
+		"",
+		"일정",
+		...(scheduleLines.length > 0
+			? scheduleLines.map((line) => `- ${line}`)
+			: ["- 일정 없음"]),
+		"",
+		"완료한 일",
+		...(completedLines.length > 0
+			? completedLines.map((line) => `- ${line}`)
+			: ["- 완료한 일 없음"]),
+		"",
+		"기록",
+		summary,
+	].join("\n");
+
+const DIARY_DATE_FORMATTERS_V2 = {
+	ko: new Intl.DateTimeFormat("ko-KR", {
+		year: "numeric",
+		month: "long",
+		day: "numeric",
+	}),
+	en: new Intl.DateTimeFormat("en-US", {
+		year: "numeric",
+		month: "long",
+		day: "numeric",
+	}),
+};
+
+const resolveDiaryLanguage = (language = "ko") =>
+	language === "en" ? "en" : "ko";
+
+const getDiaryCopy = (language = "ko") =>
+	resolveDiaryLanguage(language) === "en"
+		? {
+				targetLanguageName: "English",
+				untitledEvent: "Untitled event",
+				untitledTask: "Untitled task",
+				allDay: "All day",
+				titleLabel: "Title",
+				dateLabel: "Date",
+				scheduleHeading: "Schedule",
+				completedHeading: "Completed",
+				notesHeading: "Notes",
+				noSchedule: "No scheduled items",
+				noCompleted: "Nothing marked complete",
+				fallbackTitleBoth: "A day of plans and checkmarks",
+				fallbackTitleCompleted: "A day of completions",
+				fallbackTitleScheduled: "A day shaped by plans",
+				fallbackTitleActive: "A day with notes",
+				fallbackTitleQuiet: "A quiet day",
+				scheduleSentence: (formattedDate, scheduleLines) =>
+					`${formattedDate} included ${scheduleLines.join(", ")}.`,
+				noScheduleSentence: (formattedDate) =>
+					`${formattedDate} had no recorded schedule.`,
+				completedSentence: (completedLines) =>
+					`Completed items included ${completedLines.join(", ")}.`,
+				noCompletedSentence: "No tasks were marked complete.",
+				weatherSentence: (weatherSummary) =>
+					`The weather note for the day was ${weatherSummary}.`,
+				answerSentence: (answer) =>
+					`The daily question response was "${answer}".`,
+				memoSentence: (memoText) =>
+					`The memo for the day said "${memoText}".`,
+				inactiveSentence:
+					"There was no app activity record, so this entry uses only automatically collected data.",
+		}
+		: {
+				targetLanguageName: "Korean",
+				untitledEvent: "제목 없는 일정",
+				untitledTask: "제목 없는 작업",
+				allDay: "종일",
+				titleLabel: "제목",
+				dateLabel: "날짜",
+				scheduleHeading: "일정",
+				completedHeading: "완료한 일",
+				notesHeading: "기록",
+				noSchedule: "일정 없음",
+				noCompleted: "완료한 일 없음",
+				fallbackTitleBoth: "일정과 완료가 겹친 날",
+				fallbackTitleCompleted: "완료가 쌓인 하루",
+				fallbackTitleScheduled: "일정이 이어진 하루",
+				fallbackTitleActive: "기록이 남은 하루",
+				fallbackTitleQuiet: "조용한 하루",
+				scheduleSentence: (formattedDate, scheduleLines) =>
+					`${formattedDate}에는 ${scheduleLines.join(", ")} 일정이 있었다.`,
+				noScheduleSentence: (formattedDate) =>
+					`${formattedDate}에는 기록된 일정이 없었다.`,
+				completedSentence: (completedLines) =>
+					`완료한 일로는 ${completedLines.join(", ")}가 있었다.`,
+				noCompletedSentence: "완료로 표시한 일은 없었다.",
+				weatherSentence: (weatherSummary) =>
+					`날씨 기록은 ${weatherSummary}였다.`,
+				answerSentence: (answer) =>
+					`하루 질문 답변에는 "${answer}"가 남아 있었다.`,
+				memoSentence: (memoText) =>
+					`Memo에는 "${memoText}"가 남아 있었다.`,
+				inactiveSentence:
+					"앱 접속 기록이 없어 자동 수집된 데이터만 정리했다.",
+		};
+
+const formatDiaryDateLabelForLanguage = (dateStr, language = "ko") => {
+	if (!dateStr) return "";
+	const date = new Date(`${dateStr}T00:00:00`);
+	return Number.isNaN(date.getTime())
+		? dateStr
+		: DIARY_DATE_FORMATTERS_V2[resolveDiaryLanguage(language)].format(date);
+};
+
+const buildDiaryEventLinesForLanguage = (events = [], language = "ko") => {
+	const copy = getDiaryCopy(language);
+	return (Array.isArray(events) ? events : [])
+		.map((event) => {
+			const title = normalizeDiaryLineText(
+				event?.title || event?.summary,
+				copy.untitledEvent,
+			);
+			const start = extractTimeLabel(event?.startTime || event?.start);
+			const end = extractTimeLabel(event?.endTime || event?.end);
+			const timeLabel = start && end ? `${start}-${end}` : start || end || copy.allDay;
+			return {
+				sortKey: start || end || "00:00",
+				line: `${timeLabel} ${title}`,
+			};
+		})
+		.sort((left, right) => left.sortKey.localeCompare(right.sortKey))
+		.map((item) => item.line);
+};
+
+const buildDiaryCompletedTaskLinesForLanguage = (
+	todos = [],
+	language = "ko",
+) => {
+	const copy = getDiaryCopy(language);
+	return (Array.isArray(todos) ? todos : [])
+		.map((todo) => {
+			const title = normalizeDiaryLineText(
+				todo?.title || todo?.text,
+				copy.untitledTask,
+			);
+			const timeLabel = extractTimeLabel(todo?.startTime || todo?.endTime);
+			return {
+				sortKey: timeLabel || "99:99",
+				line: timeLabel ? `${timeLabel} ${title}` : title,
+			};
+		})
+		.sort((left, right) => left.sortKey.localeCompare(right.sortKey))
+		.map((item) => item.line);
+};
+
+const buildDiaryFallbackTitleForLanguage = ({
+	scheduleLines = [],
+	completedLines = [],
+	wasActiveDay = false,
+	language = "ko",
+}) => {
+	const copy = getDiaryCopy(language);
+	if (completedLines.length > 0 && scheduleLines.length > 0) {
+		return copy.fallbackTitleBoth;
+	}
+	if (completedLines.length > 0) {
+		return copy.fallbackTitleCompleted;
+	}
+	if (scheduleLines.length > 0) {
+		return copy.fallbackTitleScheduled;
+	}
+	return wasActiveDay ? copy.fallbackTitleActive : copy.fallbackTitleQuiet;
+};
+
+const buildDiaryFallbackSummaryForLanguage = ({
+	formattedDate,
+	scheduleLines = [],
+	completedLines = [],
+	weather,
+	memo = "",
+	diaryAnswers = [],
+	wasActiveDay = false,
+	language = "ko",
+}) => {
+	const copy = getDiaryCopy(language);
+	const sentences = [];
+
+	if (scheduleLines.length > 0) {
+		sentences.push(copy.scheduleSentence(formattedDate, scheduleLines));
+	} else {
+		sentences.push(copy.noScheduleSentence(formattedDate));
+	}
+
+	if (completedLines.length > 0) {
+		sentences.push(copy.completedSentence(completedLines));
+	} else if (wasActiveDay) {
+		sentences.push(copy.noCompletedSentence);
+	}
+
+	const weatherSummary = buildWeatherSummary(weather).replace("째C", "C");
+	if (weatherSummary) {
+		sentences.push(copy.weatherSentence(weatherSummary));
+	}
+
+	const firstAnswer = normalizeDiaryLineText(diaryAnswers?.[0] || "");
+	if (firstAnswer) {
+		sentences.push(copy.answerSentence(firstAnswer));
+	}
+
+	const memoText = normalizeDiaryLineText(memo);
+	if (memoText) {
+		sentences.push(copy.memoSentence(memoText));
+	}
+
+	if (!wasActiveDay) {
+		sentences.push(copy.inactiveSentence);
+	}
+
+	return sentences.slice(0, 4).join(" ");
+};
+
+const buildDiaryTextForLanguage = ({
+	title,
+	formattedDate,
+	scheduleLines = [],
+	completedLines = [],
+	summary,
+	language = "ko",
+}) => {
+	const copy = getDiaryCopy(language);
+	return [
+		`${copy.titleLabel}: ${title}`,
+		`${copy.dateLabel}: ${formattedDate}`,
+		"",
+		copy.scheduleHeading,
+		...(scheduleLines.length > 0
+			? scheduleLines.map((line) => `- ${line}`)
+			: [`- ${copy.noSchedule}`]),
+		"",
+		copy.completedHeading,
+		...(completedLines.length > 0
+			? completedLines.map((line) => `- ${line}`)
+			: [`- ${copy.noCompleted}`]),
+		"",
+		copy.notesHeading,
+		summary,
+	].join("\n");
+};
+
 /**
  * AI 일기 자동 생성
  * @param {Object} params
- * @param {string} params.briefingText - 당일 AI 브리핑 (시나리오 A만)
- * @param {Array} params.completedTodos - 완료된 Todo 리스트 (시나리오 A만)
+ * @param {string} params.briefingText - 당일 AI 브리핑
+ * @param {Array} params.completedTodos - 완료된 Todo 리스트
  * @param {Object} params.weather - 날씨 데이터
  * @param {Array} params.trends - 뉴스/트렌드 요약
  * @param {Array} params.stocks - 증시/환율 데이터
  * @param {Array} params.calEvents - 캘린더 일정
- * @param {Array} params.diaryAnswers - DiaryCard 질문 답변 (시나리오 A만)
+ * @param {Array} params.diaryAnswers - DiaryCard 질문 답변
  * @param {string} params.date - 대상 날짜 (YYYY-MM-DD)
  * @param {boolean} params.wasActiveDay - true=접속했음(A), false=비접속(B)
  * @returns {string} 일기 텍스트
@@ -689,95 +1080,132 @@ export async function generateDiary({
 	stocks = [],
 	calEvents = [],
 	diaryAnswers = [],
+	memo = "",
 	date = "",
 	wasActiveDay = false,
+	language = "ko",
 }) {
-	let prompt;
+	const resolvedLanguage = resolveDiaryLanguage(language);
+	const diaryCopy = getDiaryCopy(resolvedLanguage);
+	const formattedDate =
+		formatDiaryDateLabelForLanguage(date, resolvedLanguage) || date;
+	const scheduleLines = buildDiaryEventLinesForLanguage(
+		calEvents,
+		resolvedLanguage,
+	);
+	const completedLines = buildDiaryCompletedTaskLinesForLanguage(
+		completedTodos,
+		resolvedLanguage,
+	);
 
-	// Factual-Only System Prompt (REQ-AJ-006)
-	const FACTUAL_SYSTEM_PROMPT = [
-		"당신은 사용자의 하루를 요약하는 객관적 일기 작성기입니다.",
-		"",
-		"=== 반드시 지켜야 할 규칙 ===",
-		"1. 사실 기반 서술만 사용하세요 (예: '날씨: 23°C, 흐림', '회의 3건 완료', 'KOSPI +1.2%')",
-		"2. 감정적 언어 금지: '기분 좋은', '놀라운', '실망스러운', '다행히', '아쉽게도' 등",
-		"3. 비교/추측 금지: '평소와 달리', '아마도', '~일 것이다' 등",
-		"4. 미사여구 금지: 인사말, 마무리 덕담, 응원 문구 등",
-		"",
-		"=== 올바른 예시 ===",
-		"✓ '오전 9시 팀 스탠드업 미팅 참석. 날씨 18°C 맑음. KOSPI 2,450pt(+0.8%).'",
-		"✓ '프로젝트 제안서 작성 완료. 오후 3시 클라이언트 미팅.'",
-		"",
-		"=== 잘못된 예시 ===",
-		"✗ '오늘은 정말 알찬 하루였습니다.'",
-		"✗ '날씨가 좋아서 기분이 상쾌했습니다.'",
-		"✗ '내일도 좋은 하루 되세요!'",
+	const fallbackTitle = buildDiaryFallbackTitleForLanguage({
+		scheduleLines,
+		completedLines,
+		wasActiveDay,
+		language: resolvedLanguage,
+	});
+	const fallbackSummary = buildDiaryFallbackSummaryForLanguage({
+		formattedDate,
+		scheduleLines,
+		completedLines,
+		weather,
+		memo,
+		diaryAnswers,
+		wasActiveDay,
+		language: resolvedLanguage,
+	});
+
+	const promptContext = {
+		date: formattedDate,
+		wasActiveDay,
+		scheduleLines,
+		completedLines,
+		weather,
+		stocks: Array.isArray(stocks) ? stocks.slice(0, 4) : [],
+		trends: Array.isArray(trends) ? trends.slice(0, 5) : [],
+		diaryAnswers: Array.isArray(diaryAnswers) ? diaryAnswers.slice(0, 3) : [],
+		memo: normalizeDiaryLineText(memo),
+		briefingText: normalizeDiaryLineText(briefingText),
+	};
+
+	const systemPromptV2 = [
+		"You are a diary assistant that summarizes a user's day from structured facts.",
+		`Write the response in ${diaryCopy.targetLanguageName}.`,
+		"Return exactly one JSON object and nothing else.",
+		"Do not invent events, emotions, or conclusions that are not supported by the input.",
 	].join("\n");
 
-	if (wasActiveDay) {
-		// 시나리오 A: 풍부한 데이터 기반 일기
-		prompt = [
-			`${date}의 하루를 사실 기반으로 요약하세요.`,
-			"",
-			"=== [Macro Events] 거시적 사건 ===",
-			weather ? `날씨: ${JSON.stringify(weather)}` : "",
-			stocks.length > 0 ? `증시: ${JSON.stringify(stocks.slice(0, 4))}` : "",
-			trends.length > 0 ? `뉴스 트렌드: ${trends.slice(0, 5).join(", ")}` : "",
-			"",
-			"=== [Personal Records] 개인 활동 ===",
-			completedTodos.length > 0
-				? `완료한 할 일:\n${completedTodos.map((t) => `- ${t.text || t}`).join("\n")}`
-				: "완료한 할 일: 없음",
-			calEvents.length > 0
-				? `일정:\n${calEvents.slice(0, 5).map((e) => `- ${e.title || e.summary}`).join("\n")}`
-				: "일정: 없음",
-			diaryAnswers.length > 0
-				? `Daily Question 답변:\n${diaryAnswers.join("\n")}`
-				: "",
-			"",
-			"=== 출력 형식 ===",
-			"[Macro Events] 섹션과 [Personal Records] 섹션으로 구분하여 작성하세요.",
-			"각 섹션은 2-3문장으로 사실만 간결하게 서술하세요.",
-		]
-			.filter(Boolean)
-			.join("\n");
-	} else {
-		// 시나리오 B: 사실 기반 간결 일기
-		prompt = [
-			`${date}에 있었던 사실을 기록하세요.`,
-			"(사용자가 이 날 앱에 접속하지 않아 개인 활동 데이터가 없습니다.)",
-			"",
-			"=== [Macro Events] ===",
-			weather ? `날씨: ${JSON.stringify(weather)}` : "날씨 정보 없음",
-			stocks.length > 0 ? `증시: ${JSON.stringify(stocks.slice(0, 4))}` : "",
-			trends.length > 0 ? `뉴스 트렌드: ${trends.slice(0, 5).join(", ")}` : "",
-			calEvents.length > 0
-				? `예정된 일정:\n${calEvents.slice(0, 5).map((e) => `- ${e.title || e.summary}`).join("\n")}`
-				: "",
-			"",
-			"=== 출력 형식 ===",
-			"2-3문장으로 Macro Events만 사실 기반으로 기록하세요.",
-		]
-			.filter(Boolean)
-			.join("\n");
-	}
+	const promptV2 = [
+		`Write a diary title and summary for ${formattedDate}.`,
+		`Write both fields in ${diaryCopy.targetLanguageName}.`,
+		'Return JSON only in this shape: {"title":"...","summary":"..."}',
+		"",
+		"Rules:",
+		"- Title should be short and symbolic, without exaggeration.",
+		"- Summary should be 2 to 4 factual sentences.",
+		"- The schedule and completed lists will already be shown separately, so connect the day naturally instead of repeating every bullet verbatim.",
+		"- If memo exists, weave it in naturally as a factual note.",
+		"- If the day was inactive, mention that naturally.",
+		"",
+		"Input data:",
+		JSON.stringify(promptContext, null, 2),
+	].join("\n");
+
+	const systemPrompt = [
+		"당신은 사용자의 하루를 정리하는 일기 보조 AI입니다.",
+		"반드시 JSON 객체 하나만 반환하세요.",
+		"summary는 사실 기반으로만 쓰고, 감정 과장이나 추측은 금지합니다.",
+		"title은 짧은 상징 문구로 작성하되 과장하지 마세요.",
+	].join("\n");
+
+	const prompt = [
+		`${formattedDate}의 일기 제목과 요약을 작성하세요.`,
+		"반드시 아래 형식의 JSON만 반환하세요.",
+		'{"title":"...","summary":"..."}',
+		"",
+		"규칙:",
+		"- title: 한국어 3~10자 내외의 짧은 상징 문구",
+		"- summary: 한국어 2~4문장, 사실 기반",
+		"- 일정 목록과 완료 목록은 앱에서 따로 보여주므로 summary는 흐름 정리에 집중",
+		"- Memo가 있으면 사실 기반으로 한 문장 안에서 자연스럽게 반영 가능",
+		"- 앱 미접속일이면 summary 안에 그 사실을 자연스럽게 한 문장으로 포함",
+		"",
+		"입력 데이터:",
+		JSON.stringify(promptContext, null, 2),
+	].join("\n");
 
 	const data = await invokeFunction("groq", {
-		prompt,
-		system: FACTUAL_SYSTEM_PROMPT,
+		prompt: promptV2,
+		system: systemPromptV2,
 	});
 
 	if (data?.text) {
-		return String(data.text).trim();
+		try {
+			const match = String(data.text).match(/\{[\s\S]*\}/);
+			const parsed = JSON.parse(match ? match[0] : data.text);
+			const title = normalizeDiaryLineText(parsed?.title, fallbackTitle);
+			const summary = normalizeDiaryLineText(parsed?.summary, fallbackSummary);
+
+				return buildDiaryTextForLanguage({
+					title,
+					formattedDate,
+					scheduleLines,
+					completedLines,
+					summary,
+					language: resolvedLanguage,
+				});
+		} catch (error) {
+			console.warn("AI Diary 파싱 실패:", error?.message || error);
+		}
 	}
 
-	// 로컬 fallback (also factual)
-	const fallbackParts = [`[${date}]`];
-	if (weather?.temp) fallbackParts.push(`날씨: ${weather.temp}°C`);
-	if (calEvents.length > 0) fallbackParts.push(`일정: ${calEvents.length}건`);
-	if (completedTodos.length > 0) fallbackParts.push(`완료: ${completedTodos.length}건`);
-	if (!wasActiveDay) fallbackParts.push("앱 미접속");
-	
-	return fallbackParts.join(". ") + ".";
+	return buildDiaryTextForLanguage({
+		title: fallbackTitle,
+		formattedDate,
+		scheduleLines,
+		completedLines,
+		summary: fallbackSummary,
+		language: resolvedLanguage,
+	});
 }
 

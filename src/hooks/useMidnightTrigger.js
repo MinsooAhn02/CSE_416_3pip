@@ -1,9 +1,9 @@
 import { useEffect, useRef, useCallback } from "react";
 import { useDiaryStore } from "../store/useDiaryStore";
 import { useTodoStore } from "../store/useTodoStore";
-import { useDataStore } from "../store/useDataStore";
-import { generateDiary } from "../services/aiService";
+import { generateAndSaveDiaryForDate } from "../services/diaryGenerationService";
 import { load, save } from "../utils/storage";
+import { formatLocalDate, parseDateString, shiftDateString } from "../utils/date";
 
 const LAST_SYNTHESIS_KEY = "mb_last_synthesis_date";
 const LAST_ACCESS_KEY = "mb_last_access_date";
@@ -22,61 +22,27 @@ export const useMidnightTrigger = (isLoggedIn) => {
 	const synthesisInProgress = useRef(false);
 	const lastCheckedDate = useRef(null);
 
-	const todayStr = () => new Date().toISOString().slice(0, 10);
-
-	/**
-	 * Collect synthesis data from stores (REQ-AJ-002)
-	 */
-	const collectSynthesisData = useCallback((dateStr) => {
-		const { todos } = useTodoStore.getState();
-		const { weather, stocks, trends, calEvents } = useDataStore.getState();
-		const { getAnswers, getDiary } = useDiaryStore.getState();
-
-		// Filter only CHECKED items (REQ-CS-003)
-		const completedTodos = todos.filter((t) => t.completed);
-		const diaryAnswers = getAnswers(dateStr) || [];
-		const existingEntry = getDiary(dateStr);
-
-		return {
-			completedTodos,
-			diaryAnswers,
-			weather,
-			stocks,
-			trends,
-			calEvents,
-			existingMemo: existingEntry?.memo || "",
-			hasExistingDiary: !!existingEntry?.diary,
-		};
-	}, []);
+	const todayStr = () => formatLocalDate();
 
 	/**
 	 * Generate diary for a specific date (REQ-AJ-003)
 	 */
 	const synthesizeDiary = useCallback(async (dateStr, wasActiveDay = true) => {
-		const { saveDiary, getDiary } = useDiaryStore.getState();
+		const { getDiary } = useDiaryStore.getState();
 		
 		// Skip if diary already exists (idempotency)
 		if (getDiary(dateStr)?.diary) {
 			console.log(`[Midnight] Diary already exists for ${dateStr}, skipping`);
 			return true;
 		}
-
-		const data = collectSynthesisData(dateStr);
 		
 		try {
-			const diaryText = await generateDiary({
-				completedTodos: data.completedTodos,
-				weather: data.weather,
-				stocks: data.stocks,
-				trends: data.trends,
-				calEvents: data.calEvents,
-				diaryAnswers: data.diaryAnswers,
-				date: dateStr,
+			const result = await generateAndSaveDiaryForDate(dateStr, {
+				overwrite: false,
 				wasActiveDay,
 			});
 
-			if (diaryText) {
-				await saveDiary(dateStr, diaryText);
+			if (result?.ok && result.text) {
 				console.log(`[Midnight] Diary generated for ${dateStr}`);
 				return true;
 			}
@@ -84,7 +50,7 @@ export const useMidnightTrigger = (isLoggedIn) => {
 			console.warn(`[Midnight] Failed to generate diary for ${dateStr}:`, e?.message);
 		}
 		return false;
-	}, [collectSynthesisData]);
+	}, []);
 
 	/**
 	 * Recover missed diaries for skipped dates (Option A)
@@ -99,15 +65,15 @@ export const useMidnightTrigger = (isLoggedIn) => {
 		}
 
 		// Calculate skipped dates
-		const lastDate = new Date(lastAccess);
-		const todayDate = new Date(today);
+		const lastDate = parseDateString(lastAccess);
+		const todayDate = parseDateString(today);
 		const skippedDates = [];
 
 		let current = new Date(lastDate);
 		current.setDate(current.getDate() + 1);
 
 		while (current < todayDate) {
-			skippedDates.push(current.toISOString().slice(0, 10));
+			skippedDates.push(formatLocalDate(current));
 			current.setDate(current.getDate() + 1);
 		}
 
@@ -156,9 +122,7 @@ export const useMidnightTrigger = (isLoggedIn) => {
 
 		try {
 			// Generate yesterday's diary
-			const yesterday = new Date();
-			yesterday.setDate(yesterday.getDate() - 1);
-			const yesterdayStr = yesterday.toISOString().slice(0, 10);
+			const yesterdayStr = shiftDateString(today, -1);
 
 			const success = await synthesizeDiary(yesterdayStr, true);
 			
@@ -179,7 +143,7 @@ export const useMidnightTrigger = (isLoggedIn) => {
 
 		const checkMidnight = () => {
 			const now = new Date();
-			const currentDate = now.toISOString().slice(0, 10);
+			const currentDate = formatLocalDate(now);
 			const hours = now.getHours();
 			const minutes = now.getMinutes();
 

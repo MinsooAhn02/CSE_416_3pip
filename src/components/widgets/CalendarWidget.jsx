@@ -7,9 +7,13 @@ import {
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useTheme } from "../../hooks/useTheme";
-import { useDiaryStore } from "../../store/useDiaryStore";
-import { useGoogleCalendarStore } from "../../store/useGoogleCalendarStore";
+import {
+	filterTasksByTaskList,
+	useGoogleCalendarStore,
+} from "../../store/useGoogleCalendarStore";
 import { useTodoStore } from "../../store/useTodoStore";
+import { formatLocalDate } from "../../utils/date";
+import { doesTaskOccurOnDate, isTaskCompletedOnDate } from "../../utils/taskRecurrence";
 import DatePanelContainer from "../layout/DatePanelContainer";
 
 const sameDay = (a, b) =>
@@ -28,17 +32,24 @@ const CalendarWidget = () => {
 	const DAYS = t("calendar.days", { returnObjects: true });
 
 	/* ── 외부 스토어 연결 ── */
-	const getDiaryDates = useDiaryStore((s) => s.getDiaryDates);
-	const diaryDates = useMemo(() => new Set(getDiaryDates()), [getDiaryDates]);
 	const setSelectedDate = useGoogleCalendarStore((s) => s.setSelectedDate);
+	const selectedTaskListFilter = useGoogleCalendarStore((s) => s.selectedTaskListFilter);
 	const { events = [], tasks = [] } = useGoogleCalendarStore();
+	const filteredTasks = useMemo(
+		() => filterTasksByTaskList(tasks, selectedTaskListFilter),
+		[tasks, selectedTaskListFilter],
+	);
 
 	const hasEventsOnDate = (dateStr) => {
 		return events?.some((e) => e.date === dateStr) || false;
 	};
 
 	const hasTasksOnDate = (dateStr) => {
-		return tasks?.some((t) => t.date === dateStr && !t.completed) || false;
+		return (
+			filteredTasks?.some(
+				(task) => doesTaskOccurOnDate(task, dateStr) && !isTaskCompletedOnDate(task, dateStr),
+			) || false
+		);
 	};
 
 	const now = new Date();
@@ -48,8 +59,14 @@ const CalendarWidget = () => {
 
 	useEffect(() => {
 		useTodoStore.getState().ensureDailyReset?.();
-		useGoogleCalendarStore.getState().fetchEventsAndTasks?.();
 	}, []);
+
+	useEffect(() => {
+		useGoogleCalendarStore
+			.getState()
+			.fetchEventsAndTasks?.({ date: formatLocalDate(currentDate) })
+			.catch(() => {});
+	}, [currentDate]);
 
 	const handleCycleView = () => {
 		const views = ["month", "week", "day"];
@@ -157,7 +174,6 @@ const CalendarWidget = () => {
 							return <div key={i} className="invisible h-9 w-9 mx-auto" />;
 						}
 						const dateStr = `${viewYear}-${String(viewMonth + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-						const hasDiary = diaryDates.has(dateStr);
 						const isToday = day === today && isCurrentMonth;
 						const isSelected = selectedDateForPanels === dateStr;
 
@@ -177,14 +193,6 @@ const CalendarWidget = () => {
 							>
 								{day}
 								<div className="absolute bottom-0.5 left-1/2 -translate-x-1/2 flex gap-1">
-									{hasDiary && (
-										<span
-											className={`w-1 h-1 rounded-full ${
-												isToday ? "bg-white" : "bg-blue-500"
-											}`}
-											title={t("diary.title")}
-										/>
-									)}
 									{hasEventsOnDate(dateStr) && (
 										<span
 											className={`w-1 h-1 rounded-full ${
@@ -214,7 +222,6 @@ const CalendarWidget = () => {
 					{weekDays.map((d, i) => {
 						const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 						const isSelected = selectedDateForPanels === dateStr;
-						const hasDiary = diaryDates.has(dateStr);
 
 						return (
 							<button
@@ -237,14 +244,6 @@ const CalendarWidget = () => {
 								<p className="text-xs">{DAYS[d.getDay()]}</p>
 								<p className="text-lg font-bold">{d.getDate()}</p>
 								<div className="absolute bottom-1 left-1/2 -translate-x-1/2 flex gap-0.5">
-									{hasDiary && (
-										<span
-											className={`w-1 h-1 rounded-full ${
-												sameDay(d, now) ? "bg-white" : "bg-blue-500"
-											}`}
-											title={t("diary.title")}
-										/>
-									)}
 									{hasEventsOnDate(dateStr) && (
 										<span
 											className={`w-1 h-1 rounded-full ${

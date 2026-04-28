@@ -1,30 +1,53 @@
-# MorningBrief.AI - 통합 프로젝트 문서
+﻿# MorningBrief.AI - 통합 프로젝트 문서
 
-> 최종 정리일: 2026-04-21
-> 관리 정책: 문서는 DOCS.md 단일 파일로 유지
+> 최종 정리일: 2026-04-28
+> 관리 정책: 문서는 `DOCS.md` 단일 파일로 유지
 
 ---
 
 ## 1) 프로젝트 개요
 
-MorningBrief.AI는 브라우저 새 탭(New Tab)에서 동작하는 개인 대시보드형 서비스다.
-사용자의 하루 맥락(날씨, 주식, 뉴스, 일정, 건강, 메모/질문)을 모아 AI 브리핑과 기록 흐름으로 연결한다.
+MorningBrief.AI는 브라우저 새 탭(New Tab)에서 동작하는 개인 대시보드형 서비스다.  
+사용자의 하루 맥락(날씨, 주식, 뉴스, 일정, 건강, memo/질문)을 한 화면에 모으고, 이를 AI briefing과 diary 흐름으로 연결한다.
 
 핵심 목표:
 
-1. 정보를 한 화면에서 즉시 확인
+1. 필요한 정보를 한 화면에서 빠르게 확인
 2. 캐시 우선 렌더링으로 로딩 체감 개선
-3. 사용자별 설정/데이터를 안전하게 저장
+3. 사용자별 설정과 데이터를 안전하게 저장
 
 핵심 원칙:
 
-1. API 실패 시 fallback으로 UX 단절 최소화
-2. 사용자 데이터 격리(RLS)
-3. 비밀키는 Supabase Secrets에서만 관리
+1. 외부 API 실패 시 가능한 범위에서 fallback 유지
+2. 사용자 데이터는 RLS 기준으로 격리
+3. 비밀키는 클라이언트에 하드코딩하지 않고 Supabase/배포 환경 변수로만 관리
 
 ---
 
 ## 2) 기술 스택 (현재 코드 기준)
+
+### Recent Docs Sync
+
+2026-04-28
+
+1. 일정/할 일 영역은 mock 데이터가 아니라 실제 Google Calendar + Google Tasks를 기준으로 동작하고, Supabase Edge Function(`events`, `tasks`)으로 읽기/쓰기/재인증 흐름을 처리한다.
+2. Event는 Google Calendar의 실제 반복 이벤트(`RRULE`)와 연동된다. 반복 series 기준 편집/삭제, Guests, Google Meet, reminder, busy/free, visibility, Google Places API 기반 location autocomplete, rich-text description 입력/표시가 구현되어 있다.
+3. Task는 Google Tasks를 단일 source로 유지한다. 실제 Google Task Lists 기준의 `All Tasks / 특정 리스트` 필터와 새 리스트 생성 UI를 제공하고, 선택한 리스트 필터는 캘린더 task dot과 today todo에도 그대로 반영된다.
+4. Task의 앱 전용 확장 데이터는 `[MB_META]` notes에 저장한다. 여기에는 `repeat`, `dueDate`, `completedDates` 등이 포함되며, UI에서는 `Deadline`으로 보이지만 내부 마감일 필드는 `dueDate`를 사용한다. Google Tasks API의 `due`는 캘린더에 배치되는 task 날짜와 동기화한다.
+5. 일반 task의 완료/미완료는 Google Tasks와 양방향 동기화된다. `status`와 `completed` timestamp를 함께 보내고, update 호출은 `PUT` 기준으로 맞춘다. 반복 task는 Google API 제약 때문에 완료만 occurrence 단위로 분리되고, 수정/삭제/리스트 이동은 series 전체 기준이다.
+6. Event/Task 입력 UX는 시간 기본값을 현재 시각 기준 다음 30분 단위로 맞추고, 시간 없는 항목은 `All day`로 처리한다. Event 종료 시간은 시작 시간보다 1시간 뒤로 기본 설정된다.
+7. Diary 데이터 구조는 `ai_generated_diary`, `edited_diary`, `memo`로 분리되어 있고, 하루가 끝난 뒤 같은 날짜의 이벤트, 완료된 task, 응답, memo, 외부 데이터(weather, stocks, trends)를 사용해 제목 포함 diary를 생성한다.
+8. Diary 보안은 optional PIN 구조다. PIN 설정/변경/해제, lock timing, diary list 잠금, Settings 연동이 구현되어 있으며 PIN이 켜진 경우 diary 접근 전에 인증이 필요하다. diary popup은 즉시 PIN 입력창을 띄우지 않고 먼저 잠금 화면과 `Unlock` 버튼을 보여준다.
+9. Settings에는 `Diary` 탭이 있어 PIN과 diary 생성 언어를 한곳에서 관리한다. diary popup의 settings 버튼도 이 `Diary` 탭으로 바로 연결된다.
+10. Diary panel에는 수동 `Generate Diary / Regenerate Diary` 버튼이 있어 자정 자동 생성과 별개로 현재 날짜 diary를 즉시 테스트하거나 다시 만들 수 있다.
+11. Personalization은 persona + onboarding interests + 과거 memo 요약을 사용한다. 단, briefing은 memo를 제외하고, diary 생성은 해당 날짜 memo를 직접 사용한다.
+12. 캘린더에서는 diary dot을 제거했고, task dot은 occurrence-level completion과 현재 task list filter를 반영한다.
+13. Event description은 detail 화면에서 Google-style HTML을 읽기 좋게 렌더링하고, add/edit 화면에서는 compact rich-text editor로 `bold`, `italic`, `underline`, `ordered list`, `bullet list`, `link`, `strikethrough`를 입력할 수 있다.
+14. `Date Details`, `EventPanel`, `TaskPanel`은 `en/ko` 전환 시 비번역 문구 없이 전체가 바르게 돌아가도록 정리했고, 반복/알림 라벨, 상세 메타데이터, 재연결 CTA, 새 리스트 모달 문구, 빈 상태, 제목 없음 fallback, locale 날짜 표시까지 언어 전환을 따르도록 맞췄다.
+
+문제점: tasks api에서 실제로 존재하지만, 제공하는 기능이 있어서 일부 연동 안됨 (deadline, 시간설정). 
+그대로 둘지, 그냥 없앨지 향후 결정.
+
 
 ### Frontend
 
@@ -35,19 +58,48 @@ MorningBrief.AI는 브라우저 새 탭(New Tab)에서 동작하는 개인 대�
 - framer-motion
 - @hello-pangea/dnd
 - i18next / react-i18next
+- lucide-react
+
+현재 프런트엔드 구조 핵심:
+
+1. Zustand store 중심 상태 관리: `useAuthStore`, `useDataStore`, `useDiaryStore`, `useGoogleCalendarStore`, `useTodoStore`, `useWidgetStore`, `useSettingsStore`
+2. 공통 UI 컴포넌트: `TimeInput`, `GooglePlacesLocationField`, `WidgetCard`, `ConfirmDialog`
+3. Event description은 별도 에디터 라이브러리 없이 `contentEditable` 기반 lightweight rich-text editor로 구현
+4. i18n은 `en` / `ko`를 기준으로 Event location autocomplete, deadline 표시, UI copy에 반영
+
+5. i18n? Date Details / EventPanel / TaskPanel copy, repeat/reminder label, deadline/date display, reconnect flow, create-list / delete-confirm UI path源뚯? 諛섏쁺?섏뿬 ?몄뼱 ?꾪솚 ?뚰뒪媛 ?뺤깭?곸쑝濡??뚮┝?덈떎.
 
 ### Backend / Infra
 
 - Supabase (Auth, Postgres, Edge Functions)
 - Edge Functions (TypeScript)
-- 외부 데이터 연동:
+
+Google APIs:
+
+1. Google Calendar
+2. Google Tasks
+3. Google Fitness
+4. Google Maps Places JavaScript API
+
+외부 데이터/AI 연동:
 
 1. Weather
 2. Twelve Data (stocks)
 3. Tavily (trends/news)
 4. Kakao Local
-5. Google Calendar / Google Fitness
-6. Groq (LLM)
+5. Groq (LLM)
+
+현재 사용 중인 Edge Functions:
+
+1. `events`
+2. `tasks`
+3. `weather`
+4. `stocks`
+5. `tavily`
+6. `fitness`
+7. `groq`
+8. `smart-widget`
+9. `kakao-places`
 
 ---
 
@@ -56,10 +108,13 @@ MorningBrief.AI는 브라우저 새 탭(New Tab)에서 동작하는 개인 대�
 ```text
 src/
   App.jsx
+  main.jsx
+  index.css
   components/
     common/
       ConfirmDialog.jsx
       DragHandle.jsx
+      GooglePlacesLocationField.jsx
       TimeInput.jsx
       Toggle.jsx
       WidgetCard.jsx
@@ -91,8 +146,18 @@ src/
       StocksWidget.jsx
       TrendsWidget.jsx
       WeatherWidget.jsx
+  constants/
+  hooks/
+    useMidnightTrigger.js
+    useTheme.js
+  l10n/
+  lib/
+    googleMaps.js
+    supabase.js
+  mock/
   services/
     aiService.js
+    diaryGenerationService.js
   store/
     useAuthStore.js
     useDataStore.js
@@ -102,16 +167,24 @@ src/
     useSettingsStore.js
     useTodoStore.js
     useWidgetStore.js
+  utils/
+    date.js
+    eventRepeat.js
+    personaContext.js
+    storage.js
+    taskRecurrence.js
 
 supabase/
   schema.sql
   functions/
     calendar/
+    events/
     fitness/
     groq/
     kakao-places/
     smart-widget/
     stocks/
+    tasks/
     tavily/
     weather/
 ```
@@ -122,31 +195,28 @@ supabase/
 
 ### 4.1 인증 부트스트랩
 
-App 초기화 시 인증은 아래 순서로 확정된다.
+앱 초기화 시 인증은 아래 순서로 진행된다.
 
-1. mount 시 getSession() 명시 호출
-2. onAuthStateChange 구독으로 후속 이벤트 수신
-3. authBootstrapDone 이후 데이터 초기화 로직 진행
-
-의도:
-
-- 자동 세션 복원 타이밍 레이스 상황에서도 초기 로드가 멈추지 않게 함
+1. `supabase.auth.getSession()`으로 현재 세션 확인
+2. `onAuthStateChange` 구독으로 이후 변경 감지
+3. `provider_token`을 로컬에 유지해 Google 연동 복구 가능하게 처리
 
 ### 4.2 로그인 후 초기 데이터 로드
 
-조건: isLoggedIn=true && user.id 존재
+조건: `isLoggedIn === true` 그리고 `user.id` 존재
 
 실행 순서:
 
-1. hydrateFromDB(Settings/Widget/Todo/Diary)
-2. fetchAll({ useExistingCache: true })
-3. AI 후속 처리(generateAiTodoOnLoad 등)
+1. Settings / widget layouts / smart keywords / diary / todo hydrate
+2. `fetchAll({ useExistingCache: true })`
+3. Google Calendar / Tasks store 초기화
+4. 필요 시 AI todo / briefing 생성 흐름 실행
 
 ### 4.3 주기 갱신
 
-1. 탭 visible 복귀 시 fetchAll({ useExistingCache: true })
-2. 5분 주기 폴링(visible일 때만)
-3. 위젯별 수동 새로고침 시 force=true로 캐시 우회
+1. 페이지 visible 복귀 시 `fetchAll({ useExistingCache: true })`
+2. 일정 주기로 외부 위젯 데이터 갱신
+3. 자정 기준 hook에서 daily reset, diary generation 흐름 수행
 
 ---
 
@@ -154,40 +224,35 @@ App 초기화 시 인증은 아래 순서로 확정된다.
 
 ### 5.1 캐시 계층
 
-1. 메모리 캐시: 위치 정보(짧은 TTL)
-2. DB 캐시: api_cache (사용자별)
-3. localStorage fallback
+1. `api_cache` 테이블: 사용자별 API 응답 캐시
+2. `localStorage`: UI 상태와 일부 데이터 fallback
+3. 모듈 스코프 메모리 캐시: geolocation 등 짧은 TTL 데이터
 
-관련 키:
+### 5.2 캐시 규칙
 
-- mb_last_access_time
-- mb_last_fetched_at
+1. 기본 access-time 기반 캐시 임계값은 1시간
+2. geolocation은 약 5분 캐시
+3. `force`가 아니면 DB/local cache를 먼저 확인
+4. cache miss 또는 stale이면 Edge Function 재호출
 
-### 5.2 fetchAll 핵심 규칙
+### 5.3 fetchAll 핵심 규칙
 
-1. useExistingCache=true면 기본적으로 force refresh를 하지 않음
-2. user_settings + widget_layouts 조회 후 visibleWidgets 결정
-3. visibleWidgets 기준 필요한 fetch만 병렬 실행
-4. 상태(apiStatus, loading, errors)를 일관되게 갱신
+1. visible widget 기준으로 필요한 fetch만 병렬 실행
+2. 실패한 위젯은 가능한 경우 mock 또는 기존 cached 값으로 유지
+3. Calendar/Tasks는 별도 Google 전용 store에서 관리
+4. Edge 호출은 `supabase.functions.invoke` 대신 direct fetch wrapper를 사용해 실제 HTTP 오류를 노출
 
-### 5.3 개별 fetch 공통 패턴
+### 5.4 현재 데이터 소스 매핑
 
-1. cacheKey 계산
-2. force=false면 readApiCache 우선
-3. 캐시 hit 시 즉시 상태 반영 후 종료
-4. miss면 Edge Function 호출
-5. 성공 시 정규화 + writeApiCache
-6. 실패 시 mock fallback + 에러 상태 기록
-
-### 5.4 엔드포인트 매핑
-
-- weather -> /functions/v1/weather
-- stocks -> /functions/v1/stocks
-- trends/news -> /functions/v1/tavily
-- places -> /functions/v1/kakao-places
-- calendar -> /functions/v1/calendar
-- fitness -> /functions/v1/fitness
-- AI(groq) -> /functions/v1/groq
+- weather -> `functions/v1/weather`
+- stocks -> `functions/v1/stocks`
+- trends/news -> `functions/v1/tavily`
+- places -> `functions/v1/kakao-places`
+- events -> `functions/v1/events`
+- tasks -> `functions/v1/tasks`
+- fitness -> `functions/v1/fitness`
+- AI -> `functions/v1/groq`
+- smart widget -> `functions/v1/smart-widget`
 
 ---
 
@@ -195,151 +260,76 @@ App 초기화 시 인증은 아래 순서로 확정된다.
 
 ### 6.1 레이아웃 원칙
 
-DashboardLayout 기준:
-
-1. 브리핑 묶음(BriefingWidget + DiaryCard)은 핵심 블록
-2. 나머지 위젯은 설정 순서/가시성에 따라 slider deck 구성
-3. dense 위젯(news/trends/stocks/smart)은 단독 스택 처리 가능
+1. `DashboardLayout`이 built-in widget과 smart widget을 통합 렌더링
+2. `useWidgetStore`가 visibility, layout, smart keywords를 관리
+3. briefing / diary / calendar는 상단 핵심 흐름으로 배치되고, 나머지 위젯은 deck/stack 레이아웃을 따른다
 
 ### 6.2 공통 카드 규칙
 
-WidgetCard 공통 기능:
+`WidgetCard` 공통 기능:
 
-1. 타이틀/아이콘/닫기/새로고침
-2. apiStatus 표시
-3. closeWidget(widgetId)로 vis=false 적용
+1. 제목 / 아이콘 / refresh / close
+2. API 상태 표시
+3. widget visibility 토글과 DB 동기화
 
-### 6.3 위젯별 역할
+### 6.3 핵심 위젯 역할
 
-1. BriefingWidget
-
-- AI 요약/상세 브리핑
-- tone/length 반영 및 재생성
-
-2. DiaryCard
-
-- 오늘 질문 응답 입력/저장
-- 날짜별 응답 목록 표시
-
-3. CalendarWidget
-
-- month/week/day 전환
-- DatePanelContainer 연동
-
-4. WeatherWidget
-
-- 현재 날씨 및 지표
-- 단위 설정 연동
-
-5. StocksWidget
-
-- 심볼 기반 시세
-- 심볼 변경 시 재조회
-
-6. TrendsWidget
-
-- 트렌드/출처/상세 모달
-
-7. NewsWidget
-
-- 뉴스 목록/요약/상세 모달
-
-8. HealthWidget
-
-- steps/sleep/calories/heart rate 요약
-
-9. SmartWidgetContent
-
-- 키워드 기반 개인화 콘텐츠
-- refresh/remove/외부 링크 동작
+1. `BriefingWidget`: persona와 외부 데이터를 바탕으로 AI briefing 생성
+2. `CalendarWidget`: month/week/day 전환, date detail panel 연동, event/task dot 렌더링
+3. `DiaryCard`: 오늘 질문/기록 진입점
+4. `SmartWidgetContent`: keyword별 AI-generated personalized card
+5. `HealthWidget`: Google Fitness 기반 요약
 
 ---
 
-## 7) 캘린더/패널/일기 상태
+## 7) 캘린더 / 패널 / 일기 상태
 
-DatePanelContainer는 EventPanel, TaskPanel, DiaryPanel을 통합 제공한다.
+`DatePanelContainer`는 선택 날짜의 Event / Task를 나란히 보여주고, diary는 헤더 버튼으로 modal 형태로 연다.
 
-현재 상태:
+현재 구현 상태:
 
-1. 패널 UI와 PIN 인증 흐름은 구현됨
-2. useGoogleCalendarStore는 아직 Mock 기반
-3. 실 API 완전 연동은 후속 작업 항목
-
----
-
-## 8) 개인화 로직 (Smart/People)
-
-### 8.1 목적
-
-Q&A 응답에서 관심 키워드를 추출하고 최근성 가중치로 누적해 검색/추천 품질을 높인다.
-
-### 8.2 키워드 추출 규칙
-
-1. AI 출력은 JSON 배열만 허용
-2. category는 고정 목록만 허용
-3. keyword는 검색 가능한 명사 형태로 정규화
-4. 무효 category, 빈 keyword는 제거
-
-고정 category:
-
-- food
-- place
-- content
-- shopping
-- lifestyle
-- mood
-- interest
-
-### 8.3 점수 계산
-
-30일 윈도우 가중치:
-
-$$
-score = \sum \frac{30 - elapsed\_days}{30}, \quad elapsed\_days < 30
-$$
-
-처리 흐름:
-
-1. 하루 Q&A 수집
-2. 자정 배치에서 키워드 추출
-3. score_log 적재
-4. 조회 시 합산/정렬
-5. 30일 초과 데이터 정리
+1. `EventPanel`은 Google Calendar CRUD를 담당하며, recurring event는 master series 기준으로 편집/삭제한다.
+2. Event는 title optional, all-day, 12-hour time picker, guests, Google Meet, visibility, busy/free, reminder, Google Places location, rich-text description을 지원한다.
+3. `TaskPanel`은 Google Tasks CRUD를 담당하며, title optional, all-day/no-time, repeat, `Deadline` UI, list selector를 지원한다. 내부적으로는 마감일을 `dueDate`로 저장한다.
+4. 반복 task는 Google Tasks 한 건을 source로 유지하고, 완료 상태만 `completedDates`로 날짜별 분리된다.
+5. Task list filter(`All Tasks` 또는 특정 Google Task List)는 Tasks 패널, Calendar task dot, today todo에 공통으로 반영된다.
+6. `DiaryPanel`은 `ai_generated_diary`, `edited_diary`, `memo`를 기준으로 표시되며, diary list와 PIN 보호 modal 흐름을 공유한다.
+7. Diary PIN은 optional이다. PIN이 설정된 경우 diary / diary list 진입 전에 `PINModal` 인증이 필요하고, lock timing은 Settings에서 제어한다.
+8. 캘린더는 diary dot 없이 event/task indicator만 표시한다.
 
 ---
 
-## 9) 최근 이슈 반영 상태
+## 8) 개인화 로직
 
-### 9.1 자동 세션 복원 시 공란 문제
+### 8.1 현재 사용되는 입력
 
-증상:
+`buildPersonaContext()`는 아래 데이터를 조합한다.
 
-- dev 실행 후 재로그인 전 위젯 공란
+1. persona
+2. onboarding interests
+3. age
+4. 과거 memo 요약
 
-반영 내용:
+### 8.2 현재 memo 사용 규칙
 
-1. authBootstrapDone 도입
-2. getSession() + onAuthStateChange 병행
-3. 초기화 fallback 경로 보강
+1. same-day diary generation: 해당 날짜 memo를 직접 사용
+2. smart widget personalization: 과거 memo 요약 사용
+3. briefing / first-login briefing: `includeMemo: false`로 memo 제외
 
-결과:
+### 8.3 현재 한계
 
-- 자동 복원 경로 안정성 개선
+1. `UserInterestProfile` 같은 별도 derived profile 테이블은 아직 없다
+2. memo 원문을 topic-only profile로 캐싱하지 않는다
+3. personalization은 runtime context 기반이며 장기 프로필 레이어로 분리되어 있지 않다
 
-### 9.2 슬라이더 위젯 상세 모달 위치 오프셋
+---
 
-원인:
+## 9) 현재 제약 / 주의점
 
-- transform 컨텍스트 내부 모달 렌더 영향
-
-반영 내용:
-
-1. 상세 모달 portal 렌더 방식 적용
-2. host 기반 표시 범위 정리
-
-결과:
-
-- 패널 이동 후에도 상세 모달 위치 일관성 확보
+1. Event repeat은 Google Calendar native recurrence와 직접 연동되지만, Task repeat은 Google Tasks 공개 API 제약 때문에 앱 메타데이터(`[MB_META]`) 기반이다.
+2. Task repeat에서 날짜별로 분리되는 것은 완료 상태만이다. repeat/list/`dueDate`(Deadline)/description 수정은 series 전체에 적용된다.
+3. Event description rich text는 Google-style HTML과 호환되도록 제한된 태그만 sanitize해서 렌더링한다.
+4. 일부 외부 위젯(weather, stocks, trends, restaurants, 일부 health 흐름)은 네트워크/인증 실패 시 기존 cache 또는 mock fallback을 사용할 수 있다.
 
 ---
 
@@ -350,26 +340,44 @@ $$
 ```env
 VITE_SUPABASE_URL=https://xxxxx.supabase.co
 VITE_SUPABASE_ANON_KEY=eyJhbGci...
+VITE_GOOGLE_MAPS_API_KEY=AIza...
 ```
+
+선택적으로 사용할 수 있는 디버그 변수:
+
+```env
+VITE_DEBUG_FLOW=1
+```
+
+Google Maps / Places key 정책:
+
+1. `VITE_GOOGLE_MAPS_API_KEY`는 로컬 `.env` 또는 배포 환경 변수에만 둔다
+2. 실제 키는 Git에 커밋하지 않고 `.env.example`만 공유한다
+3. Google Cloud에서 `HTTP referrers` 제한을 건다
+4. Places autocomplete는 브라우저에서 동작하므로 Supabase secret로 대체할 수 없다
 
 ### 10.2 Google OAuth / Scope
 
-1. Supabase Auth의 Google Provider 활성화
-2. OAuth callback URI 등록
-3. 필요한 scope 추가
-
-권장 scope:
+현재 로그인 시 요청하는 주요 scope:
 
 ```text
-https://www.googleapis.com/auth/calendar.readonly
+https://www.googleapis.com/auth/calendar
+https://www.googleapis.com/auth/tasks
 https://www.googleapis.com/auth/fitness.activity.read
+https://www.googleapis.com/auth/fitness.sleep.read
+https://www.googleapis.com/auth/fitness.heart_rate.read
 ```
+
+주의:
+
+1. 예전 readonly scope로 동의한 세션은 event/task write가 동작하지 않을 수 있다
+2. Google 권한이 만료되면 Event/Task 패널의 `Reconnect Google` 흐름으로 다시 연결해야 한다
 
 ### 10.3 보안 원칙
 
-1. 서드파티 키는 Secrets Manager에서만 관리
-2. 클라이언트 코드 하드코딩 금지
-3. RLS로 사용자 데이터 분리
+1. third-party secret은 배포 플랫폼/Supabase secret로만 관리
+2. 클라이언트 코드에는 anon key 외 비밀키를 넣지 않는다
+3. 사용자 데이터는 RLS와 user-scoped row로 분리한다
 
 ---
 
@@ -377,41 +385,43 @@ https://www.googleapis.com/auth/fitness.activity.read
 
 ### 11.1 실행 전
 
-1. 환경 변수 확인
-2. Auth/DB/RLS 정책 확인
-3. Edge Functions 배포 상태 확인
+1. `.env` / Supabase 환경 변수 확인
+2. Google Provider와 redirect URI 설정 확인
+3. Edge Function 배포 상태 확인
 
 ### 11.2 런타임 확인
 
-1. 로그인 직후 위젯 즉시 렌더 여부
-2. 수동 새로고침(force=true) 정상 동작 여부
-3. 뉴스/트렌드 상세 모달 위치 정상 여부
-4. 캘린더/패널/PIN 흐름 정상 여부
+1. 로그인 직후 widget hydrate와 `fetchAll`이 정상 시작되는지
+2. Event/Task write 후 원격 Google 데이터가 다시 반영되는지
+3. diary generation / PIN flow / settings modal layering이 정상인지
+4. smart widget / briefing이 persona context와 함께 생성되는지
 
 ### 11.3 장애 시 우선 점검
 
-1. handleAuthChange 호출 여부
-2. user.id 세팅 여부
-3. fetchAll 진입 여부
-4. visibleWidgets 계산 결과
-5. edge 응답(ok/error/timeout) 로그
+1. `provider_token`이 살아 있는지
+2. `fetchAll`에서 어떤 widget fetch가 실패했는지
+3. Supabase Edge Function HTTP 응답 본문이 무엇인지
+4. Google OAuth scope가 현재 기능과 맞는지
 
 ---
 
 ## 12) 문서 통합 출처
 
-이번 정리본은 아래 파일의 중복을 제거하고 최신 구현 기준으로 통합했다.
+현재 문서는 아래 정보를 기준으로 정리한다.
 
-1. DOCS.md(기존)
-2. README.md
-3. logic.txt
-4. logic for Personalization .txt
-5. widget.txt
+1. `DOCS.md`
+2. 실제 코드베이스 구현 상태
+3. `README.md`
+4. `logic.txt`
+5. `logic for Personalization.txt`
+6. `widget.txt`
 
 ---
 
 ## 13) 문서 관리 규칙
 
-1. 신규 문서는 임시 작성 후 DOCS.md로 병합
-2. 병합 완료 후 임시 문서는 삭제
-3. 동일 주제는 DOCS.md 내부 단일 섹션만 유지
+1. 기능 변경과 함께 `DOCS.md`를 같은 턴에 갱신한다.
+2. `Recent Docs Sync`에는 사소한 spacing, copy, 위치 미세조정 같은 trivial 변경을 누적하지 않는다.
+3. `Recent Docs Sync`에는 현재 제품 상태를 이해하는 데 필요한 큰 변화만 남긴다.
+4. 문서는 changelog보다 "현재 구조와 제약" 설명을 우선한다.
+5. 오래된 설명이 현재 구현과 어긋나면, 새 항목을 덧붙이기보다 기존 설명을 교체한다.

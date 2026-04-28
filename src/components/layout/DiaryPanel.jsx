@@ -1,35 +1,38 @@
-import { useState, useEffect } from "react";
-import { BookOpen, Lock, Edit2, Save, X } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { BookOpen, Lock, Edit2, RotateCcw, Save, Settings, X } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { useTheme } from "../../hooks/useTheme";
 import { useDiaryStore } from "../../store/useDiaryStore";
+import { useSettingsStore } from "../../store/useSettingsStore";
+import { generateAndSaveDiaryForDate } from "../../services/diaryGenerationService";
 import PINModal from "../modals/PINModal";
 
-/**
- * DiaryPanel — PIN-protected diary display and edit
- *
- * BUG FIX #1: Blur-Lock Interaction
- * - Shows blurred content with lock overlay initially
- * - PIN modal only appears on user click, not automatically
- *
- * BUG FIX #2: Strict PIN Session Reset
- * - PIN auth resets when closing/switching dates
- * - User must re-enter PIN every time
- *
- * BUG FIX #4: Diary Edit Functionality
- * - Users can now edit AI-generated diary content
- * - Save button updates state correctly
- *
- * @param {{ selectedDate: string, onClose?: () => void }} props
- */
 const DiaryPanel = ({ selectedDate, onClose, compact = false }) => {
+	const { i18n } = useTranslation();
 	const { isDark, cardCls, inputCls, hoverCls, secondaryBgCls } = useTheme();
 	const {
 		getDiary,
 		saveDiary,
 		saveMemo,
-		isPinAuthenticatedSession,
+		revertDiaryToGenerated,
+		pinSet,
+		isPinAuthenticated,
+		pinAuthExpiresAt,
+		refreshPinAuthState,
 		clearPinSession,
 	} = useDiaryStore();
+	const pinLockMode = useSettingsStore((state) => state.pinLockMode);
+	const setShowSettings = useSettingsStore((state) => state.setShowSettings);
+	const setSettingsTab = useSettingsStore((state) => state.setSettingsTab);
+	const pinRequired = pinSet && pinLockMode !== "off";
+
+	const currentEntry = getDiary(selectedDate);
+	const aiGeneratedDiary =
+		currentEntry?.aiGeneratedDiary || currentEntry?.diary || "";
+	const canEditDiary = !!(currentEntry?.diary || aiGeneratedDiary).trim();
+	const canRevertDiary = !!(
+		currentEntry?.editedDiary?.trim() && currentEntry?.aiGeneratedDiary?.trim()
+	);
 
 	const [showPinModal, setShowPinModal] = useState(false);
 	const [isEditingDiary, setIsEditingDiary] = useState(false);
@@ -37,33 +40,78 @@ const DiaryPanel = ({ selectedDate, onClose, compact = false }) => {
 	const [diaryContent, setDiaryContent] = useState("");
 	const [memoContent, setMemoContent] = useState("");
 	const [isSaving, setIsSaving] = useState(false);
+	const [isGeneratingDiary, setIsGeneratingDiary] = useState(false);
 
-	/* Load diary data on mount */
+	const diaryUiText = useMemo(
+		() =>
+			i18n.language === "ko"
+				? {
+						generate: "일기 생성",
+						regenerate: "다시 생성",
+						generating: "생성 중...",
+						generateTitle: "이 날짜의 일기 생성",
+						regenerateTitle: "이 날짜의 일기 다시 생성",
+				  }
+				: {
+						generate: "Generate Diary",
+						regenerate: "Regenerate Diary",
+						generating: "Generating...",
+						generateTitle: "Generate diary for this date",
+						regenerateTitle: "Regenerate diary for this date",
+				  },
+		[i18n.language],
+	);
+
 	useEffect(() => {
-		const entry = getDiary(selectedDate);
-		if (entry) {
-			setDiaryContent(entry.diary || "");
-			setMemoContent(entry.memo || "");
-		}
-		// Reset editing states when date changes
+		setDiaryContent(currentEntry?.diary || "");
+		setMemoContent(currentEntry?.notes || currentEntry?.memo || "");
 		setIsEditingDiary(false);
 		setIsEditingMemo(false);
-	}, [selectedDate, getDiary]);
+	}, [selectedDate, currentEntry?.diary, currentEntry?.notes, currentEntry?.memo]);
 
-	/* Check if PIN is authenticated */
-	const isAuthenticated = isPinAuthenticatedSession?.();
+	const isAuthenticated = !pinRequired || isPinAuthenticated;
 
-	/* BUG FIX #2: Reset PIN session when closing or switching dates */
+	useEffect(() => {
+		refreshPinAuthState?.();
+	}, [pinLockMode, refreshPinAuthState]);
+
 	useEffect(() => {
 		return () => {
-			// Cleanup: Reset PIN auth when component unmounts or date changes
-			if (isAuthenticated) {
+			if (pinRequired && pinLockMode === "immediate" && isAuthenticated) {
 				clearPinSession();
 			}
 		};
-	}, [selectedDate, isAuthenticated, clearPinSession]);
+	}, [pinRequired, pinLockMode, isAuthenticated, clearPinSession]);
 
-	/* Handle diary save (BUG FIX #4: Edit Diary functionality) */
+	useEffect(() => {
+		if (
+			!pinRequired ||
+			pinLockMode === "immediate" ||
+			!isAuthenticated ||
+			!pinAuthExpiresAt
+		) {
+			return undefined;
+		}
+
+		const remainingMs = pinAuthExpiresAt - Date.now();
+		if (remainingMs <= 0) {
+			refreshPinAuthState?.();
+			return undefined;
+		}
+
+		const timerId = window.setTimeout(() => {
+			refreshPinAuthState?.();
+		}, remainingMs + 50);
+
+		return () => window.clearTimeout(timerId);
+	}, [
+		pinRequired,
+		pinLockMode,
+		isAuthenticated,
+		pinAuthExpiresAt,
+		refreshPinAuthState,
+	]);
+
 	const handleSaveDiary = async () => {
 		setIsSaving(true);
 		try {
@@ -76,7 +124,19 @@ const DiaryPanel = ({ selectedDate, onClose, compact = false }) => {
 		}
 	};
 
-	/* Handle memo save */
+	const handleRevertDiary = async () => {
+		setIsSaving(true);
+		try {
+			await revertDiaryToGenerated(selectedDate);
+			setDiaryContent(aiGeneratedDiary);
+			setIsEditingDiary(false);
+		} catch (err) {
+			console.error("Failed to revert diary:", err);
+		} finally {
+			setIsSaving(false);
+		}
+	};
+
 	const handleSaveMemo = async () => {
 		setIsSaving(true);
 		try {
@@ -89,17 +149,29 @@ const DiaryPanel = ({ selectedDate, onClose, compact = false }) => {
 		}
 	};
 
-	/* Handle lock button - reset PIN only, don't close panel (BUG FIX #2) */
-	const handleLock = () => {
-		// BUG FIX #2: Only reset PIN session, NOT the entire panel
-		// This ensures the diary locks while keeping the Date Details view open
-		clearPinSession();
-		// Do NOT call onClose() - that would close the entire panel
+	const handleGenerateDiary = async (overwrite = false) => {
+		setIsGeneratingDiary(true);
+		try {
+			await generateAndSaveDiaryForDate(selectedDate, { overwrite });
+			setIsEditingDiary(false);
+		} catch (err) {
+			console.error("Failed to generate diary:", err);
+		} finally {
+			setIsGeneratingDiary(false);
+		}
 	};
 
-	/* Format date for display */
+	const handleLock = () => {
+		clearPinSession();
+	};
+
+	const handleOpenDiarySettings = () => {
+		setSettingsTab("diary");
+		setShowSettings(true);
+	};
+
 	const formatDate = (dateStr) => {
-		const d = new Date(dateStr + "T00:00:00");
+		const d = new Date(`${dateStr}T00:00:00`);
 		const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 		return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")} ${days[d.getDay()]}`;
 	};
@@ -114,46 +186,69 @@ const DiaryPanel = ({ selectedDate, onClose, compact = false }) => {
 					<div className="flex items-center gap-2">
 						<BookOpen size={15} className="text-blue-500" />
 						<h3 className="font-bold text-xs">Diary</h3>
-						{!isAuthenticated && <Lock size={13} className="text-gray-500" />}
+						{pinRequired && !isAuthenticated && (
+							<Lock size={13} className="text-gray-500" />
+						)}
 					</div>
-					{isAuthenticated && (
-						<button
-							onClick={handleLock}
-							title="Lock and reset PIN"
-							className={`p-1 rounded-md transition-colors ${hoverCls}`}
-						>
-							<Lock size={14} />
-						</button>
-					)}
+					<div className="flex items-center gap-1">
+						{pinRequired && isAuthenticated && (
+							<button
+								onClick={handleLock}
+								title="Lock diary"
+								className={`p-1 rounded-md transition-colors ${hoverCls}`}
+							>
+								<Lock size={14} />
+							</button>
+						)}
+						{pinSet && (
+							<button
+								onClick={handleOpenDiarySettings}
+								title="Diary settings"
+								className={`p-1 rounded-md transition-colors ${hoverCls}`}
+							>
+								<Settings size={14} />
+							</button>
+						)}
+					</div>
 				</div>
 
-				{showPinModal && !isAuthenticated && (
+				{showPinModal && pinRequired && !isAuthenticated && (
 					<PINModal
+						mode={pinSet ? "verify" : "setup"}
 						onSuccess={() => {
 							setShowPinModal(false);
 						}}
 						onCancel={() => {
 							setShowPinModal(false);
-							onClose?.();
 						}}
 					/>
 				)}
 
-				{!isAuthenticated ? (
-					<button
-						onClick={() => setShowPinModal(true)}
-						className={`w-full h-12 rounded-lg px-3 flex items-center gap-2 transition-all ${`${secondaryBgCls} ${hoverCls}`}`}
+				{pinRequired && !isAuthenticated ? (
+					<div
+						className={`rounded-lg px-3 py-3 space-y-3 transition-all ${secondaryBgCls}`}
 					>
-						<Lock
-							size={16}
-							className={isDark ? "text-gray-500" : "text-gray-400"}
-						/>
-						<p
-							className={`text-xs text-left ${isDark ? "text-gray-400" : "text-gray-600"}`}
+						<div className="flex items-center gap-2">
+							<Lock
+								size={16}
+								className={isDark ? "text-gray-500" : "text-gray-400"}
+							/>
+							<p
+								className={`text-xs text-left ${isDark ? "text-gray-400" : "text-gray-600"}`}
+							>
+								{pinSet
+									? "Diary is locked."
+									: "Diary PIN is required before opening this diary."}
+							</p>
+						</div>
+						<button
+							type="button"
+							onClick={() => setShowPinModal(true)}
+							className="w-full rounded-lg bg-blue-500 px-3 py-2 text-xs font-medium text-white transition-colors hover:bg-blue-600"
 						>
-							Diary is locked. Tap to unlock.
-						</p>
-					</button>
+							{pinSet ? "Unlock" : "Set up PIN"}
+						</button>
+					</div>
 				) : (
 					<div
 						className={`h-12 rounded-lg px-3 flex items-center gap-3 ${secondaryBgCls}`}
@@ -176,21 +271,31 @@ const DiaryPanel = ({ selectedDate, onClose, compact = false }) => {
 
 	return (
 		<div className={`rounded-xl border p-4 space-y-4 h-auto ${cardCls}`}>
-			{/* Header */}
 			<div className="flex items-center justify-between gap-2 mb-4">
 				<div className="flex items-center gap-2">
 					<BookOpen size={16} className="text-blue-500" />
 					<h3 className="font-bold text-sm">Diary</h3>
-					{!isAuthenticated && <Lock size={14} className="text-gray-500" />}
+					{pinRequired && !isAuthenticated && (
+						<Lock size={14} className="text-gray-500" />
+					)}
 				</div>
 				<div className="flex items-center gap-1">
-					{isAuthenticated && (
+					{pinRequired && isAuthenticated && (
 						<button
 							onClick={handleLock}
-							title="Lock and reset PIN"
+							title="Lock diary"
 							className={`p-1.5 rounded-lg transition-colors ${hoverCls}`}
 						>
 							<Lock size={16} />
+						</button>
+					)}
+					{pinSet && (
+						<button
+							onClick={handleOpenDiarySettings}
+							title="Diary settings"
+							className={`p-1.5 rounded-lg transition-colors ${hoverCls}`}
+						>
+							<Settings size={16} />
 						</button>
 					)}
 					{onClose && (
@@ -205,24 +310,21 @@ const DiaryPanel = ({ selectedDate, onClose, compact = false }) => {
 				</div>
 			</div>
 
-			{/* PIN Modal (BUG FIX #1: Only shows on click, not automatically) */}
-			{showPinModal && !isAuthenticated && (
+			{showPinModal && pinRequired && !isAuthenticated && (
 				<PINModal
+					mode={pinSet ? "verify" : "setup"}
 					onSuccess={() => {
 						setShowPinModal(false);
 					}}
 					onCancel={() => {
 						setShowPinModal(false);
-						onClose?.();
 					}}
 				/>
 			)}
 
-			{/* BUG FIX #4: Clean Lock UI - Solid background with lock icon (no blur) */}
-			{!isAuthenticated && (
+			{pinRequired && !isAuthenticated && (
 				<div
-					onClick={() => setShowPinModal(true)}
-					className={`h-[280px] rounded-lg flex flex-col items-center justify-center cursor-pointer transition-all ${`${secondaryBgCls} ${hoverCls}`}`}
+					className={`h-[280px] rounded-lg flex flex-col items-center justify-center transition-all px-6 ${secondaryBgCls}`}
 				>
 					<Lock
 						size={48}
@@ -231,22 +333,28 @@ const DiaryPanel = ({ selectedDate, onClose, compact = false }) => {
 					<p
 						className={`text-xs font-medium text-center ${isDark ? "text-gray-400" : "text-gray-600"}`}
 					>
-						Click to unlock
+						{pinSet
+							? "This diary is locked."
+							: "PIN setup is required before opening the diary."}
 					</p>
+					<button
+						type="button"
+						onClick={() => setShowPinModal(true)}
+						className="mt-4 rounded-lg bg-blue-500 px-4 py-2 text-xs font-medium text-white transition-colors hover:bg-blue-600"
+					>
+						{pinSet ? "Unlock" : "Set up PIN"}
+					</button>
 				</div>
 			)}
 
-			{/* BUG FIX #4: Unlocked Content with Editable Diary */}
 			{isAuthenticated && (
 				<div className="space-y-4">
-					{/* Date Info */}
 					<p
 						className={`text-xs font-medium flex-shrink-0 ${isDark ? "text-gray-400" : "text-gray-600"}`}
 					>
 						{formatDate(selectedDate)}
 					</p>
 
-					{/* AI Generated Diary (Now Editable!) */}
 					<div className="space-y-2">
 						<div className="flex items-center justify-between">
 							<label
@@ -254,22 +362,56 @@ const DiaryPanel = ({ selectedDate, onClose, compact = false }) => {
 							>
 								AI Generated Diary
 							</label>
-							{!isEditingDiary && (
+							<div className="flex items-center gap-1">
 								<button
-									onClick={() => setIsEditingDiary(true)}
-									className={`p-1 rounded-lg text-xs transition-colors ${hoverCls}`}
-									title="Edit diary"
+									onClick={() => handleGenerateDiary(!!currentEntry?.diary?.trim())}
+									disabled={isSaving || isGeneratingDiary || isEditingDiary}
+									className={`px-2 py-1 rounded-lg text-[11px] font-medium transition-colors disabled:opacity-50 ${hoverCls}`}
+									title={
+										currentEntry?.diary?.trim()
+											? diaryUiText.regenerateTitle
+											: diaryUiText.generateTitle
+									}
 								>
-									<Edit2 size={14} />
+									{isGeneratingDiary
+										? diaryUiText.generating
+										: currentEntry?.diary?.trim()
+											? diaryUiText.regenerate
+											: diaryUiText.generate}
 								</button>
-							)}
+								{canRevertDiary && !isEditingDiary && (
+									<button
+										onClick={handleRevertDiary}
+										disabled={isSaving}
+										className={`px-2 py-1 rounded-lg text-[11px] font-medium transition-colors flex items-center gap-1 ${hoverCls} disabled:opacity-50`}
+										title="Revert to original AI diary"
+									>
+										<RotateCcw size={13} />
+										Revert
+									</button>
+								)}
+								{canEditDiary && !isEditingDiary && (
+									<button
+										onClick={() => setIsEditingDiary(true)}
+										className={`p-1 rounded-lg text-xs transition-colors ${hoverCls}`}
+										title="Edit diary"
+									>
+										<Edit2 size={14} />
+									</button>
+								)}
+							</div>
 						</div>
+
 						{!isEditingDiary ? (
 							<div
-								className={`p-3 rounded-lg text-xs leading-relaxed whitespace-pre-wrap min-h-[80px] cursor-pointer transition-all ${`${secondaryBgCls} ${hoverCls}`}`}
-								onClick={() => setIsEditingDiary(true)}
+								className={`p-3 rounded-lg text-xs leading-relaxed whitespace-pre-wrap min-h-[80px] transition-all ${secondaryBgCls} ${canEditDiary ? "cursor-pointer" : ""} ${canEditDiary ? hoverCls : ""}`}
+								onClick={() => {
+									if (canEditDiary) {
+										setIsEditingDiary(true);
+									}
+								}}
 							>
-								{diaryContent || "No diary generated for this date yet."}
+								{diaryContent || "No AI diary generated for this date yet."}
 							</div>
 						) : (
 							<div className="space-y-2">
@@ -290,7 +432,10 @@ const DiaryPanel = ({ selectedDate, onClose, compact = false }) => {
 										{isSaving ? "Saving..." : "Save"}
 									</button>
 									<button
-										onClick={() => setIsEditingDiary(false)}
+										onClick={() => {
+											setDiaryContent(currentEntry?.diary || "");
+											setIsEditingDiary(false);
+										}}
 										className={`flex-1 px-3 py-2 rounded-lg text-xs font-medium transition-colors ${`${secondaryBgCls} ${hoverCls}`}`}
 									>
 										Cancel
@@ -300,19 +445,18 @@ const DiaryPanel = ({ selectedDate, onClose, compact = false }) => {
 						)}
 					</div>
 
-					{/* Memo Section */}
 					<div className="space-y-2">
 						<div className="flex items-center justify-between">
 							<label
 								className={`text-xs font-medium block ${isDark ? "opacity-70" : "text-gray-600"}`}
 							>
-								Personal Notes
+								Memo
 							</label>
 							{!isEditingMemo && (
 								<button
 									onClick={() => setIsEditingMemo(true)}
 									className={`p-1 rounded-lg text-xs transition-colors ${hoverCls}`}
-									title="Edit notes"
+									title="Edit Memo"
 								>
 									<Edit2 size={14} />
 								</button>
@@ -323,7 +467,7 @@ const DiaryPanel = ({ selectedDate, onClose, compact = false }) => {
 								className={`p-3 rounded-lg text-xs leading-relaxed whitespace-pre-wrap min-h-[80px] cursor-pointer transition-all ${`${secondaryBgCls} ${hoverCls}`}`}
 								onClick={() => setIsEditingMemo(true)}
 							>
-								{memoContent || "Click to add personal notes..."}
+								{memoContent || "Click to add memo..."}
 							</div>
 						) : (
 							<div className="space-y-2">
@@ -332,7 +476,7 @@ const DiaryPanel = ({ selectedDate, onClose, compact = false }) => {
 									onChange={(e) => setMemoContent(e.target.value)}
 									rows={4}
 									className={`w-full px-3 py-2 rounded-lg text-xs outline-none border transition-all focus:ring-2 focus:ring-blue-500/30 resize-none ${inputCls}`}
-									placeholder="Write your personal notes here..."
+									placeholder="Write your memo here..."
 								/>
 								<div className="flex gap-2">
 									<button
@@ -344,7 +488,10 @@ const DiaryPanel = ({ selectedDate, onClose, compact = false }) => {
 										{isSaving ? "Saving..." : "Save"}
 									</button>
 									<button
-										onClick={() => setIsEditingMemo(false)}
+										onClick={() => {
+											setMemoContent(currentEntry?.notes || currentEntry?.memo || "");
+											setIsEditingMemo(false);
+										}}
 										className={`flex-1 px-3 py-2 rounded-lg text-xs font-medium transition-colors ${`${secondaryBgCls} ${hoverCls}`}`}
 									>
 										Cancel
