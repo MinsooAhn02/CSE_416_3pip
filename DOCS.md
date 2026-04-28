@@ -1,6 +1,6 @@
 # MorningBrief.AI - 통합 프로젝트 문서
 
-> 최종 정리일: 2026-04-21
+> 최종 정리일: 2026-04-29
 > 관리 정책: 문서는 DOCS.md 단일 파일로 유지
 
 ---
@@ -292,19 +292,34 @@ Q&A 응답에서 관심 키워드를 추출하고 최근성 가중치로 누적�
 
 ### 8.3 점수 계산
 
-30일 윈도우 가중치:
+30일 윈도우 가중치(출처 가중치 포함, 반올림 없이 저장):
 
 $$
-score = \sum \frac{30 - elapsed\_days}{30}, \quad elapsed\_days < 30
+score = \sum \left(base\_weight \times \frac{30 - elapsed\_days}{30}\right), \quad elapsed\_days < 30
 $$
+
+기본 가중치:
+
+- personal 질문: 2
+- 일기(다이어리): 1
+
+예시 계산(각 이벤트를 그대로 합산해 저장):
+
+- "짜장": personal 1회(10일 전) + diary 1회(오늘)
+  - $2\times(20/30) + 1\times(30/30)$
+- "면": personal 1회(9일 전) + diary 1회(오늘)
+  - $2\times(21/30) + 1\times(30/30)$
+
+저장 방식: 위 계산 결과를 JSON 포맷으로 반영해 저장하며, 추후 코드 구현 시 이 JSON 구조를 그대로 사용한다.
 
 처리 흐름:
 
-1. 하루 Q&A 수집
+1. 하루 Q&A/일기 수집 (source=personal|diary)
 2. 자정 배치에서 키워드 추출
-3. score_log 적재
-4. 조회 시 합산/정렬
-5. 30일 초과 데이터 정리
+3. source_weight 부여 (personal=2, diary=1)
+4. score_log 적재
+5. 조회 시 합산/정렬
+6. 30일 초과 데이터 정리
 
 ---
 
