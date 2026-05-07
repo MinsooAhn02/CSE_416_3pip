@@ -113,6 +113,9 @@ export const useSettingsStore = create((set, get) => ({
 	lastBriefingShown: load("mb_last_briefing_shown", null),
 	showFirstLoginModal: false,
 
+	// 개인화 관심 키워드 (DB에서 hydrate, [{keyword, category, score}])
+	keywordInterests: [],
+
 	/* DB에서 불러온 설정으로 덮어쓰기 */
 	hydrateFromDB: async (data) => {
 		if (!data && supabase) {
@@ -179,6 +182,10 @@ export const useSettingsStore = create((set, get) => ({
 		if (data.last_briefing_shown) {
 			patch.lastBriefingShown = data.last_briefing_shown;
 			save("mb_last_briefing_shown", data.last_briefing_shown);
+		}
+		// 개인화 관심 키워드
+		if (Array.isArray(data.keyword_interests)) {
+			patch.keywordInterests = data.keyword_interests;
 		}
 		if (Object.keys(patch).length) set(patch);
 		
@@ -295,6 +302,36 @@ export const useSettingsStore = create((set, get) => ({
 		set({ showFirstLoginModal: false, lastBriefingShown: today });
 		save("mb_last_briefing_shown", today);
 		syncSettings({ last_briefing_shown: today });
+	},
+
+	// 개인화 관심 키워드 액션
+	setKeywordInterests: (interests) => {
+		set({ keywordInterests: interests });
+		syncSettings({ keyword_interests: interests });
+	},
+
+	addKeywordInterest: (keyword, category = "interest") => {
+		const current = get().keywordInterests;
+		if (current.some((item) => item.keyword === keyword)) return;
+		const updated = [{ keyword, category, score: 1 }, ...current];
+		set({ keywordInterests: updated });
+		syncSettings({ keyword_interests: updated });
+		notifySaved();
+	},
+
+	removeKeywordInterest: (keyword) => {
+		const updated = get().keywordInterests.filter(
+			(item) => item.keyword !== keyword
+		);
+		set({ keywordInterests: updated });
+		syncSettings({ keyword_interests: updated });
+		notifySaved();
+	},
+
+	resetKeywordInterests: () => {
+		set({ keywordInterests: [] });
+		syncSettings({ keyword_interests: [], keyword_interests_updated: null });
+		notifySaved();
 	},
 
 	// Check and trigger First-Login Modal (called on app init)

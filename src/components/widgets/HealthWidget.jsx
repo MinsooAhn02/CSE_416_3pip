@@ -8,30 +8,9 @@ import WidgetCard from "../common/WidgetCard";
 const HealthWidget = () => {
 	const { isDark, muted, secondaryBgCls } = useTheme();
 	const { t } = useTranslation();
-	const healthData = useDataStore((s) => s.healthData);
-	const loading = useDataStore((s) => s.loading.health);
-	const error = useDataStore((s) => s.errors.health);
-	const apiStatus = useDataStore((s) => s.apiStatus.health ?? null);
-	const fetchHealth = useDataStore((s) => s.fetchHealth);
-	const getLastUpdatedMinutes = useDataStore((s) => s.getLastUpdatedMinutes);
-	const reconnectGoogle = useAuthStore((s) => s.reconnectGoogle);
-
-	const showReconnectGoogle =
-		error === "Google Health connection expired. Reconnect Google to sync Health again.";
-
-	const formatLastUpdated = (minutes) => {
-		if (minutes == null) return t("common.before_refresh");
-		if (minutes <= 0) return t("common.just_now");
-		return t("common.minutes_ago", { count: minutes });
-	};
-
-	const handleReconnectGoogle = async () => {
-		try {
-			await reconnectGoogle();
-		} catch (err) {
-			console.error("Failed to reconnect Google for health:", err);
-		}
-	};
+	const healthData  = useDataStore((s) => s.healthData);
+	const apiStatus   = useDataStore((s) => s.apiStatus.health ?? null);
+	const isRealData  = apiStatus === "ok";
 
 	return (
 		<WidgetCard
@@ -104,21 +83,10 @@ const HealthWidget = () => {
 							<p className={`text-[10px] ${muted}`}>{t("widgets.health.cups")}</p>
 						</div>
 					</div>
-					{showReconnectGoogle && (
-						<div className="pt-1 flex justify-center">
-							<button
-								type="button"
-								onClick={handleReconnectGoogle}
-								className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[11px] font-semibold transition-colors ${
-									isDark
-										? "bg-white/10 text-white hover:bg-white/15"
-										: "bg-slate-100 text-slate-700 hover:bg-slate-200"
-								}`}
-							>
-								<RefreshCcw size={12} />
-								Reconnect Google
-							</button>
-						</div>
+					{!isRealData && (
+						<p className={`text-[10px] text-center mt-1 ${muted}`}>
+							{t("widgets.health.google_fit_notice")}
+						</p>
 					)}
 				</div>
 			) : (

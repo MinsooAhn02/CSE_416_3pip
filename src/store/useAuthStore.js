@@ -1,8 +1,8 @@
 import { create } from "zustand";
 import { load, save } from "../utils/storage";
 import { supabase } from "../lib/supabase";
-
-const PROVIDER_TOKEN_KEY = "mb_google_provider_token";
+import { runPersonalizationBatch } from "../services/personalizationService";
+import { useSettingsStore } from "./useSettingsStore";
 
 export const useAuthStore = create((set, get) => ({
 	isLoggedIn: load("mb_login", false),
@@ -168,11 +168,23 @@ export const useAuthStore = create((set, get) => ({
 			});
 			save("mb_onboarded", true);
 			save("mb_persona", data.persona);
-			return;
-		}
 
-		set({ onboarded: false, showOnboarding: true, obStep: 0 });
-		save("mb_onboarded", false);
+			// 이미 DB에 저장된 keyword_interests를 즉시 store에 반영 (배치 전에도 표시)
+			if (Array.isArray(data.keyword_interests) && data.keyword_interests.length > 0) {
+				useSettingsStore.setState({ keywordInterests: data.keyword_interests });
+			}
+
+			// 개인화 배치: 백그라운드 실행. 배치가 직접 DB에 쓰므로 setState만 (syncSettings 이중 write 방지)
+			runPersonalizationBatch().then((interests) => {
+				if (Array.isArray(interests) && interests.length > 0) {
+					useSettingsStore.setState({ keywordInterests: interests });
+				}
+			}).catch(() => {});
+		} else {
+			// 신규 유저: 온보딩 모달 표시
+			set({ onboarded: false, showOnboarding: true, obStep: 0 });
+			save("mb_onboarded", false);
+		}
 	},
 
 	setShowOnboarding: (v) => set({ showOnboarding: v }),

@@ -17,6 +17,7 @@
     "no": "No",
     "more": "More",
     "show_more": "{{count}} more",
+    "show_more_plain": "Show more",
     "just_now": "Just now",
     "minutes_ago": "{{count}}m ago",
     "before_refresh": "Before refresh",
@@ -185,6 +186,7 @@
       "ai_summary": "AI Summary",
       "hashtags": "Hashtags",
       "sources": "Sources",
+      "view_sources": "View sources ({{count}})",
       "loading": "Loading trends...",
       "no_data": "No trends available."
     },
@@ -194,7 +196,11 @@
       "news_list": "News List",
       "read_more": "Read More",
       "loading": "Loading news...",
-      "no_data": "No news available."
+      "no_data": "No news available.",
+      "detail_title": "News Details",
+      "no_results": "No news to display.",
+      "no_content": "No summary available.",
+      "read_original": "Read original"
     },
     "health": {
       "title": "Health (Google Fit)",

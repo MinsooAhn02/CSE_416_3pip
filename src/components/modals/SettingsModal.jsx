@@ -13,7 +13,9 @@ import {
 	Calendar,
 	Timer,
 	ListOrdered,
-	Lock,
+	Heart,
+	Plus,
+	Trash2,
 } from "lucide-react";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 import { useTheme } from "../../hooks/useTheme";
@@ -88,7 +90,7 @@ const SettingsModal = () => {
 		clockStyle,
 		priorityOrder,
 		showFirstLoginBriefing,
-		diaryLanguage,
+		keywordInterests,
 		setShowSettings,
 		setSettingsTab,
 		setTheme,
@@ -100,7 +102,12 @@ const SettingsModal = () => {
 		setPinLockMode,
 		setDiaryLanguage,
 		setShowFirstLoginBriefing,
+		addKeywordInterest,
+		removeKeywordInterest,
+		resetKeywordInterests,
 	} = useSettingsStore();
+
+	const [newInterestKeyword, setNewInterestKeyword] = useState("");
 	const {
 		vis,
 		smartKeywords,
@@ -193,6 +200,7 @@ const SettingsModal = () => {
 							{ id: "priority", label: "데이터 우선순위" },
 							{ id: "clock", label: "시계 스타일" },
 							{ id: "briefing", label: "AI 브리핑" },
+							{ id: "interests", label: "관심사" },
 							{ id: "theme", label: "테마" },
 								{ id: "diary", label: "Diary" },
 							{ id: "profile", label: "프로필" },
@@ -966,6 +974,113 @@ const SettingsModal = () => {
 										AI 브리핑과 다이어리는 사실 기반으로만 생성됩니다. 감정적 표현, 비교, 예측은 자동으로 제외됩니다.
 									</p>
 								</div>
+							</div>
+						)}
+						{settingsTab === "interests" && (
+							<div className="space-y-4">
+								<div>
+									<p className="text-sm font-medium mb-1">관심 키워드</p>
+									<p className={`text-xs ${muted}`}>
+										AI가 Q&A와 일기에서 자동 수집한 키워드입니다. 직접 추가하거나 삭제할 수 있습니다.
+									</p>
+								</div>
+								<div className="flex gap-2">
+									<input
+										type="text"
+										value={newInterestKeyword}
+										onChange={(e) => setNewInterestKeyword(e.target.value)}
+										onKeyDown={(e) => {
+											if (e.key === "Enter" && newInterestKeyword.trim()) {
+												addKeywordInterest(newInterestKeyword.trim());
+												setNewInterestKeyword("");
+											}
+										}}
+										placeholder="키워드 입력 후 Enter"
+										className={`flex-1 px-3 py-2 rounded-lg text-sm border outline-none focus:ring-2 focus:ring-blue-500/30 ${
+											isDark
+												? "bg-white/5 border-white/10 text-white placeholder:text-white/30"
+												: "bg-gray-50 border-gray-200 text-slate-800 placeholder:text-gray-400"
+										}`}
+									/>
+									<button
+										onClick={() => {
+											if (newInterestKeyword.trim()) {
+												addKeywordInterest(newInterestKeyword.trim());
+												setNewInterestKeyword("");
+											}
+										}}
+										className="px-3 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg text-sm transition-colors"
+									>
+										<Plus size={14} />
+									</button>
+								</div>
+								{keywordInterests.length === 0 ? (
+									<div className={`p-4 rounded-xl text-center ${isDark ? "bg-white/5" : "bg-gray-50"}`}>
+										<Heart size={20} className={`mx-auto mb-2 ${muted}`} />
+										<p className={`text-xs ${muted}`}>
+											아직 수집된 관심 키워드가 없습니다.<br />
+											Q&A에 답변하거나 일기를 작성하면 다음 날 자동으로 추출됩니다.
+										</p>
+									</div>
+								) : (
+									<div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+										{keywordInterests.map((item) => (
+											<div
+												key={item.keyword}
+												className={`flex items-center justify-between px-3 py-2 rounded-lg ${
+													isDark ? "bg-white/5" : "bg-gray-50"
+												}`}
+											>
+												<div className="flex items-center gap-2 min-w-0">
+													<span
+														className={`text-[10px] px-1.5 py-0.5 rounded flex-shrink-0 ${
+															isDark
+																? "bg-blue-500/20 text-blue-300"
+																: "bg-blue-100 text-blue-600"
+														}`}
+													>
+														{item.category}
+													</span>
+													<span className="text-sm truncate">{item.keyword}</span>
+													<span className={`text-[10px] flex-shrink-0 ${muted}`}>
+														{typeof item.score === "number" ? item.score.toFixed(1) : ""}
+													</span>
+												</div>
+												<button
+													onClick={() => removeKeywordInterest(item.keyword)}
+													className={`p-1 rounded transition-colors flex-shrink-0 ${
+														isDark
+															? "hover:bg-red-500/20 text-white/40 hover:text-red-300"
+															: "hover:bg-red-50 text-gray-400 hover:text-red-500"
+													}`}
+												>
+													<Trash2 size={12} />
+												</button>
+											</div>
+										))}
+									</div>
+								)}
+								{keywordInterests.length > 0 && (
+									<button
+										onClick={() =>
+											openConfirm(
+												"관심사 초기화",
+												"모든 관심 키워드와 누적 점수를 초기화하시겠습니까?",
+												() => {
+													resetKeywordInterests();
+													closeConfirm();
+												}
+											)
+										}
+										className={`w-full p-2.5 rounded-xl text-sm text-left ${
+											isDark
+												? "bg-red-500/10 text-red-400 hover:bg-red-500/20"
+												: "bg-red-50 text-red-500 hover:bg-red-100"
+										} transition-colors`}
+									>
+										관심사 전체 초기화
+									</button>
+								)}
 							</div>
 						)}
 					</div>

@@ -7,6 +7,8 @@ import { useTheme } from "../../hooks/useTheme";
 import { useSettingsStore } from "../../store/useSettingsStore";
 import { useDataStore } from "../../store/useDataStore";
 import { useTodoStore } from "../../store/useTodoStore";
+import { useDiaryStore } from "../../store/useDiaryStore";
+import { useAuthStore } from "../../store/useAuthStore";
 import {
 	generateDetailedBriefing,
 	getTimeGreeting,
@@ -53,6 +55,8 @@ const BriefingWidget = () => {
 	const bLen = useSettingsStore((s) => s.bLen) || "medium";
 	const setBLen = useSettingsStore((s) => s.setBLen);
 	const priorityOrder = useSettingsStore((s) => s.priorityOrder) || [];
+	const keywordInterests = useSettingsStore((s) => s.keywordInterests) || [];
+	const persona = useAuthStore((s) => s.persona);
 
 	const weather = useDataStore((s) => s.weather);
 	const stocks = useDataStore((s) => s.stocks);
@@ -120,7 +124,9 @@ const BriefingWidget = () => {
 				calEvents,
 				todos,
 				activeWidgetIds,
-				persona: buildPersonaContext({ includeMemo: false }),
+				yesterdayMemo,
+				keywordInterests,
+				persona,
 			};
 
 			// Generate all three versions in parallel

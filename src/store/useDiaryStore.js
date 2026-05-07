@@ -9,11 +9,9 @@ import {
 } from "./useSettingsStore";
 
 const STORAGE_KEY = "mb_diary_entries";
-const ANSWERS_KEY = "mb_diary_answers";
 const ACTIVE_KEY = "mb_last_access_date";
 const PIN_KEY = "mb_diary_pin";
 const PIN_AUTH_SESSION_KEY = "mb_diary_pin_auth";
-const PIN_AUTH_EXPIRES_AT_KEY = "mb_diary_pin_auth_expires_at";
 
 const todayStr = () => formatLocalDate();
 
@@ -118,8 +116,9 @@ const saveEntriesLocally = (entries) => {
 const initialPinSessionState = getInitialPinSessionState();
 
 export const useDiaryStore = create((set, get) => ({
-	entries: getInitialEntries(),
-	diaryAnswers: load(ANSWERS_KEY, {}),
+	/* ── 상태 ── */
+	entries: getInitialEntries(),                // { "2026-03-18": { diary: "...", memo: "..." } }
+	diaryAnswers: {},                            // { "2026-03-18": string[] } — DB에서 hydrate
 	wasActiveToday: load(ACTIVE_KEY, "") === todayStr(),
 	pinModalVisible: false,
 
@@ -435,60 +434,28 @@ export const useDiaryStore = create((set, get) => ({
 		}
 	},
 
-	saveMemo: async (dateStr, memoText) => get().saveNotes(dateStr, memoText),
+	/* ── DiaryCard Q&A 관리 (user_qa 테이블) ── */
+	/** 질문+답변을 user_qa 테이블에 저장. 실패 시 에러 throw (UI에서 처리) */
+	addAnswer: async (dateStr, question, answer) => {
+		if (!supabase) throw new Error("Supabase not available");
+		const { data: { user } } = await supabase.auth.getUser();
+		if (!user) throw new Error("Not authenticated");
 
-	addAnswer: (dateStr, text) => {
-		set((state) => {
-			const answers = { ...state.diaryAnswers };
-			if (!answers[dateStr]) answers[dateStr] = [];
-			answers[dateStr] = [...answers[dateStr], text];
-			save(ANSWERS_KEY, answers);
-			return { diaryAnswers: answers };
+		const { error } = await supabase.from("user_qa").insert({
+			user_id: user.id,
+			question,
+			answer,
+			asked_date: dateStr,
 		});
+		if (error) throw error;
 	},
 
-	getAnswers: (dateStr) => get().diaryAnswers[dateStr] || [],
-
-	getNotes: (dateStr) => getEntryNotes(get().entries[dateStr]),
-	getMemo: (dateStr) => getEntryNotes(get().entries[dateStr]),
-
-	getRecentNotes: ({
-		beforeDate = null,
-		limit = 5,
-		days = 14,
-		includeSameDate = false,
-	} = {}) => {
-		const anchor = beforeDate
-			? parseDateString(beforeDate)
-			: parseDateString(formatLocalDate());
-
-		return Object.entries(get().entries)
-			.map(([dateStr, entry]) => ({
-				date: dateStr,
-				notes: getEntryNotes(entry),
-			}))
-			.filter((entry) => entry.notes)
-			.filter((entry) => {
-				if (Number.isNaN(anchor.getTime())) return true;
-				const entryDate = parseDateString(entry.date);
-				if (Number.isNaN(entryDate.getTime())) return false;
-				const diffDays =
-					(anchor.getTime() - entryDate.getTime()) / (24 * 60 * 60 * 1000);
-				if (diffDays < 0 || diffDays > days) return false;
-				if (!includeSameDate && diffDays === 0) return false;
-				return true;
-			})
-			.sort((left, right) => right.date.localeCompare(left.date))
-			.slice(0, limit);
+	/** 특정 날짜의 답변 가져오기 (레거시 호환) */
+	getAnswers: (dateStr) => {
+		return get().diaryAnswers[dateStr] || [];
 	},
 
-	getRecentNotesSummary: (options = {}) =>
-		get()
-			.getRecentNotes(options)
-			.map((entry) => `${entry.date}: ${entry.notes}`)
-			.join(" | "),
-	getRecentMemoSummary: (options = {}) => get().getRecentNotesSummary(options),
-
+	/* ── DB에서 일기 + 답변 불러오기 ── */
 	hydrateFromDB: async () => {
 		if (!supabase) return;
 
@@ -500,32 +467,26 @@ export const useDiaryStore = create((set, get) => ({
 
 			const { data } = await supabase
 				.from("diaries")
-				.select("date, ai_generated_diary, edited_diary, diary_text, memo")
+				.select("date, diary_text, memo, answers")
 				.eq("user_id", user.id);
 
-			if (!data || data.length === 0) return;
-
-			const entries = { ...get().entries };
-			for (const row of data) {
-				const prevEntry = normalizeEntry(entries[row.date]);
-				entries[row.date] = normalizeEntry({
-					...prevEntry,
-					aiGeneratedDiary:
-						row.ai_generated_diary ||
-						row.diary_text ||
-						prevEntry.aiGeneratedDiary ||
-						prevEntry.diary ||
-						"",
-					editedDiary: row.edited_diary || prevEntry.editedDiary || "",
-					notes: row.memo || prevEntry.notes || prevEntry.memo || "",
-					memo: row.memo || prevEntry.notes || prevEntry.memo || "",
-				});
+			if (data && data.length > 0) {
+				const entries = { ...get().entries };
+				const diaryAnswers = {};
+				for (const row of data) {
+					entries[row.date] = {
+						diary: row.diary_text || entries[row.date]?.diary || "",
+						memo: row.memo || entries[row.date]?.memo || "",
+					};
+					if (Array.isArray(row.answers) && row.answers.length > 0) {
+						diaryAnswers[row.date] = row.answers;
+					}
+				}
+				set({ entries, diaryAnswers });
+				save(STORAGE_KEY, entries);
 			}
-
-			set({ entries });
-			saveEntriesLocally(entries);
-		} catch (error) {
-			console.warn("Diary hydrate failed:", error?.message);
+		} catch (e) {
+			console.warn("Diary hydrate failed:", e?.message);
 		}
 	},
 
