@@ -11,10 +11,9 @@ import { supabase } from "../lib/supabase";
  */
 
 const STORAGE_KEY = "mb_diary_entries";
-const ANSWERS_KEY = "mb_diary_answers";
 const ACTIVE_KEY = "mb_last_access_date";
-const PIN_KEY = "mb_diary_pin"; // 4-digit PIN stored locally
-const PIN_AUTH_SESSION_KEY = "mb_diary_pin_auth"; // Session-based PIN auth state
+const PIN_KEY = "mb_diary_pin";
+const PIN_AUTH_SESSION_KEY = "mb_diary_pin_auth";
 
 const todayStr = () => new Date().toISOString().slice(0, 10);
 
@@ -51,7 +50,7 @@ const getInitialEntries = () => {
 export const useDiaryStore = create((set, get) => ({
 	/* ── 상태 ── */
 	entries: getInitialEntries(),                // { "2026-03-18": { diary: "...", memo: "..." } }
-	diaryAnswers: load(ANSWERS_KEY, {}),        // { "2026-03-18": ["답변1", "답변2"] }
+	diaryAnswers: {},                            // { "2026-03-18": string[] } — DB에서 hydrate
 	wasActiveToday: load(ACTIVE_KEY, "") === todayStr(),
 	
 	/* ── PIN Authentication State ── */
@@ -204,24 +203,28 @@ export const useDiaryStore = create((set, get) => ({
 		}
 	},
 
-	/* ── DiaryCard 답변 관리 ── */
-	/** 답변 추가 (DiaryCard에서 호출) */
-	addAnswer: (dateStr, text) => {
-		set((s) => {
-			const answers = { ...s.diaryAnswers };
-			if (!answers[dateStr]) answers[dateStr] = [];
-			answers[dateStr] = [...answers[dateStr], text];
-			save(ANSWERS_KEY, answers);
-			return { diaryAnswers: answers };
+	/* ── DiaryCard Q&A 관리 (user_qa 테이블) ── */
+	/** 질문+답변을 user_qa 테이블에 저장. 실패 시 에러 throw (UI에서 처리) */
+	addAnswer: async (dateStr, question, answer) => {
+		if (!supabase) throw new Error("Supabase not available");
+		const { data: { user } } = await supabase.auth.getUser();
+		if (!user) throw new Error("Not authenticated");
+
+		const { error } = await supabase.from("user_qa").insert({
+			user_id: user.id,
+			question,
+			answer,
+			asked_date: dateStr,
 		});
+		if (error) throw error;
 	},
 
-	/** 특정 날짜의 답변 가져오기 */
+	/** 특정 날짜의 답변 가져오기 (레거시 호환) */
 	getAnswers: (dateStr) => {
 		return get().diaryAnswers[dateStr] || [];
 	},
 
-	/* ── DB에서 일기 데이터 불러오기 ── */
+	/* ── DB에서 일기 + 답변 불러오기 ── */
 	hydrateFromDB: async () => {
 		if (!supabase) return;
 		try {
@@ -230,18 +233,22 @@ export const useDiaryStore = create((set, get) => ({
 
 			const { data } = await supabase
 				.from("diaries")
-				.select("date, diary_text, memo")
+				.select("date, diary_text, memo, answers")
 				.eq("user_id", user.id);
 
 			if (data && data.length > 0) {
 				const entries = { ...get().entries };
+				const diaryAnswers = {};
 				for (const row of data) {
 					entries[row.date] = {
 						diary: row.diary_text || entries[row.date]?.diary || "",
 						memo: row.memo || entries[row.date]?.memo || "",
 					};
+					if (Array.isArray(row.answers) && row.answers.length > 0) {
+						diaryAnswers[row.date] = row.answers;
+					}
 				}
-				set({ entries });
+				set({ entries, diaryAnswers });
 				save(STORAGE_KEY, entries);
 			}
 		} catch (e) {

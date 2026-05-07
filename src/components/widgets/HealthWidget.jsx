@@ -7,7 +7,9 @@ import WidgetCard from "../common/WidgetCard";
 const HealthWidget = () => {
 	const { isDark, muted, secondaryBgCls } = useTheme();
 	const { t } = useTranslation();
-	const healthData = useDataStore((s) => s.healthData);
+	const healthData  = useDataStore((s) => s.healthData);
+	const apiStatus   = useDataStore((s) => s.apiStatus.health ?? null);
+	const isRealData  = apiStatus === "ok";
 
 	return (
 		<WidgetCard title={t("widgets.health.title")} icon={Activity} widgetId="health">
@@ -68,9 +70,11 @@ const HealthWidget = () => {
 							<p className={`text-[10px] ${muted}`}>{t("widgets.health.cups")}</p>
 						</div>
 					</div>
-					<p className={`text-[10px] text-center mt-1 ${muted}`}>
-						{t("widgets.health.google_fit_notice")}
-					</p>
+					{!isRealData && (
+						<p className={`text-[10px] text-center mt-1 ${muted}`}>
+							{t("widgets.health.google_fit_notice")}
+						</p>
+					)}
 				</div>
 			) : (
 				<p className="text-sm opacity-50">{t("widgets.health.loading")}</p>

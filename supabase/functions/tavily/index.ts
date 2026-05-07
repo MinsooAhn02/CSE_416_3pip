@@ -6,15 +6,14 @@ const corsHeaders = {
 		"authorization, x-client-info, apikey, content-type",
 };
 
-const toHashtag = (value: string) => {
-	const compact = value
-		.replace(/["'`]/g, "")
-		.replace(/\s+/g, "_")
-		.replace(/[^\p{L}\p{N}_#-]/gu, "")
+/** Remove common article-title noise: "- Site Name", "| Category", brackets, markdown */
+const cleanTitle = (raw: string): string =>
+	raw
+		.replace(/\s*[-–|]\s*[^-–|]{2,35}$/, "") // trailing "- Site" or "| Category"
+		.replace(/\[.*?\]/g, "")                  // [brackets]
+		.replace(/["'`*_#]/g, "")                 // markdown chars / hashtags
+		.replace(/\s{2,}/g, " ")
 		.trim();
-	if (!compact) return null;
-	return compact.startsWith("#") ? compact : `#${compact}`;
-};
 
 serve(async (req) => {
 	if (req.method === "OPTIONS")
@@ -25,34 +24,39 @@ serve(async (req) => {
 			query = "대한민국 실시간 이슈, 기술, 경제, 라이프스타일 트렌드 7개",
 			mode = "trends", // "trends" | "news"
 			max_results: maxResults,
-			location = null, // { country, city } — news 모드에서 지역 정보
+			location = null,
+			include_domains = [],
 		} = await req.json();
 
 		const apiKey = Deno.env.get("TAVILY_API_KEY");
 		if (!apiKey) throw new Error("TAVILY_API_KEY not set");
 
 		const isNews = mode === "news";
-		const resultCount = maxResults ?? (isNews ? 10 : 7);
+		const resultCount = maxResults ?? (isNews ? 10 : 8);
+
+		const tavilyBody: Record<string, unknown> = {
+			api_key: apiKey,
+			query,
+			topic: "news",
+			search_depth: "advanced",
+			max_results: resultCount,
+			include_answer: true,
+			include_images: isNews,
+		};
+		if (Array.isArray(include_domains) && include_domains.length > 0) {
+			tavilyBody.include_domains = include_domains;
+		}
 
 		const res = await fetch("https://api.tavily.com/search", {
 			method: "POST",
 			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({
-				api_key: apiKey,
-				query,
-				topic: "news",
-				search_depth: "advanced",
-				max_results: resultCount,
-				include_answer: true,
-				include_images: isNews, // 뉴스 모드에서만 이미지 포함
-			}),
+			body: JSON.stringify(tavilyBody),
 		});
 
 		if (!res.ok) throw new Error(`Tavily ${res.status}: ${await res.text()}`);
 		const data = await res.json();
 
 		if (isNews) {
-			// 뉴스 모드: 제목 + URL + 이미지 URL 추출
 			const topImages: string[] = Array.isArray(data.images)
 				? data.images.slice(0, 10)
 				: [];
@@ -85,24 +89,14 @@ serve(async (req) => {
 			);
 		}
 
-		// 트렌드 모드 (기존 동작 유지)
+		// 트렌드 모드 — 기사 제목을 그대로 트렌드 키워드로 사용
 		const trends = Array.from(
 			new Set(
-				(data.results || [])
-					.flatMap(
-						(item: { title?: string; content?: string }) => [
-							item.title,
-							item.content,
-						],
-					)
-					.filter(Boolean)
-					.flatMap((text: string) => text.split(/[\n,|]/))
-					.map((item: string) => item.trim())
-					.filter((item: string) => item.length >= 2)
-					.map(toHashtag)
-					.filter(Boolean),
+				(data.results ?? [])
+					.map((item: { title?: string }) => cleanTitle(item.title ?? ""))
+					.filter((t: string) => t.length >= 5 && t.length <= 80),
 			),
-		).slice(0, 7);
+		).slice(0, 8);
 
 		return new Response(
 			JSON.stringify({

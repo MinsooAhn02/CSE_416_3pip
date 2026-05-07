@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Toaster } from "react-hot-toast";
+import { useTranslation } from "react-i18next";
 import { useAuthStore } from "./store/useAuthStore";
 import { useSettingsStore } from "./store/useSettingsStore";
 import { useWidgetStore } from "./store/useWidgetStore";
@@ -19,6 +20,7 @@ import OnboardingModal from "./components/modals/OnboardingModal";
 import SettingsModal from "./components/modals/SettingsModal";
 import BriefSettingsModal from "./components/modals/BriefSettingsModal";
 import FirstLoginBriefingModal from "./components/modals/FirstLoginBriefingModal";
+import WidgetSettingsModal from "./components/modals/WidgetSettingsModal";
 
 /* ── v8: 1:3:3 Layout Architecture with Widget Scroll Box (REQ-WS-001) ── */
 
@@ -27,9 +29,13 @@ const App = () => {
 	const user = useAuthStore((s) => s.user);
 	const handleAuthChange = useAuthStore((s) => s.handleAuthChange);
 	const { isDark } = useTheme();
+	const { i18n } = useTranslation();
 	const fetchAll = useDataStore((s) => s.fetchAll);
+	const fetchNews = useDataStore((s) => s.fetchNews);
+	const fetchTrends = useDataStore((s) => s.fetchTrends);
 	const bgImage = useSettingsStore((s) => s.bgImage);
 	const initPhaseRef = useRef("none");
+	const prevLangRef = useRef(i18n.language);
 	const [authBootstrapDone, setAuthBootstrapDone] = useState(!supabase);
 
 	// Use the new midnight trigger hook (REQ-CS-005, REQ-AJ-001)
@@ -129,6 +135,16 @@ const App = () => {
 		return () => clearTimeout(timerId);
 	}, [authBootstrapDone, isLoggedIn, user?.id, fetchAll]);
 
+	// 언어 변경 시 뉴스/트렌드 강제 재호출
+	useEffect(() => {
+		if (prevLangRef.current === i18n.language) return;
+		prevLangRef.current = i18n.language;
+		if (!isLoggedIn) return;
+		const userId = useAuthStore.getState().user?.id;
+		fetchNews(userId, true);
+		fetchTrends(userId, true);
+	}, [i18n.language, isLoggedIn, fetchNews, fetchTrends]);
+
 	// 탭이 다시 포커스될 때 캐시 만료(1시간) 확인 → 자동 갱신
 	useEffect(() => {
 		if (!isLoggedIn) return;
@@ -220,6 +236,7 @@ const App = () => {
 			<SettingsModal />
 			<BriefSettingsModal />
 			<FirstLoginBriefingModal />
+			<WidgetSettingsModal />
 
 			{/* Global Toast Notifications */}
 			<Toaster

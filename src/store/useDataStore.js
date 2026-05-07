@@ -4,11 +4,11 @@ import { load, save } from "../utils/storage";
 import { DEFAULT_VIS } from "../constants";
 import { useSettingsStore } from "./useSettingsStore";
 import { useAuthStore } from "./useAuthStore";
+import i18n from "../l10n/i18n";
 import {
 	fetchWeather as mockFetchWeather,
 	fetchStocks as mockFetchStocks,
 	fetchTrends as mockFetchTrends,
-	fetchRestaurants as mockFetchRestaurants,
 	fetchCalendarEvents as mockFetchCalendarEvents,
 	fetchHealthData as mockFetchHealthData,
 } from "../mock/data";
@@ -325,20 +325,6 @@ const hasMeaningfulStockValues = (rows) => {
 	});
 };
 
-/* ── 맛집 정규화 ── */
-const normalizeRestaurantItem = (item) => {
-	if (!item) return null;
-	if ("price" in item || "rating" in item) return item;
-
-	return {
-		name: item.name,
-		category: item.category?.split(" > ").pop() ?? "맛집",
-		distance: item.distance ? `${item.distance}m` : "거리 정보 없음",
-		address: item.address,
-		url: item.url,
-	};
-};
-
 /* ── 건강 데이터 정규화: Steps + Sleep 유효 필터링 ── */
 const normalizeHealthData = (raw) => {
 	if (!raw || typeof raw !== "object") return null;
@@ -367,7 +353,6 @@ export const useDataStore = create((set, get) => ({
 	news: [],
 	newsAnswer: null,
 	newsResults: [],
-	restaurants: [],
 	calEvents: [],
 	healthData: null,
 	rawData: {
@@ -385,6 +370,7 @@ export const useDataStore = create((set, get) => ({
 	 * "error" = request failed (even if mock fallback is showing)
 	 * null = never attempted */
 	apiStatus: {},
+	fetchedLanguage: {},   // { news: "ko", trends: "ko" } — 마지막 fetch 시 언어
 	lastFetchedAt: load("mb_last_fetched_at", {}),
 	setActiveWidgetIds: (ids) => set({ activeWidgetIds: ids }),
 	setApiStatus: (key, status) =>
@@ -569,21 +555,31 @@ export const useDataStore = create((set, get) => ({
 	   trendsResults: 출처 배열 [{title, url, content}, ...]
 	   ══════════════════════════════════════════ */
 	fetchTrends: async (userId, force = false) => {
-		const cacheKey = "trends_full";
+		const lang = i18n.language || "ko";
+		const isEn = lang === "en";
+
+		// 트렌드는 관심사 무관 — 세상에서 실제로 뜨는 것을 보여줌
+		const cacheKey = `trends_full_${lang}`;
+
+		// 언어 변경 시 강제 재호출
+		if (!force && get().fetchedLanguage?.trends && get().fetchedLanguage.trends !== lang) {
+			force = true;
+		}
 
 		// ✅ 캐시 우선 확인
 		if (!force) {
 			const dbCached = await readApiCache(cacheKey, userId, false);
-			if (dbCached?.data?.trends) {
+			if (dbCached?.data?.trends || dbCached?.data?.results?.length) {
 				set({
-					trends: dbCached.data.trends,
+					trends: dbCached.data.trends ?? [],
 					trendsAnswer: dbCached.data.answer ?? null,
 					trendsResults: dbCached.data.results ?? [],
+					fetchedLanguage: { ...get().fetchedLanguage, trends: lang },
 				});
 				cacheIt("trends", dbCached.data);
 				get().markFetched("trends", dbCached.fetchedAt);
 				get().setApiStatus("trends", "ok");
-				return; // ← loading 상태 변경 없음
+				return;
 			}
 		}
 
@@ -593,11 +589,14 @@ export const useDataStore = create((set, get) => ({
 			errors: { ...s.errors, trends: null },
 		}));
 		try {
-
+			const trendsQuery = isEn
+				? "today major trending news worldwide technology AI politics economy entertainment sports latest"
+				: "오늘 대한민국 주요 이슈 인공지능 기술 정치 경제 연예 스포츠 최신 뉴스";
+			const koNewsDomains = ["news.naver.com", "yna.co.kr", "chosun.com", "joins.com", "hani.co.kr", "news1.kr"];
 
 			const edge = await invokeEdgeDetailed("tavily", {
-				query:
-					"대한민국 실시간 이슈, 기술, 경제, 캠퍼스, 라이프스타일 관련 최신 트렌드 7개",
+				query: trendsQuery,
+				include_domains: isEn ? [] : koNewsDomains,
 			});
 			if (edge?.data) {
 				set((s) => ({ rawData: { ...s.rawData, trends: edge.data } }));
@@ -622,6 +621,7 @@ export const useDataStore = create((set, get) => ({
 				await writeApiCache(cacheKey, full, userId);
 				get().markFetched("trends");
 				get().setApiStatus("trends", "ok");
+				set((s) => ({ fetchedLanguage: { ...s.fetchedLanguage, trends: lang } }));
 				return;
 			}
 
@@ -663,7 +663,19 @@ export const useDataStore = create((set, get) => ({
 	   newsResults: 뉴스 기사 배열 [{title, url, content}, ...]
 	   ══════════════════════════════════════════ */
 	fetchNews: async (userId, force = false) => {
-		// 위치 정보로 지역 뉴스 캐시 키 결정 (module scope 캐시 공유)
+		const lang = i18n.language || "ko";
+		const isEn = lang === "en";
+
+		// 관심사 키워드 (상위 5개)
+		const keywordInterests = useSettingsStore.getState().keywordInterests ?? [];
+		const topKeywords = keywordInterests
+			.sort((a, b) => (b.score ?? 0) - (a.score ?? 0))
+			.slice(0, 5)
+			.map((k) => k.keyword)
+			.filter(Boolean);
+		const interestFingerprint = topKeywords.join("+") || "base";
+
+		// 위치 정보로 지역 뉴스 캐시 키 결정
 		let locationLabel = "KR";
 		let locationObj = null;
 		const geo = await getGeoPosition();
@@ -674,7 +686,12 @@ export const useDataStore = create((set, get) => ({
 			locationObj = { lat, lon };
 		}
 
-		const cacheKey = `news_${locationLabel}`;
+		const cacheKey = `news_${locationLabel}_${lang}_${interestFingerprint}`;
+
+		// 언어 변경 시 강제 재호출
+		if (!force && get().fetchedLanguage?.news && get().fetchedLanguage.news !== lang) {
+			force = true;
+		}
 
 		// ✅ 캐시 우선 확인
 		if (!force) {
@@ -684,6 +701,7 @@ export const useDataStore = create((set, get) => ({
 					news: dbCached.data.news ?? [],
 					newsAnswer: dbCached.data.answer ?? null,
 					newsResults: dbCached.data.results ?? [],
+					fetchedLanguage: { ...get().fetchedLanguage, news: lang },
 				});
 				cacheIt("news", dbCached.data);
 				get().markFetched("news", dbCached.fetchedAt);
@@ -699,9 +717,21 @@ export const useDataStore = create((set, get) => ({
 		}));
 		try {
 			// 지역 뉴스 5개 + 글로벌 뉴스 5개 병렬 호출
-			const localQuery = locationObj
-				? `현재 위치(위도 ${locationObj.lat}, 경도 ${locationObj.lon}) 주변 지역 최신 뉴스 속보 5개`
-				: "대한민국 최신 뉴스 속보 5개";
+			const interestClause = topKeywords.length > 0
+				? (isEn ? ` topics: ${topKeywords.join(", ")}` : ` 관심: ${topKeywords.join(", ")}`)
+				: "";
+			const localQuery = isEn
+				? (locationObj
+					? `latest local news today near lat ${locationObj.lat} lon ${locationObj.lon}${interestClause}`
+					: `latest South Korea news today breaking${interestClause}`)
+				: (locationObj
+					? `현재 위치(위도 ${locationObj.lat}, 경도 ${locationObj.lon}) 주변 지역 최신 뉴스 속보${interestClause}`
+					: `대한민국 최신 뉴스 속보${interestClause}`);
+
+			const koNewsDomains = ["news.naver.com", "yna.co.kr", "chosun.com", "joins.com", "hani.co.kr", "news1.kr"];
+			const globalNewsQuery = isEn
+				? "world top breaking news headlines today"
+				: "세계 주요 뉴스 속보 오늘";
 
 			const [localEdge, globalEdge] = await Promise.all([
 				invokeEdgeDetailed("tavily", {
@@ -709,11 +739,13 @@ export const useDataStore = create((set, get) => ({
 					mode: "news",
 					max_results: 5,
 					location: locationObj,
+					include_domains: isEn ? [] : koNewsDomains,
 				}),
 				invokeEdgeDetailed("tavily", {
-					query: "world top news headlines breaking news today 5",
+					query: globalNewsQuery,
 					mode: "news",
 					max_results: 5,
+					include_domains: isEn ? [] : koNewsDomains,
 				}),
 			]);
 
@@ -746,6 +778,7 @@ export const useDataStore = create((set, get) => ({
 				await writeApiCache(cacheKey, full, userId);
 				get().markFetched("news");
 				get().setApiStatus("news", "ok");
+				set((s) => ({ fetchedLanguage: { ...s.fetchedLanguage, news: lang } }));
 				return;
 			}
 
@@ -771,61 +804,6 @@ export const useDataStore = create((set, get) => ({
 			get().setApiStatus("news", "error");
 		} finally {
 			set((s) => ({ loading: { ...s.loading, news: false } }));
-		}
-	},
-
-	/* ══════════════════════════════════════════
-	   주변 맛집 (Kakao Places)
-	   ══════════════════════════════════════════ */
-	fetchRestaurants: async (
-		query = "맛집",
-		lat = 37.5665,
-		lon = 126.978,
-		userId,
-		force = false,
-	) => {
-		const cacheKey = `restaurants_${query}_${lat}_${lon}`;
-
-		// ✅ 캐시 우선 확인
-		if (!force) {
-			const dbCached = await readApiCache(cacheKey, userId, false);
-			if (dbCached?.data) {
-				set({ restaurants: dbCached.data });
-				cacheIt("restaurants", dbCached.data);
-				return; // ← loading 상태 변경 없음
-			}
-		}
-
-		// ✅ 캐시 없으면 여기서 loading: true
-		set((s) => ({ loading: { ...s.loading, restaurants: true } }));
-		try {
-
-			const data = await invokeEdge("kakao-places", {
-				query,
-				lat,
-				lon,
-				radius: 1200,
-			});
-			if (data) {
-				const normalized = data.map(normalizeRestaurantItem).filter(Boolean);
-				set({ restaurants: normalized });
-				cacheIt("restaurants", normalized);
-				await writeApiCache(cacheKey, normalized, userId);
-				return;
-			}
-
-			const mock = await mockFetchRestaurants();
-			set({ restaurants: cached("restaurants", mock) });
-		} catch (e) {
-			console.warn("fetchRestaurants failed:", e?.message || e);
-			try {
-				const mock = await mockFetchRestaurants();
-				set({ restaurants: cached("restaurants", mock) });
-			} catch {
-				/* mock 실패 무시 */
-			}
-		} finally {
-			set((s) => ({ loading: { ...s.loading, restaurants: false } }));
 		}
 	},
 
@@ -1060,20 +1038,6 @@ export const useDataStore = create((set, get) => ({
 						console.warn("fetchNews failed in fetchAll:", e?.message),
 					),
 			);
-		if (visibleWidgets.includes("restaurants"))
-			jobs.push(
-				store
-					.fetchRestaurants(
-						"맛집",
-						undefined,
-						undefined,
-						userId,
-						shouldForceRefresh,
-					)
-					.catch((e) =>
-						console.warn("fetchRestaurants failed in fetchAll:", e?.message),
-					),
-			);
 		if (visibleWidgets.includes("calendar"))
 			jobs.push(
 				store
@@ -1097,3 +1061,43 @@ export const useDataStore = create((set, get) => ({
 		setLastAccessTime();
 	},
 }));
+
+// 언어 변경 시 뉴스/트렌드 자동 재호출 (React 렌더 사이클 외부에서도 동작)
+i18n.on("languageChanged", () => {
+	const store = useDataStore.getState();
+	const userId = useAuthStore.getState().user?.id;
+	if (store.apiStatus?.news === "ok" || store.apiStatus?.news === "error") {
+		store.fetchNews(userId, true);
+	}
+	if (store.apiStatus?.trends === "ok" || store.apiStatus?.trends === "error") {
+		store.fetchTrends(userId, true);
+	}
+});
+
+// 관심사 변경 시 뉴스/트렌드 자동 재호출
+const getInterestFingerprint = (keywordInterests) => {
+	const top = (keywordInterests ?? [])
+		.slice()
+		.sort((a, b) => (b.score ?? 0) - (a.score ?? 0))
+		.slice(0, 5)
+		.map((k) => k.keyword)
+		.filter(Boolean);
+	return top.join("+") || "base";
+};
+
+let _prevInterestFingerprint = getInterestFingerprint(
+	useSettingsStore.getState().keywordInterests,
+);
+
+useSettingsStore.subscribe((state) => {
+	const fingerprint = getInterestFingerprint(state.keywordInterests);
+	if (fingerprint === _prevInterestFingerprint) return;
+	_prevInterestFingerprint = fingerprint;
+
+	// 뉴스만 재호출 — 트렌드는 관심사와 무관하게 세계 트렌드를 반영
+	const store = useDataStore.getState();
+	const userId = useAuthStore.getState().user?.id;
+	if (store.apiStatus?.news === "ok" || store.apiStatus?.news === "error") {
+		store.fetchNews(userId, true);
+	}
+});

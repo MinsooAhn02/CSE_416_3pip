@@ -1,5 +1,119 @@
 import { supabase } from "../lib/supabase";
 
+// fallback 질문 — Groq 실패 시 사용
+const FALLBACK_QUESTIONS = [
+	"좋아하는 음식 종류가 있나요? (한식, 일식, 양식, 중식 등)",
+	"요즘 가장 관심 있는 게 있나요?",
+	"지금 가장 먹고 싶은 게 있나요?",
+	"자주 가는 카페나 식당이 있나요?",
+	"요즘 즐겨 보는 콘텐츠가 있나요?",
+	"취미로 하고 있는 게 있나요?",
+	"최근에 가 본 곳 중에 좋았던 데가 있나요?",
+	"요즘 가장 자주 먹는 음식이 뭔가요?",
+	"좋아하는 음악 장르나 아티스트가 있나요?",
+	"운동이나 스포츠를 즐기시나요?",
+	"주말에 주로 어떻게 보내세요?",
+	"요즘 새로 시작해 보고 싶은 게 있나요?",
+];
+
+// 탐색 주제 풀 — 매 호출마다 랜덤 1~2개 선택
+const TOPIC_POOL = [
+	"좋아하는 음식 종류 (한식/일식/양식/중식 등)",
+	"요즘 관심 있는 것 또는 취미",
+	"즐겨 보는 콘텐츠 (드라마/영화/유튜브 등)",
+	"주말에 주로 하는 것, 운동, 스포츠",
+	"자주 가는 장소 유형 (카페, 공원, 쇼핑몰 등)",
+	"최근에 먹어본 것 중 맛있었던 것",
+	"좋아하는 음악 장르 또는 아티스트",
+	"요즘 새로 시작해보고 싶은 것",
+	"즐겨 먹는 간식 또는 야식",
+	"좋아하는 계절과 그 이유",
+];
+
+function pickTopics(previousQuestions, count = 2) {
+	// 이미 물어본 질문에서 언급된 주제는 우선순위 낮춤 (단순 랜덤으로도 충분)
+	const shuffled = [...TOPIC_POOL].sort(() => Math.random() - 0.5);
+	return shuffled.slice(0, count);
+}
+
+function getDayOfWeekKo() {
+	const days = ["일요일", "월요일", "화요일", "수요일", "목요일", "금요일", "토요일"];
+	return days[new Date().getDay()];
+}
+
+/**
+ * Groq로 현재 상황에 맞는 개인화 질문 1개 생성
+ */
+export async function generatePersonalizedQuestion({
+	persona = "",
+	city = "",
+	weatherCondition = "",
+	previousQuestions = [],
+} = {}) {
+	const dayOfWeek = getDayOfWeekKo();
+	const isWeekend = ["토요일", "일요일"].includes(dayOfWeek);
+
+	if (!supabase) {
+		const unused = FALLBACK_QUESTIONS.filter((q) => !previousQuestions.includes(q));
+		const pool = unused.length > 0 ? unused : FALLBACK_QUESTIONS;
+		return pool[Math.floor(Math.random() * pool.length)];
+	}
+
+	const topics = pickTopics(previousQuestions);
+	const contextParts = [
+		`${isWeekend ? "주말" : "평일"} / ${dayOfWeek}`,
+		city && weatherCondition ? `${city} (날씨: ${weatherCondition})` : city || weatherCondition || "",
+	].filter(Boolean).join(", ");
+
+	try {
+		const data = await invokeFunction("groq", {
+			system: [
+				"당신은 상대방에게 과하지 않은 관심을 표현하며 대화를 시작하는 '다정한 대화 파트너'입니다.",
+				"당신의 목적은 주어진 상황(날씨, 요일 등)에 어울리는 주제를 골라, 상대방이 편안하게 자신의 이야기를 꺼낼 수 있도록 돕는 질문을 만드는 것입니다.",
+				"",
+				"[핵심 원칙]",
+				"1. 자연스러움: 기계적인 질문이 아니라, 친구에게 말을 건네는 듯한 분위기를 유지하세요.",
+				"2. 부드러운 시작: 질문 바로 앞에 '날씨가 화창해서 그런지~', '벌써 목요일이라 그런지~' 처럼 상황을 활용한 부드러운 도입부를 한 문장 덧붙이세요.",
+				"3. 간결성: 전체 문장은 두 문장 이내로 작성하세요.",
+				"4. 출력 형식: 오직 질문 텍스트만 출력하세요. (번호, 따옴표, 설명 금지)",
+				"",
+				"[질문 스타일 예시]",
+				"- 날씨가 정말 좋은데, 이런 날씨에 산책하면서 듣기 좋은 본인만의 플레이리스트가 있나요?",
+				"- 벌써 목요일이네요, 이번 주말에 특별히 계획하고 계신 즐거운 일이 있으신가요?",
+				"- 요즘 유튜브에서 우연히 본 영상 중에 기억에 남는 재미있는 주제가 있었나요?",
+				"",
+				"반드시 한국어 존댓말을 사용하고 물음표(?)로 끝내세요.",
+			].join("\n"),
+			prompt: [
+				"[상황 정보]",
+				`- 시간: ${contextParts}`,
+				persona ? `- 사용자 정보: ${persona}` : "",
+				"",
+				`[탐색 대상]`,
+				`- 주제: ${topics.join(" 또는 ")}`,
+				previousQuestions.length > 0
+					? `- 제외 대상 (이미 물어본 질문):\n${previousQuestions.map((q) => `  · ${q}`).join("\n")}`
+					: "",
+				"",
+				`위 정보를 바탕으로 자연스러운 질문을 생성해주세요. 반드시 존댓말을 사용하고 물음표로 끝내주세요.`,
+			]
+				.filter(Boolean)
+				.join("\n"),
+			temperature: 0.8,
+		});
+
+		const q = data?.text?.trim().replace(/^["'\d.\s]+|["']+$/g, "");
+		if (q && q.length > 3 && q.length < 100) return q;
+	} catch {
+		// fall through to fallback
+	}
+
+	// 이미 물어본 것 제외한 fallback
+	const unused = FALLBACK_QUESTIONS.filter((q) => !previousQuestions.includes(q));
+	const pool = unused.length > 0 ? unused : FALLBACK_QUESTIONS;
+	return pool[Math.floor(Math.random() * pool.length)];
+}
+
 const DEBUG_FLOW = import.meta.env.VITE_DEBUG_FLOW === "1";
 const AI_TIMEOUT_MS = 15000;
 
@@ -80,7 +194,6 @@ const scoreSignals = ({ context, timeProfile }) => {
 		weather,
 		stocks,
 		trends,
-		restaurants,
 		calEvents,
 		healthData,
 		todos,
@@ -261,28 +374,6 @@ const scoreSignals = ({ context, timeProfile }) => {
 		});
 	}
 
-	if (activeSet.has("restaurants") && Array.isArray(restaurants)) {
-		const R = clamp(restaurants.length / 5, 0.1, 1.1);
-		const Kmatch = ["점심", "식단", "음식", "푸드"].some((k) =>
-			personaText.includes(k),
-		)
-			? 1.18
-			: 1;
-		const wPersona = 1.02;
-		const U = timeProfile.mode === "lunch" ? 1 : 0.2;
-		const Se = timeProfile.mode === "lunch" ? 0.45 : 0.08;
-		pushSignal({
-			id: "restaurants",
-			title: "메뉴/맛집 추천",
-			payload: restaurants.slice(0, 4),
-			R,
-			Kmatch,
-			wPersona,
-			U,
-			Se,
-		});
-	}
-
 	return signals.sort((a, b) => b.score - a.score).slice(0, 3);
 };
 
@@ -351,15 +442,23 @@ export function getTimeGreeting() {
 export async function generateDetailedBriefing({ tone, length, context, priorityOrder }) {
 	const timeProfile = getTimeProfile();
 	const topSignals = scoreSignals({ context: context ?? {}, timeProfile });
-	
+
 	// calEvents를 가독성 높은 문자열로 변환
 	const formattedCalEvents = formatCalEventsForAI(context?.calEvents);
-	
+
 	// Build priority guidance for AI (REQ-US-006)
-	const priorityGuidance = priorityOrder?.length > 0 
+	const priorityGuidance = priorityOrder?.length > 0
 		? `사용자가 다음 순서로 정보 우선순위를 설정했습니다: ${priorityOrder.join(" > ")}. 이 순서대로 정보를 강조하세요.`
 		: "";
-	
+
+	// 개인화 관심 키워드 상위 10개
+	const keywordInterests = Array.isArray(context?.keywordInterests)
+		? context.keywordInterests : [];
+	const topKeywords = keywordInterests.slice(0, 10).map((k) => k.keyword);
+	const interestsGuidance = topKeywords.length > 0
+		? `사용자의 최근 관심 키워드: ${topKeywords.join(", ")}. 관련 정보가 있으면 브리핑에 자연스럽게 반영하세요.`
+		: "";
+
 	const contextWithPriority = {
 		...(context ?? {}),
 		timeProfile,
@@ -367,6 +466,7 @@ export async function generateDetailedBriefing({ tone, length, context, priority
 		topSignalIds: topSignals.map((s) => s.id),
 		formattedCalEvents,
 		priorityOrder: priorityOrder || [],
+		topKeywords,
 	};
 
 	// Map length to actual line counts for summary
@@ -384,6 +484,7 @@ export async function generateDetailedBriefing({ tone, length, context, priority
 		`현재 모드: ${timeProfile.label} (${timeProfile.mode})`,
 		`모드 가이드: ${timeProfile.desc}`,
 		priorityGuidance ? `\n=== 우선순위 지침 ===\n${priorityGuidance}` : "",
+		interestsGuidance ? `\n=== 개인화 관심사 ===\n${interestsGuidance}` : "",
 		"",
 		"=== 오늘의 일정 ===",
 		formattedCalEvents,

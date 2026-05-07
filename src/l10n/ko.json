@@ -15,6 +15,7 @@
     "no": "아니오",
     "more": "더 보기",
     "show_more": "{{count}}건 더 보기",
+    "show_more_plain": "더보기",
     "just_now": "방금 갱신",
     "minutes_ago": "{{count}}분 전",
     "before_refresh": "갱신 전"
@@ -120,6 +121,7 @@
       "ai_summary": "AI 요약",
       "hashtags": "해시태그",
       "sources": "출처",
+      "view_sources": "출처 보기 ({{count}})",
       "loading": "트렌드 데이터를 불러오는 중...",
       "no_data": "표시할 트렌드가 없습니다."
     },
@@ -129,7 +131,11 @@
       "news_list": "뉴스 목록",
       "read_more": "더 보기",
       "loading": "뉴스를 불러오는 중...",
-      "no_data": "표시할 뉴스가 없습니다."
+      "no_data": "표시할 뉴스가 없습니다.",
+      "detail_title": "뉴스 상세",
+      "no_results": "표시할 뉴스가 없습니다.",
+      "no_content": "요약 내용이 없습니다.",
+      "read_original": "원문 보기"
     },
     "health": {
       "title": "건강 (Google Fit)",

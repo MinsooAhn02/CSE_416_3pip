@@ -77,6 +77,29 @@ export const useWidgetStore = create((set, get) => ({
 	newKeyword: "",
 	currentBreakpoint: "lg",
 
+	// 위젯 설정
+	widgetSettings: load("mb_widget_settings", {}),  // { [widgetId]: { viewType, interestsEnabled } }
+	globalFontSize: load("mb_font_size", "medium"),   // "small" | "medium" | "large"
+	activeWidgetSettings: null,                        // 현재 설정 모달이 열린 widgetId
+
+	setWidgetSetting: (widgetId, key, value) =>
+		set((s) => {
+			const next = {
+				...s.widgetSettings,
+				[widgetId]: { ...s.widgetSettings[widgetId], [key]: value },
+			};
+			save("mb_widget_settings", next);
+			return { widgetSettings: next };
+		}),
+
+	setGlobalFontSize: (size) => {
+		save("mb_font_size", size);
+		set({ globalFontSize: size });
+	},
+
+	openWidgetSettings: (widgetId) => set({ activeWidgetSettings: widgetId }),
+	closeWidgetSettings: () => set({ activeWidgetSettings: null }),
+
 	/* DB에서 위젯 상태 불러오기 */
 	hydrateFromDB: async () => {
 		if (!supabase) return;
