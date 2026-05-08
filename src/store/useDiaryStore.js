@@ -13,112 +13,15 @@ const ACTIVE_KEY = "mb_last_access_date";
 const PIN_KEY = "mb_diary_pin";
 const PIN_AUTH_SESSION_KEY = "mb_diary_pin_auth";
 
-const todayStr = () => formatLocalDate();
+const todayStr = () => new Date().toISOString().slice(0, 10);
 
-const getEntryNotes = (entry = {}) =>
-	String(entry.notes || entry.memo || "").trim();
-
-const getPinLockMode = () =>
-	useSettingsStore.getState().pinLockMode || DEFAULT_PIN_LOCK_MODE;
-
-const parseStoredExpiry = (value) => {
-	if (typeof value === "number" && Number.isFinite(value)) return value;
-	if (typeof value === "string" && value.trim()) {
-		const parsed = Number(value);
-		return Number.isFinite(parsed) ? parsed : null;
-	}
-	return null;
-};
-
-const getStoredPinExpiry = () =>
-	parseStoredExpiry(load(PIN_AUTH_EXPIRES_AT_KEY, null));
-
-const isPinExpiryValid = (expiresAt) =>
-	typeof expiresAt === "number" && expiresAt > Date.now();
-
-const clearPersistedPinSession = () => {
-	save(PIN_AUTH_SESSION_KEY, false);
-	save(PIN_AUTH_EXPIRES_AT_KEY, null);
-};
-
-const getInitialPinSessionState = () => {
-	const pinLockMode = getPinLockMode();
-
-	if (pinLockMode === "off") {
-		clearPersistedPinSession();
-		return { isPinAuthenticated: true, pinAuthExpiresAt: null };
-	}
-
-	if (pinLockMode === "immediate") {
-		clearPersistedPinSession();
-		return { isPinAuthenticated: false, pinAuthExpiresAt: null };
-	}
-
-	const expiresAt = getStoredPinExpiry();
-	if (isPinExpiryValid(expiresAt)) {
-		return { isPinAuthenticated: true, pinAuthExpiresAt: expiresAt };
-	}
-
-	clearPersistedPinSession();
-	return { isPinAuthenticated: false, pinAuthExpiresAt: null };
-};
-
-const normalizeEntry = (entry = {}) => {
-	const aiGeneratedDiary =
-		entry.aiGeneratedDiary || entry.ai_generated_diary || entry.diary || "";
-	const editedDiary = entry.editedDiary || entry.edited_diary || "";
-	const diary = editedDiary || aiGeneratedDiary || "";
-
-	return {
-		diary,
-		aiGeneratedDiary,
-		editedDiary,
-		notes: getEntryNotes(entry),
-		memo: getEntryNotes(entry),
-	};
-};
-
-const MOCK_DIARY_ENTRIES = {
-	"2026-03-27": normalizeEntry({
-		diary:
-			"Today was quite productive. I managed to complete all the calendar refinements and UI improvements. The team's feedback on the conditional diary layout was very positive. Looking forward to testing with users tomorrow.",
-		memo: "Remember to send the refined UI screenshots to stakeholders for final approval.",
-	}),
-	"2026-03-26": normalizeEntry({
-		diary:
-			"A good day for feature development. Implemented the save buttons for Events and Tasks panels. The clean lock UI looks much better without the blur effect. Testing the new date highlighting revealed some edge cases we need to handle.",
-		memo: "Follow up with backend team about Google Calendar API implementation timeline.",
-	}),
-	"2026-03-25": normalizeEntry({
-		diary:
-			"Started working on the conditional diary panel feature. When there's no diary entry, the Events and Tasks panels should expand to fill the full width. This is a significant UX improvement. Also began addressing the clipping issues with the Add buttons.",
-		memo: "Test the 2-column layout thoroughly on mobile and tablet screens.",
-	}),
-};
-
-const getInitialEntries = () => {
-	const storedEntries = load(STORAGE_KEY, {});
-	const mergedEntries = { ...MOCK_DIARY_ENTRIES, ...storedEntries };
-
-	return Object.fromEntries(
-		Object.entries(mergedEntries).map(([dateStr, entry]) => [
-			dateStr,
-			normalizeEntry(entry),
-		]),
-	);
-};
-
-const saveEntriesLocally = (entries) => {
-	save(STORAGE_KEY, entries);
-	return entries;
-};
-
-const initialPinSessionState = getInitialPinSessionState();
+const getInitialEntries = () => load(STORAGE_KEY, {});
 
 export const useDiaryStore = create((set, get) => ({
 	/* ── 상태 ── */
 	entries: getInitialEntries(),                // { "2026-03-18": { diary: "...", memo: "..." } }
 	diaryAnswers: {},                            // { "2026-03-18": string[] } — DB에서 hydrate
+	todayQA: [],                                // [{ question, answer }] — 오늘의 Q&A 답변
 	wasActiveToday: load(ACTIVE_KEY, "") === todayStr(),
 	pinModalVisible: false,
 
@@ -448,6 +351,24 @@ export const useDiaryStore = create((set, get) => ({
 			asked_date: dateStr,
 		});
 		if (error) throw error;
+		// 오늘 날짜이면 로컬 todayQA 상태도 즉시 업데이트
+		if (dateStr === todayStr()) {
+			set((s) => ({ todayQA: [...s.todayQA, { question, answer }] }));
+		}
+	},
+
+	/** 오늘의 Q&A 답변을 user_qa 테이블에서 로드 */
+	fetchTodayQA: async () => {
+		if (!supabase) return;
+		const { data: { user } } = await supabase.auth.getUser();
+		if (!user) return;
+		const { data } = await supabase
+			.from("user_qa")
+			.select("question, answer")
+			.eq("user_id", user.id)
+			.eq("asked_date", todayStr())
+			.order("created_at", { ascending: true });
+		if (data) set({ todayQA: data });
 	},
 
 	/** 특정 날짜의 답변 가져오기 (레거시 호환) */

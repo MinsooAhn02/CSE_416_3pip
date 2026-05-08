@@ -61,8 +61,8 @@ const DiaryCard = () => {
 		setSaveError(false);
 		try {
 			await addAnswer(todayStr(), question, answerText.trim());
+			setIsSaving(false);
 			setSaved(true);
-			// 1.5초 후 다음 질문으로
 			setTimeout(() => {
 				fetchNextQuestion();
 			}, 1500);

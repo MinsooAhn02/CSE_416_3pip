@@ -1,12 +1,6 @@
 import { create } from "zustand";
 import { load, save } from "../utils/storage";
-import { formatLocalDate } from "../utils/date";
-import { materializeTasksForDate } from "../utils/taskRecurrence";
-import {
-	ALL_TASK_LIST_FILTER_ID,
-	filterTasksByTaskList,
-	useGoogleCalendarStore,
-} from "./useGoogleCalendarStore";
+import { supabase } from "../lib/supabase";
 
 const TODAY_KEY = "mb_task_last_reset";
 const TODO_CACHE_KEY = "mb_todos";
@@ -47,7 +41,12 @@ const syncTodosFromCalendarStore = (tasks = useGoogleCalendarStore.getState().ta
 };
 
 export const useTodoStore = create((set, get) => ({
-	todos: getCurrentTodos().length > 0 ? getCurrentTodos() : load(TODO_CACHE_KEY, []),
+	todos: load("mb_todos", []).map((t) => ({
+		id: t.id,
+		text: t.text,
+		completed: !!t.completed,
+		isFixed: !!t.isFixed,
+	})),
 	newTodoText: "",
 	showAddTodo: false,
 

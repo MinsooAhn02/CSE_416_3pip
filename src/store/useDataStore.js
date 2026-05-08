@@ -403,6 +403,8 @@ export const useDataStore = create((set, get) => ({
 	},
 	onboardingProfile: null,
 	activeWidgetIds: [],
+	usingDefaultWeatherLocation: false,
+	manualWeatherCity: load("mb_manual_city", null),
 	loading: {},
 	errors: {},
 	/* Per-key API health for the temporary status indicator:
@@ -434,18 +436,54 @@ export const useDataStore = create((set, get) => ({
 	   - 브라우저 Geolocation으로 현재 위치 자동 감지
 	   - 실패 시 mock fallback
 	   ══════════════════════════════════════════ */
+	setManualWeatherCity: async (city) => {
+		const trimmed = city?.trim() || null;
+		if (!trimmed) {
+			save("mb_manual_city", null);
+			set({ manualWeatherCity: null });
+			return { ok: true };
+		}
+		// Nominatim으로 도시명 → 좌표 변환 (무료, 키 불필요)
+		try {
+			const res = await fetch(
+				`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(trimmed)}&format=json&limit=1`,
+				{ headers: { "Accept-Language": "en" } },
+			);
+			const results = await res.json();
+			if (!results?.length) return { ok: false, error: `City "${trimmed}" not found` };
+			const { lat, lon, display_name } = results[0];
+			const cityData = { name: trimmed, displayName: display_name.split(",")[0], lat: parseFloat(lat), lon: parseFloat(lon) };
+			save("mb_manual_city", cityData);
+			set({ manualWeatherCity: cityData });
+			return { ok: true };
+		} catch {
+			return { ok: false, error: "Geocoding failed" };
+		}
+	},
+
 	fetchWeather: async (latArg, lonArg, userId, force = false) => {
-		// ── 위치 결정: Geolocation (module scope 캐시) 우선, 실패 시 서울 기본값 ──
+		const manualCity = get().manualWeatherCity;
+
+		// ── 위치 결정: 수동 도시 > Geolocation > 서울 기본값 ──
 		let lat = latArg ?? 37.5665;
 		let lon = lonArg ?? 126.978;
+		let usingDefault = true;
 
-		if (latArg == null && lonArg == null) {
+		if (manualCity?.lat != null) {
+			lat = manualCity.lat;
+			lon = manualCity.lon;
+			usingDefault = false;
+		} else if (latArg == null && lonArg == null) {
 			const geo = await getGeoPosition();
 			if (geo) {
 				lat = geo.lat;
 				lon = geo.lon;
+				usingDefault = false;
 			}
+		} else {
+			usingDefault = false;
 		}
+		set({ usingDefaultWeatherLocation: usingDefault });
 
 		// 좌표를 소수점 1자리로 반올림 → 동일 지역 캐시 재사용
 		const rLat = Math.round(lat * 10) / 10;
@@ -456,7 +494,7 @@ export const useDataStore = create((set, get) => ({
 		if (!force) {
 			const dbCached = await readApiCache(cacheKey, userId, false);
 			if (dbCached?.data) {
-				set({ weather: dbCached.data });
+				set({ weather: dbCached.data, usingDefaultWeatherLocation: usingDefault });
 				cacheIt("weather", dbCached.data);
 				get().markFetched("weather", dbCached.fetchedAt);
 				get().setApiStatus("weather", "ok");
@@ -484,22 +522,14 @@ export const useDataStore = create((set, get) => ({
 				}
 			}
 
-			// 에러 기록 후 mock fallback
-			const errMsg = edge?.data?.error || edge?.error || "날씨 API 호출에 실패했습니다.";
-			set((s) => ({ errors: { ...s.errors, weather: errMsg } }));
-			const mock = await mockFetchWeather(lat, lon);
-			set({ weather: cached("weather", mock) });
+			set((s) => ({ errors: { ...s.errors, weather: "Connection failed. Please try again later." } }));
+			set({ weather: null });
 			get().markFetched("weather");
 			get().setApiStatus("weather", "error");
 		} catch (e) {
 			console.warn("fetchWeather failed:", e?.message || e);
-			set((s) => ({
-				errors: { ...s.errors, weather: e?.message || "날씨 데이터를 불러오지 못했습니다." },
-			}));
-			try {
-				const mock = await mockFetchWeather();
-				set({ weather: cached("weather", mock) });
-			} catch { /* ignore */ }
+			set((s) => ({ errors: { ...s.errors, weather: "Connection failed. Please try again later." } }));
+			set({ weather: null });
 			get().markFetched("weather");
 			get().setApiStatus("weather", "error");
 		} finally {
@@ -557,30 +587,16 @@ export const useDataStore = create((set, get) => ({
 			}
 
 			set((s) => ({
-				errors: {
-					...s.errors,
-					stocks: edge?.error || "주식 API가 유효하지 않은 값을 반환했습니다.",
-				},
+				errors: { ...s.errors, stocks: "Connection failed. Please try again later." },
 				rawData: { ...s.rawData, stocks: edge?.data ?? null },
 			}));
-			const mock = await mockFetchStocks();
-			set({ stocks: cached("stocks", mock) });
+			set({ stocks: [] });
 			get().markFetched("stocks");
 			get().setApiStatus("stocks", "error");
 		} catch (e) {
 			console.warn("fetchStocks failed:", e?.message || e);
-			set((s) => ({
-				errors: {
-					...s.errors,
-					stocks: e?.message || "주식 데이터를 불러오지 못했습니다.",
-				},
-			}));
-			try {
-				const mock = await mockFetchStocks();
-				set({ stocks: cached("stocks", mock) });
-			} catch {
-				/* mock 실패 무시 */
-			}
+			set((s) => ({ errors: { ...s.errors, stocks: "Connection failed. Please try again later." } }));
+			set({ stocks: [] });
 			get().markFetched("stocks");
 			get().setApiStatus("stocks", "error");
 		} finally {
@@ -665,30 +681,14 @@ export const useDataStore = create((set, get) => ({
 				return;
 			}
 
-			set((s) => ({
-				errors: {
-					...s.errors,
-					trends: edge?.error || "트렌드 API 응답이 비어 있습니다.",
-				},
-			}));
-			const mock = await mockFetchTrends();
-			set({ trends: cached("trends", mock) });
+			set((s) => ({ errors: { ...s.errors, trends: "Connection failed. Please try again later." } }));
+			set({ trendsResults: [], trends: [] });
 			get().markFetched("trends");
 			get().setApiStatus("trends", "error");
 		} catch (e) {
 			console.warn("fetchTrends failed:", e?.message || e);
-			set((s) => ({
-				errors: {
-					...s.errors,
-					trends: e?.message || "트렌드를 불러오지 못했습니다.",
-				},
-			}));
-			try {
-				const mock = await mockFetchTrends();
-				set({ trends: cached("trends", mock) });
-			} catch {
-				/* mock 실패 무시 */
-			}
+			set((s) => ({ errors: { ...s.errors, trends: "Connection failed. Please try again later." } }));
+			set({ trendsResults: [], trends: [] });
 			get().markFetched("trends");
 			get().setApiStatus("trends", "error");
 		} finally {
@@ -822,24 +822,14 @@ export const useDataStore = create((set, get) => ({
 				return;
 			}
 
-			set((s) => ({
-				errors: {
-					...s.errors,
-					news: localEdge?.error || "뉴스 API 응답이 비어 있습니다.",
-				},
-			}));
-			const mock = await mockFetchTrends();
-			set({ newsResults: mock.map((t) => ({ title: t, url: "", content: "", image: null })) });
+			set((s) => ({ errors: { ...s.errors, news: "Connection failed. Please try again later." } }));
+			set({ newsResults: [] });
 			get().markFetched("news");
 			get().setApiStatus("news", "error");
 		} catch (e) {
 			console.warn("fetchNews failed:", e?.message || e);
-			set((s) => ({
-				errors: {
-					...s.errors,
-					news: e?.message || "뉴스를 불러오지 못했습니다.",
-				},
-			}));
+			set((s) => ({ errors: { ...s.errors, news: "Connection failed. Please try again later." } }));
+			set({ newsResults: [] });
 			get().markFetched("news");
 			get().setApiStatus("news", "error");
 		} finally {
@@ -919,12 +909,9 @@ export const useDataStore = create((set, get) => ({
 	   ══════════════════════════════════════════ */
 	fetchHealth: async (userId, force = false) => {
 		if (!supabase) {
-			const mock = await mockFetchHealthData();
-			set({ healthData: mock });
+			set((s) => ({ errors: { ...s.errors, health: "Connection failed. Please try again later." } }));
+			set({ healthData: null });
 			get().setApiStatus("health", "error");
-			set((s) => ({
-				errors: { ...s.errors, health: "Supabase is not configured, so Health is using mock data." },
-			}));
 			return;
 		}
 
@@ -941,7 +928,6 @@ export const useDataStore = create((set, get) => ({
 				if (dbCached?.data) {
 					set({ healthData: dbCached.data });
 					cacheIt("health", dbCached.data);
-					get().markFetched("health", dbCached.fetchedAt);
 					get().setApiStatus("health", "ok");
 					return;
 				}
@@ -949,12 +935,8 @@ export const useDataStore = create((set, get) => ({
 
 			const token = await useAuthStore.getState().ensureProviderToken?.();
 			if (!token) {
-				const mock = await mockFetchHealthData();
-				set({ healthData: cached("health", mock) });
-				set((s) => ({
-					errors: { ...s.errors, health: GOOGLE_HEALTH_AUTH_ERROR },
-				}));
-				get().markFetched("health");
+				set((s) => ({ errors: { ...s.errors, health: "Connection failed. Please try again later." } }));
+				set({ healthData: null });
 				get().setApiStatus("health", "error");
 				return;
 			}
@@ -965,39 +947,17 @@ export const useDataStore = create((set, get) => ({
 				set({ healthData: normalized });
 				cacheIt("health", normalized);
 				await writeApiCache(cacheKey, normalized, userId);
-				get().markFetched("health");
 				get().setApiStatus("health", "ok");
-				return;
+			} else {
+				set((s) => ({ errors: { ...s.errors, health: "Connection failed. Please try again later." } }));
+				set({ healthData: null });
+				get().setApiStatus("health", "error");
 			}
-
-			const errMsg = getGoogleHealthErrorMessage(
-				edge?.data?.error || edge?.error || "Failed to load Google Health data.",
-			);
-			set((s) => ({
-				errors: { ...s.errors, health: errMsg },
-			}));
-			const mock = await mockFetchHealthData();
-			set({ healthData: cached("health", mock) });
-			get().markFetched("health");
-			get().setApiStatus("health", "error");
 		} catch (e) {
 			console.warn("fetchHealth failed:", e?.message || e);
-			const errMsg = getGoogleHealthErrorMessage(
-				e?.message || "Failed to load Google Health data.",
-			);
-			set((s) => ({
-				errors: { ...s.errors, health: errMsg },
-			}));
-			try {
-				const mock = await mockFetchHealthData();
-				set({ healthData: cached("health", mock) });
-			} catch {
-				/* mock 실패 무시 */
-			}
-			get().markFetched("health");
+			set((s) => ({ errors: { ...s.errors, health: "Connection failed. Please try again later." } }));
+			set({ healthData: null });
 			get().setApiStatus("health", "error");
-		} finally {
-			set((s) => ({ loading: { ...s.loading, health: false } }));
 		}
 	},
 

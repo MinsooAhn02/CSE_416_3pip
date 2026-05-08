@@ -19,22 +19,33 @@ serve(async (req) => {
 		return new Response("ok", { headers: corsHeaders });
 
 	try {
-		const { lat = 37.5665, lon = 126.978 } = await req.json();
+		const { lat = 37.5665, lon = 126.978, city } = await req.json();
 		const apiKey = Deno.env.get("OPENWEATHER_API_KEY");
 		if (!apiKey) throw new Error("OPENWEATHER_API_KEY not set");
 
 		const baseUrl = "https://api.openweathermap.org/data/2.5";
 
-		// 날씨 + 대기질 병렬 호출
-		const [weatherRes, aqRes] = await Promise.all([
-			fetch(
-				`${baseUrl}/weather?lat=${lat}&lon=${lon}&units=metric&lang=kr&appid=${apiKey}`,
-			),
-			fetch(`${baseUrl}/air_pollution?lat=${lat}&lon=${lon}&appid=${apiKey}`),
-		]);
+		// city 이름으로 검색하면 lat/lon은 응답에서 추출
+		const weatherQuery = city
+			? `q=${encodeURIComponent(city)}`
+			: `lat=${lat}&lon=${lon}`;
 
+		const weatherRes = await fetch(
+			`${baseUrl}/weather?${weatherQuery}&units=metric&lang=kr&appid=${apiKey}`,
+		);
 		if (!weatherRes.ok) throw new Error(`OpenWeather ${weatherRes.status}`);
 		const data = await weatherRes.json();
+
+		// city 검색 시 실제 좌표를 응답에서 추출해 AQI 조회
+		const coordLat = data.coord?.lat ?? lat;
+		const coordLon = data.coord?.lon ?? lon;
+
+		// 날씨 + 대기질 병렬 호출
+		const [, aqRes] = await Promise.all([
+			Promise.resolve(),
+			fetch(`${baseUrl}/air_pollution?lat=${coordLat}&lon=${coordLon}&appid=${apiKey}`),
+		]);
+
 		const aqData = aqRes.ok ? await aqRes.json() : null;
 
 		// 대기질 (AQI 1~5)
