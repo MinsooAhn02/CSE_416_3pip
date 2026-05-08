@@ -12,13 +12,7 @@ const LAYOUT_VERSION = 14;
 const BUILTIN_IDS = new Set(WIDGET_LIST.map((w) => w.id));
 
 const initLayouts = () => {
-	const savedVer = load("mb_layout_ver", 0);
-	if (savedVer < LAYOUT_VERSION) {
-		save("mb_layout_ver", LAYOUT_VERSION);
-		// localStorage의 레이아웃은 지우지 않음 — hydrateFromDB()가 DB에서 로드함
-		// 로컬에 저장된 값이 있으면 우선 사용, 없으면 DEFAULT_LAYOUTS
-		return load("mb_layouts", DEFAULT_LAYOUTS);
-	}
+	save("mb_layout_ver", LAYOUT_VERSION);
 	return load("mb_layouts", DEFAULT_LAYOUTS);
 };
 
@@ -70,7 +64,7 @@ export const useWidgetStore = create((set, get) => ({
 	vis: load("mb_vis", DEFAULT_VIS),
 	layouts: initLayouts(),
 	editMode: false,
-	smartKeywords: load("mb_smart", ["카메라", "노트북"]),
+	smartKeywords: load("mb_smart", []),
 	smartWidgetData: load("mb_smart_data", {}),
 	smartWidgetErrors: {},
 	refreshing: {},
@@ -255,18 +249,6 @@ export const useWidgetStore = create((set, get) => ({
 		set({ layouts: DEFAULT_LAYOUTS });
 		save("mb_layouts", DEFAULT_LAYOUTS);
 		syncWidgetDB({ layouts: DEFAULT_LAYOUTS });
-	},
-	// App.jsx DND 레이아웃 리셋 함수 (col1, col2, col3 형식)
-	resetDndLayout: () => {
-		const DEFAULT_DND_LAYOUT = {
-			col1: ["briefing"],
-			col2: ["weather", "stocks", "news"],
-			col3: ["trends", "health", "diary"],
-		};
-		save("mb_widget_layout", DEFAULT_DND_LAYOUT);
-		save("mb_widget_layout_ver", 6);
-		// 페이지 새로고침으로 적용 (state는 App.jsx에서 관리)
-		window.location.reload();
 	},
 	setShowAddSmart: (v) => set({ showAddSmart: v }),
 	setNewKeyword: (v) => set({ newKeyword: v }),

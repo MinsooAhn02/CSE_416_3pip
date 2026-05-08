@@ -31,3 +31,41 @@
 17. 스마트 위젯 format 정의 (일반 widget 양식 참고)
 19. Diary PIN 설정 기능 — ⚙️ 설정에서 PIN 저장/수정, 재설정 시 본인 확인 질문(유저 직접 작성) 통해 authenticate
 20. Diary 질문 카드 깨진 글자 수정 ("금요일이终于 도착했군요... 외식 плани..." → 한국어로 정상 표시)
+
+## 5/8/2026
+
+### 코드 감사 & Dead Code 정리 (merge 누락 수정)
+
+**🔴 CRITICAL 수정**
+
+1. `src/store/useTodoStore.js` — import 5개 누락 복구
+   - `formatLocalDate`, `materializeTasksForDate`, `useGoogleCalendarStore`, `filterTasksByTaskList`, `ALL_TASK_LIST_FILTER_ID` 전부 누락되어 todo 기능 완전 마비 상태였음
+   - merge 중에 import 라인이 통째로 날아간 것으로 추정
+   - 수정 후 `ensureDailyReset`, `syncTodosFromCalendarStore`, `toggleTodo`, `addTodo`, `deleteTodo` 정상 동작
+
+**🟡 로직 버그 수정**
+
+2. `src/components/widgets/BriefingWidget.jsx` — `healthData` context 누락 복구
+   - `aiService.js`의 `scoreSignals()`는 `context.healthData`로 health 신호를 채점하는데 BriefingWidget이 context에 `healthData`를 넘기지 않아 health 점수가 항상 0이었음
+   - `useDataStore((s) => s.healthData)` 구독 추가 + context 객체에 `healthData: healthData ?? null` 추가
+   - `hoverCls` — BriefingWidget에서 unused한 destructure 제거
+
+3. `src/store/useWidgetStore.js` — 기본 스마트 키워드 `["카메라", "노트북"]` → `[]`
+   - 신규 사용자가 테스트 키워드로 시작하던 문제 수정
+
+**🟢 Dead Code 삭제**
+
+4. `src/store/useWidgetStore.js` — `resetDndLayout()` 함수 삭제
+   - 구 DND 시스템(`mb_widget_layout` 키) 대상 함수. 현재 앱은 breakpoint grid(`mb_layouts`) 사용. 호출하는 곳도 없음
+   - `initLayouts()` if/else 두 브랜치가 동일한 코드 → 단순화
+
+5. `src/store/useDiaryStore.js` — `wasActiveToday` reactive state 제거
+   - `markActive()`가 `set({ wasActiveToday: true })`를 호출했지만 어떤 컴포넌트도 subscribe하지 않음. 실제 로직은 `wasActiveOn()`이 localStorage 직접 읽음
+   - `isPinAuthenticatedSession()` wrapper 함수 삭제 — `isPinAuthenticated` state 직접 구독으로 충분, 호출하는 코드 없음
+
+6. `src/store/useDataStore.js` — dead mock import 4개 제거
+   - `mockFetchWeather`, `mockFetchStocks`, `mockFetchTrends`, `mockFetchHealthData` — 현재 fetch 실패 시 에러 메시지 + null로 처리하므로 사용 안 됨
+   - `mockFetchCalendarEvents`는 유지 (Supabase 미연결 시 fallback으로 실제 사용 중)
+
+---
+

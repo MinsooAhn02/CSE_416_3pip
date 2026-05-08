@@ -108,7 +108,6 @@ export const useDiaryStore = create((set, get) => ({
 	entries: getInitialEntries(),                // { "2026-03-18": { diary: "...", memo: "..." } }
 	diaryAnswers: {},                            // { "2026-03-18": string[] } — DB에서 hydrate
 	todayQA: [],                                // [{ question, answer }] — 오늘의 Q&A 답변
-	wasActiveToday: load(ACTIVE_KEY, "") === todayStr(),
 	pinModalVisible: false,
 
 	pinSet: !!load(PIN_KEY, null),
@@ -199,15 +198,6 @@ export const useDiaryStore = create((set, get) => ({
 		return false;
 	},
 
-	isPinAuthenticatedSession: () => {
-		const pinLockMode = getPinLockMode();
-		if (pinLockMode === "off") return true;
-		if (pinLockMode === "immediate") return !!get().isPinAuthenticated;
-
-		const expiresAt = getStoredPinExpiry() ?? get().pinAuthExpiresAt;
-		return isPinExpiryValid(expiresAt);
-	},
-
 	applyPinLockMode: (pinLockMode) => {
 		if (pinLockMode === "off") {
 			clearPersistedPinSession();
@@ -258,7 +248,6 @@ export const useDiaryStore = create((set, get) => ({
 
 	markActive: () => {
 		save(ACTIVE_KEY, todayStr());
-		set({ wasActiveToday: true });
 	},
 
 	wasActiveOn: (dateStr) => {

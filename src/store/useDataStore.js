@@ -6,13 +6,7 @@ import { formatLocalDate } from "../utils/date";
 import { useSettingsStore } from "./useSettingsStore";
 import { useAuthStore } from "./useAuthStore";
 import i18n from "../l10n/i18n";
-import {
-	fetchWeather as mockFetchWeather,
-	fetchStocks as mockFetchStocks,
-	fetchTrends as mockFetchTrends,
-	fetchCalendarEvents as mockFetchCalendarEvents,
-	fetchHealthData as mockFetchHealthData,
-} from "../mock/data";
+import { fetchCalendarEvents as mockFetchCalendarEvents } from "../mock/data";
 
 const DEBUG_FLOW = import.meta.env.VITE_DEBUG_FLOW === "1";
 const EDGE_TIMEOUT_MS = 25000;
