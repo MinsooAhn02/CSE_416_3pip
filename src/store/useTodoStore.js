@@ -20,11 +20,8 @@ const normalizeTaskAsTodo = (task) => ({
 	title: task.title || task.text || "",
 	completed: !!task.completed,
 	date: task.occurrenceDate || task.date || "",
-	startTime: task.startTime || "",
-	endTime: task.endTime || "",
 	description: task.description || "",
 	taskListId: task.taskListId || "@default",
-	repeat: task.repeat || null,
 });
 
 const getCalendarStoreState = () => {
@@ -110,7 +107,6 @@ export const useTodoStore = create((set, get) => ({
 
 		await calendarState.updateTask(id, {
 			completed: !currentTodo.completed,
-			occurrenceDate: currentTodo.date || todayStamp(),
 		});
 		syncTodosFromCalendarStore();
 	},
@@ -130,8 +126,6 @@ export const useTodoStore = create((set, get) => ({
 			title: text,
 			description: safeOpts.description || "",
 			date,
-			startTime: safeOpts.startTime || "",
-			endTime: safeOpts.endTime || "",
 			completed: false,
 			taskListId:
 				calendarState.selectedTaskListFilter !== ALL_TASK_LIST_FILTER_ID

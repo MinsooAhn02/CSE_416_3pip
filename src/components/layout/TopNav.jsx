@@ -87,6 +87,7 @@ const TopNav = () => {
 	const [currentTime, setCurrentTime] = useState(new Date());
 	const [searchQuery, setSearchQuery] = useState("");
 	const [showDiaryList, setShowDiaryList] = useState(false);
+	const isKo = i18n.language?.toLowerCase().startsWith("ko");
 
 	// Language toggle handler
 	const handleLanguageToggle = () => {
@@ -106,8 +107,18 @@ const TopNav = () => {
 	const ampm = currentTime.getHours() >= 12 ? "PM" : "AM";
 	const timeStr = `${hours12}:${minutes} ${ampm}`;
 
-	// 날짜 상세 포맷: "2026년 03월 18일 07시 17분 21초"
-	const detailedTimeStr = `${currentTime.getFullYear()}년 ${String(currentTime.getMonth() + 1).padStart(2, "0")}월 ${String(currentTime.getDate()).padStart(2, "0")}일 ${String(currentTime.getHours()).padStart(2, "0")}시 ${String(currentTime.getMinutes()).padStart(2, "0")}분 ${String(currentTime.getSeconds()).padStart(2, "0")}초`;
+	const detailedTimeStr = currentTime.toLocaleString(
+		isKo ? "ko-KR" : "en-US",
+		{
+			year: "numeric",
+			month: "2-digit",
+			day: "2-digit",
+			hour: "2-digit",
+			minute: "2-digit",
+			second: "2-digit",
+			hour12: !isKo,
+		},
+	);
 
 	const handleSearch = (e) => {
 		e.preventDefault();
@@ -126,7 +137,7 @@ const TopNav = () => {
 				{user?.avatarUrl ? (
 					<img
 						src={user.avatarUrl}
-						alt={user.displayName || "프로필"}
+						alt={user.displayName || (isKo ? "프로필" : "Profile")}
 						className="w-10 h-10 rounded-full border-2 border-white/30 object-cover cursor-pointer hover:border-blue-400 transition-colors"
 					/>
 				) : (

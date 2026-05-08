@@ -26,9 +26,11 @@ import DiaryPanel from "./DiaryPanel";
  */
 const DatePanelContainer = ({ selectedDate, onClose }) => {
 	const { t, i18n } = useTranslation();
-	const { isDark, cardSecondaryCls, hoverCls } = useTheme();
+	const { isDark, cardSecondaryCls, hoverCls, borderCls, secondaryBgCls } =
+		useTheme();
 	const getDiary = useDiaryStore((s) => s.getDiary);
 	const [showDiaryModal, setShowDiaryModal] = useState(false);
+	const [activePanel, setActivePanel] = useState("events");
 
 	if (!selectedDate) return null;
 
@@ -101,19 +103,42 @@ const DatePanelContainer = ({ selectedDate, onClose }) => {
 				</div>
 			</div>
 
-			{/* 
-				PHASE 9: RESTRUCTURED STACKED LAYOUT
-				- Top Row: Events and Tasks in 2-column layout (grid-cols-2), each taking 50% width
-				- Bottom Row: Diary panel below, taking 100% width (spans full container width)
-				- Diary only renders if entry exists for selected date
-				- This addresses ergonomic issues with narrow 3-column layout
-				- Diary now has more horizontal space for reading/writing content
-			*/}
+			<div
+				className={`mb-3 inline-flex rounded-xl border p-1 ${
+					isDark ? "bg-morning-dark-card border-morning-dark-hover" : "bg-white/70"
+				} ${borderCls}`}
+			>
+				<button
+					type="button"
+					onClick={() => setActivePanel("events")}
+					className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
+						activePanel === "events"
+							? "bg-orange-500 text-white"
+							: `${secondaryBgCls} ${hoverCls}`
+					}`}
+				>
+					{t("events.title")}
+				</button>
+				<button
+					type="button"
+					onClick={() => setActivePanel("tasks")}
+					className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
+						activePanel === "tasks"
+							? "bg-green-500 text-white"
+							: `${secondaryBgCls} ${hoverCls}`
+					}`}
+				>
+					{t("tasks.title")}
+				</button>
+			</div>
+
 			<div className="w-full max-w-none space-y-3">
-				{/* Top Row: Events and Tasks (2-column, 50/50 split) */}
-				<div className="w-full max-w-none grid grid-cols-1 md:grid-cols-2 gap-3">
+				<div className="w-full max-w-none">
+					{activePanel === "events" ? (
 					<EventPanel selectedDate={selectedDate} onClose={onClose} />
-					<TaskPanel selectedDate={selectedDate} onClose={onClose} />
+					) : (
+					<TaskPanel selectedDate={selectedDate} />
+					)}
 				</div>
 			</div>
 

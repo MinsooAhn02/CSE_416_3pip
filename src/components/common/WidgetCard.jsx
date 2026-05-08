@@ -1,4 +1,5 @@
-import { X, Settings } from "lucide-react";
+import { X } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { useTheme } from "../../hooks/useTheme";
 import { useWidgetStore } from "../../store/useWidgetStore";
 import DragHandle from "./DragHandle";
@@ -14,9 +15,12 @@ const WidgetCard = ({
 	refreshing,
 	refreshIcon: RefreshIcon,
 }) => {
+	const { i18n } = useTranslation();
 	const { isDark, cardCls, cardShadowCls, muted, hoverCls } = useTheme();
 	const closeWidget = useWidgetStore((s) => s.closeWidget);
-	const openWidgetSettings = useWidgetStore((s) => s.openWidgetSettings);
+	const isKo = i18n.language?.toLowerCase().startsWith("ko");
+	const refreshTitle = isKo ? "새로고침" : "Refresh";
+	const closeWidgetTitle = isKo ? "위젯 끄기" : "Close widget";
 
 	return (
 		<div
@@ -25,11 +29,7 @@ const WidgetCard = ({
 			<div
 				className={`flex items-center justify-between ${noPad ? "p-5 pb-0" : "mb-3"}`}
 			>
-				<button
-					className="flex items-center gap-2 group"
-					onClick={() => widgetId && openWidgetSettings(widgetId)}
-					title="위젯 설정"
-				>
+				<div className="flex items-center gap-2">
 					<DragHandle />
 					{Icon && (
 						<Icon
@@ -38,13 +38,7 @@ const WidgetCard = ({
 						/>
 					)}
 					<h3 className="font-semibold text-sm">{title}</h3>
-					{widgetId && (
-						<Settings
-							size={11}
-							className={`opacity-0 group-hover:opacity-40 transition-opacity ${muted}`}
-						/>
-					)}
-				</button>
+				</div>
 				<div className="flex items-center gap-1.5">
 					{headerMeta && (
 						<span className={`text-[10px] ${muted}`}>{headerMeta}</span>
@@ -53,7 +47,7 @@ const WidgetCard = ({
 						<button
 							onClick={onRefresh}
 							className={`${muted} hover:opacity-100 transition-opacity p-1 rounded-lg ${hoverCls}`}
-							title="새로고침"
+							title={refreshTitle}
 						>
 							<RefreshIcon
 								size={14}
@@ -65,7 +59,7 @@ const WidgetCard = ({
 						<button
 							onClick={() => closeWidget(widgetId)}
 							className={`${muted} hover:opacity-100 transition-opacity p-1 rounded-lg ${hoverCls}`}
-							title="위젯 끄기"
+							title={closeWidgetTitle}
 						>
 							<X size={14} />
 						</button>

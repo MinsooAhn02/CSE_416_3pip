@@ -116,64 +116,20 @@ const getMonthWindow = (anchor = new Date()) => {
 	};
 };
 
-const parseTaskNotes = (notes = "") => {
+const stripLegacyTaskMetadata = (notes = "") => {
 	const raw = String(notes || "");
 	const match = raw.match(
 		new RegExp(
-			`${TASK_META_OPEN.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(.*?)${TASK_META_CLOSE.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`,
+			`${TASK_META_OPEN.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}.*?${TASK_META_CLOSE.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`,
 			"s",
 		),
 	);
-
-	if (!match) {
-		return {
-			description: raw.trim(),
-			meta: {},
-		};
-	}
-
-	let meta = {};
-	try {
-		meta = JSON.parse(match[1]);
-	} catch {
-		meta = {};
-	}
-
-	const description = raw.replace(match[0], "").trim();
-	return { description, meta };
+	return match ? raw.replace(match[0], "").trim() : raw.trim();
 };
 
-const buildTaskNotes = ({
-	description = "",
-	startTime = "",
-	endTime = "",
-	repeat = null,
-	dueDate = "",
-	deadline = "",
-	completedDates = [],
-}) => {
+const buildTaskNotes = (description = "") => {
 	const cleanDescription = String(description || "").trim();
-	const meta = {};
-	const normalizedDueDate = String(dueDate || deadline || "").trim();
-	const normalizedCompletedDates = Array.from(
-		new Set(
-			(Array.isArray(completedDates) ? completedDates : []).filter((date) =>
-				typeof date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(date),
-			),
-		),
-	).sort();
-
-	if (startTime) meta.startTime = startTime;
-	if (endTime) meta.endTime = endTime;
-	if (repeat && repeat.type && repeat.type !== "none") meta.repeat = repeat;
-	if (normalizedDueDate) meta.dueDate = normalizedDueDate;
-	if (normalizedCompletedDates.length > 0) meta.completedDates = normalizedCompletedDates;
-
-	if (Object.keys(meta).length === 0) {
-		return cleanDescription || undefined;
-	}
-
-	return `${TASK_META_OPEN}${JSON.stringify(meta)}${TASK_META_CLOSE}${cleanDescription ? `\n\n${cleanDescription}` : ""}`;
+	return cleanDescription || undefined;
 };
 
 const toLocalDateTimeIso = (dateStr, timeStr = "00:00") => {
@@ -193,19 +149,6 @@ const toTaskCompletedIso = (input = new Date()) => {
 	const date = input instanceof Date ? input : new Date(input);
 	return Number.isNaN(date.getTime()) ? new Date().toISOString() : date.toISOString();
 };
-
-const normalizeCompletedDates = (dates = []) =>
-	Array.from(
-		new Set(
-			(Array.isArray(dates) ? dates : []).filter(
-				(date) => typeof date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(date),
-			),
-	),
-).sort();
-
-const hasTaskRepeat = (repeat) => !!(repeat?.type && repeat.type !== "none");
-const hasOwn = (value, key) =>
-	!!value && Object.prototype.hasOwnProperty.call(value, key);
 
 const normalizeAttendees = (attendees = []) =>
 	(Array.isArray(attendees) ? attendees : [])
@@ -304,17 +247,13 @@ const normalizeEvent = (event) => {
 };
 
 const normalizeTask = (task) => {
-	const { description: notesDescription, meta } = parseTaskNotes(
-		task?.notes || task?.description || "",
+	const description = stripLegacyTaskMetadata(
+		task?.description ?? task?.notes ?? "",
 	);
 	const date =
 		task?.date ||
 		extractTaskDateString(task?.due || "") ||
 		extractDateString(task?.updated || "");
-	const description = hasOwn(task, "description")
-		? String(task?.description || "").trim()
-		: notesDescription;
-	const repeat = hasOwn(task, "repeat") ? task?.repeat || null : meta.repeat || null;
 	const completed =
 		typeof task?.completed === "boolean"
 			? task.completed
@@ -325,20 +264,6 @@ const normalizeTask = (task) => {
 			: typeof task?.completed === "string" && task.completed.trim()
 				? task.completed.trim()
 				: "";
-	const startTime = hasOwn(task, "startTime")
-		? String(task?.startTime || "").trim()
-		: meta.startTime || "";
-	const endTime = hasOwn(task, "endTime")
-		? String(task?.endTime || "").trim()
-		: meta.endTime || "";
-	const dueDate = hasOwn(task, "dueDate")
-		? String(task?.dueDate || "").trim()
-		: hasOwn(task, "deadline")
-			? String(task?.deadline || "").trim()
-			: meta.dueDate || meta.deadline || task?.deadline || "";
-	const completedDates = hasOwn(task, "completedDates")
-		? normalizeCompletedDates(task?.completedDates || [])
-		: normalizeCompletedDates(meta.completedDates || task?.completedDates || []);
 
 	return {
 		id: task?.id,
@@ -347,17 +272,11 @@ const normalizeTask = (task) => {
 		text: task?.title || task?.text || "",
 		date,
 		due: task?.due || (date ? toTaskDueIso(date) : null),
-		startTime: startTime || "",
-		endTime,
 		description,
-		completed: hasTaskRepeat(repeat) ? false : completed,
-		completedAt: hasTaskRepeat(repeat) ? "" : completedAt,
-		isFixed: !!meta.isFixed || !!task?.isFixed,
-		notes: task?.notes || "",
+		completed,
+		completedAt,
+		notes: description,
 		updated: task?.updated || null,
-		repeat,
-		dueDate,
-		completedDates,
 	};
 };
 
@@ -903,31 +822,17 @@ export const useGoogleCalendarStore = create((set, get) => ({
 	addTask: async (taskData) => {
 		set({ loading: true, error: null });
 		try {
-			const repeat = taskData.repeat ?? null;
-			const normalizedTask = normalizeTask({
-				...taskData,
-				repeat,
-				dueDate: taskData.dueDate ?? taskData.deadline ?? "",
-				completedDates:
-					hasTaskRepeat(repeat) && Array.isArray(taskData.completedDates)
-						? taskData.completedDates
-						: [],
-			});
+			const normalizedTask = normalizeTask(taskData);
 			const taskListId = taskData.taskListId || normalizedTask.taskListId || "@default";
 			const payload = {
 				title: normalizedTask.title,
-				notes: buildTaskNotes(normalizedTask),
+				notes: buildTaskNotes(normalizedTask.description),
 				due: toTaskDueIso(normalizedTask.date || formatLocalDate()),
-				status:
-					hasTaskRepeat(normalizedTask.repeat)
-						? "needsAction"
-						: normalizedTask.completed
-							? "completed"
-							: "needsAction",
+				status: normalizedTask.completed ? "completed" : "needsAction",
 				completed:
-					hasTaskRepeat(normalizedTask.repeat) || !normalizedTask.completed
-						? null
-						: normalizedTask.completedAt || toTaskCompletedIso(),
+					normalizedTask.completed
+						? normalizedTask.completedAt || toTaskCompletedIso()
+						: null,
 			};
 
 			let created = {
@@ -980,74 +885,33 @@ export const useGoogleCalendarStore = create((set, get) => ({
 		set({ loading: true, error: null });
 		try {
 			const current = get().tasks.find((task) => task.id === taskId);
-			const mergedRaw = { ...(current || {}), ...(updates || {}), id: taskId };
-			const nextRepeat =
-				updates?.repeat !== undefined ? updates.repeat : (current?.repeat ?? null);
-			const isRepeatingTask = hasTaskRepeat(nextRepeat);
-			const occurrenceDate =
-				String(
-					updates?.occurrenceDate ||
-						current?.occurrenceDate ||
-						mergedRaw?.occurrenceDate ||
-						mergedRaw?.date ||
-						current?.date ||
-						"",
-				).trim() || "";
-			const completedDatesSet = new Set(
-				normalizeCompletedDates(
-					updates?.completedDates !== undefined
-						? updates.completedDates
-						: current?.completedDates ?? mergedRaw?.completedDates ?? [],
-				),
-			);
-
-			if (isRepeatingTask && updates?.completed !== undefined && occurrenceDate) {
-				if (updates.completed) completedDatesSet.add(occurrenceDate);
-				else completedDatesSet.delete(occurrenceDate);
-			}
-
 			const merged = normalizeTask({
-				...mergedRaw,
+				...(current || {}),
+				...(updates || {}),
+				id: taskId,
 				completed:
-					isRepeatingTask
-						? false
-						: updates?.completed !== undefined
-							? updates.completed
-							: current?.completed ?? false,
+					updates?.completed !== undefined
+						? updates.completed
+						: current?.completed ?? false,
 				completedAt:
-					isRepeatingTask
-						? ""
-						: updates?.completed !== undefined
-							? updates.completed
-								? current?.completedAt || toTaskCompletedIso()
-								: ""
-							: current?.completedAt || mergedRaw?.completedAt || "",
-				repeat: nextRepeat,
-				dueDate:
-					updates?.dueDate !== undefined
-						? updates.dueDate
-						: updates?.deadline !== undefined
-							? updates.deadline
-							: (current?.dueDate ?? current?.deadline ?? ""),
-				completedDates: isRepeatingTask ? [...completedDatesSet] : [],
+					updates?.completed !== undefined
+						? updates.completed
+							? current?.completedAt || toTaskCompletedIso()
+							: ""
+						: current?.completedAt || "",
 			});
 			const taskListId = updates?.taskListId || current?.taskListId || merged.taskListId || "@default";
 			const currentTaskListId =
 				current?.taskListId || merged.taskListId || "@default";
 			const payload = {
 				title: merged.title,
-				notes: buildTaskNotes(merged),
+				notes: buildTaskNotes(merged.description),
 				due: toTaskDueIso(merged.date || formatLocalDate()),
-				status:
-					hasTaskRepeat(merged.repeat)
-						? "needsAction"
-						: merged.completed
-							? "completed"
-							: "needsAction",
+				status: merged.completed ? "completed" : "needsAction",
 				completed:
-					hasTaskRepeat(merged.repeat) || !merged.completed
-						? null
-						: merged.completedAt || toTaskCompletedIso(),
+					merged.completed
+						? merged.completedAt || toTaskCompletedIso()
+						: null,
 			};
 
 			let updated = { ...merged, due: payload.due, taskListId };

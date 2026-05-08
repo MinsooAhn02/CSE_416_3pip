@@ -4,6 +4,7 @@ import { load, save } from "../utils/storage";
 import { supabase } from "../lib/supabase";
 import { DEFAULT_PRIORITY_ORDER } from "../constants";
 import i18n from "../l10n/i18n";
+import { normalizeFixedInterestIds } from "../utils/interests";
 
 export const DEFAULT_PIN_LOCK_MODE = "immediate";
 export const DEFAULT_DIARY_LANGUAGE = "app";
@@ -104,6 +105,7 @@ export const useSettingsStore = create((set, get) => ({
 	voiceOn: load("mb_voice", false),
 	pinLockMode: load("mb_pin_lock_mode", DEFAULT_PIN_LOCK_MODE),
 	diaryLanguage: load("mb_diary_language", DEFAULT_DIARY_LANGUAGE),
+	fixedInterestIds: [],
 	
 	// Data Priority (REQ-US-006)
 	priorityOrder: load("mb_priority_order", DEFAULT_PRIORITY_ORDER),
@@ -186,6 +188,10 @@ export const useSettingsStore = create((set, get) => ({
 		// 개인화 관심 키워드
 		if (Array.isArray(data.keyword_interests)) {
 			patch.keywordInterests = data.keyword_interests;
+		}
+		if (Array.isArray(data.fixed_interests)) {
+			const fixedInterestIds = normalizeFixedInterestIds(data.fixed_interests);
+			patch.fixedInterestIds = fixedInterestIds;
 		}
 		if (Object.keys(patch).length) set(patch);
 		
@@ -305,6 +311,12 @@ export const useSettingsStore = create((set, get) => ({
 	},
 
 	// 개인화 관심 키워드 액션
+	setFixedInterestIds: (ids) => {
+		const normalized = normalizeFixedInterestIds(ids);
+		set({ fixedInterestIds: normalized });
+		syncSettings({ fixed_interests: normalized });
+	},
+
 	setKeywordInterests: (interests) => {
 		set({ keywordInterests: interests });
 		syncSettings({ keyword_interests: interests });

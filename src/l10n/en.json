@@ -81,6 +81,8 @@
     "date_details": "Date Details",
     "open_diary_for_date": "Open diary for this date",
     "cycle_view": "Cycle View",
+    "today": "Today",
+    "go_to_today": "Go to today",
     "days": ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"],
     "days_full": ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
   },
@@ -150,6 +152,12 @@
     "title": "Diary",
     "card_title": "Today's Story",
     "question": "What was the happiest moment of your day?",
+    "daily_question_title": "Daily Question",
+    "daily_question_loading": "Generating a question...",
+    "daily_question_placeholder": "Write your answer (Press Enter to submit)",
+    "daily_question_saved": "Saved - preparing the next question",
+    "daily_question_save_error": "Failed to save. Please try again.",
+    "daily_question_fallback": "What are you up to right now?",
     "placeholder": "Write about your day...",
     "no_entry": "No diary entry for this date",
     "write_diary": "Write Diary",
@@ -252,9 +260,14 @@
   },
   "errors": {
     "network_error": "Network error. Please try again.",
+    "connection_failed": "Connection failed. Please try again later.",
     "auth_error": "Authentication failed.",
     "load_error": "Failed to load data.",
-    "save_error": "Failed to save data."
+    "save_error": "Failed to save data.",
+    "city_not_found": "City \"{{city}}\" not found.",
+    "geocoding_failed": "Failed to find the city location.",
+    "google_health_auth": "Google Health connection expired. Reconnect Google to sync Health again.",
+    "google_health_api_disabled": "Google Fitness API is disabled for this Google Cloud project. Enable it in Google Cloud, wait a few minutes, then reconnect Google."
   },
   "time": {
     "greeting_morning": "Good morning! ☀️",

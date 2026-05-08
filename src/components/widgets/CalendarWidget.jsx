@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
 	Calendar,
 	ArrowLeftRight,
@@ -54,6 +54,7 @@ const CalendarWidget = () => {
 
 	const now = new Date();
 	const today = now.getDate();
+	const todayStr = formatLocalDate(now);
 	const viewYear = currentDate.getFullYear();
 	const viewMonth = currentDate.getMonth();
 
@@ -72,7 +73,14 @@ const CalendarWidget = () => {
 		const views = ["month", "week", "day"];
 		const currentIndex = views.indexOf(calView);
 		const nextIndex = (currentIndex + 1) % views.length;
+		setSelectedDateForPanels(null);
+		setSelectedDate(null);
 		setCalView(views[nextIndex]);
+	};
+
+	const selectDate = (dateStr) => {
+		setSelectedDateForPanels(dateStr);
+		setSelectedDate(dateStr);
 	};
 
 	const goToPrev = () => {
@@ -80,6 +88,15 @@ const CalendarWidget = () => {
 	};
 	const goToNext = () => {
 		setCurrentDate(new Date(viewYear, viewMonth + 1, 1));
+	};
+	const goToToday = () => {
+		const nextDate = new Date();
+		const nextTodayStr = formatLocalDate(nextDate);
+		setCurrentDate(nextDate);
+		setSelectedDate(nextTodayStr);
+		if (selectedDateForPanels) {
+			setSelectedDateForPanels(nextTodayStr);
+		}
 	};
 
 	const cells = useMemo(() => {
@@ -104,6 +121,8 @@ const CalendarWidget = () => {
 
 	const isCurrentMonth =
 		viewYear === now.getFullYear() && viewMonth === now.getMonth();
+	const isTodayButtonDisabled =
+		isCurrentMonth && (!selectedDateForPanels || selectedDateForPanels === todayStr);
 
 	const monthLabel = currentDate.toLocaleDateString(
 		i18n.language === "ko" ? "ko-KR" : "en-US",
@@ -145,6 +164,21 @@ const CalendarWidget = () => {
 							>
 								<ChevronRight size={16} />
 							</button>
+							<button
+								type="button"
+								onClick={goToToday}
+								disabled={isTodayButtonDisabled}
+								className={`rounded-full border px-2.5 py-1 text-xs font-medium transition-colors ${
+									isTodayButtonDisabled
+										? isDark
+											? "cursor-default border-slate-700 text-slate-500"
+											: "cursor-default border-slate-200 text-slate-400"
+										: `${borderCls} ${hoverCls}`
+								}`}
+								title={t("calendar.go_to_today")}
+							>
+								{t("calendar.today")}
+							</button>
 						</>
 					)}
 
@@ -181,10 +215,7 @@ const CalendarWidget = () => {
 							<button
 								key={i}
 								type="button"
-								onClick={() => {
-									setSelectedDateForPanels(dateStr);
-									setSelectedDate(dateStr);
-								}}
+								onClick={() => selectDate(dateStr)}
 								className={`relative mx-auto flex h-9 w-9 items-center justify-center text-sm rounded-full transition-colors ${
 									isToday ? "bg-blue-500 text-white font-bold" : hoverCls
 								} ${isSelected && !isToday ? "ring-2 ring-blue-500" : ""} ${
@@ -227,10 +258,7 @@ const CalendarWidget = () => {
 							<button
 								key={i}
 								type="button"
-								onClick={() => {
-									setSelectedDateForPanels(dateStr);
-									setSelectedDate(dateStr);
-								}}
+								onClick={() => selectDate(dateStr)}
 								className={`relative text-center p-4 rounded-lg border transition-colors ${
 									sameDay(d, now)
 										? "bg-blue-500 text-white border-blue-500"
@@ -272,11 +300,7 @@ const CalendarWidget = () => {
 				<div className="flex justify-center items-start py-6">
 					<button
 						type="button"
-						onClick={() => {
-							const dateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
-							setSelectedDateForPanels(dateStr);
-							setSelectedDate(dateStr);
-						}}
+						onClick={() => selectDate(todayStr)}
 						className="w-40 h-40 rounded-2xl bg-blue-500 text-white flex flex-col items-center justify-center shadow-sm hover:bg-blue-600 transition-colors"
 					>
 						<p className="text-xs uppercase">{dayFullNames[now.getDay()]}</p>

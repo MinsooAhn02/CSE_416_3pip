@@ -1,11 +1,13 @@
 import { useState, useRef, useEffect } from "react";
 import { Settings, Plus, X, Sparkles } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { useTheme } from "../../hooks/useTheme";
 import { useSettingsStore } from "../../store/useSettingsStore";
 import { useWidgetStore } from "../../store/useWidgetStore";
 import { useDiaryStore } from "../../store/useDiaryStore";
 
 const FixedButtons = () => {
+	const { t } = useTranslation();
 	const { isDark, inputCls, muted, cardCls } = useTheme();
 	const setShowSettings = useSettingsStore((s) => s.setShowSettings);
 	const newKeyword = useWidgetStore((s) => s.newKeyword);
@@ -56,7 +58,9 @@ const FixedButtons = () => {
 								size={16}
 								className={isDark ? "text-yellow-300" : "text-yellow-600"}
 							/>
-							<span className="font-semibold text-sm">스마트 위젯 추가</span>
+							<span className="font-semibold text-sm">
+								{t("widgets.smart.add_smart_widget")}
+							</span>
 							<button
 								onClick={() => {
 									setShowPopup(false);
@@ -73,7 +77,7 @@ const FixedButtons = () => {
 								value={newKeyword}
 								onChange={(e) => setNewKeyword(e.target.value)}
 								onKeyDown={(e) => e.key === "Enter" && handleAdd()}
-								placeholder="키워드 입력..."
+								placeholder={t("widgets.smart.enter_keyword")}
 								autoFocus
 								className={`flex-grow rounded-xl px-3 py-2 text-sm outline-none border focus:border-blue-400 ${inputCls}`}
 							/>
@@ -81,14 +85,14 @@ const FixedButtons = () => {
 								onClick={handleAdd}
 								className="bg-blue-500 hover:bg-blue-400 text-white px-3 py-2 rounded-xl text-xs font-bold whitespace-nowrap"
 							>
-								추가
+								{t("common.add")}
 							</button>
 						</div>
 					</div>
 				)}
 				<button
 					onClick={() => setShowPopup((p) => !p)}
-					title="스마트 위젯 추가"
+					title={t("widgets.smart.add_smart_widget")}
 					className={btnBase}
 				>
 					<Plus size={22} className="opacity-60" />
@@ -96,7 +100,11 @@ const FixedButtons = () => {
 			</div>
 
 			{/* Settings */}
-			<button onClick={() => setShowSettings(true)} className={btnBase}>
+			<button
+				onClick={() => setShowSettings(true)}
+				className={btnBase}
+				title={t("settings.title")}
+			>
 				<Settings
 					size={22}
 					className="opacity-60 group-hover:rotate-45 transition-transform duration-500"

@@ -204,7 +204,11 @@ const App = () => {
 						: "bg-morning-light-page text-morning-light-text"
 				}`}
 			>
-				<p className="text-sm opacity-80">세션 확인 중...</p>
+				<p className="text-sm opacity-80">
+					{i18n.language?.toLowerCase().startsWith("ko")
+						? "세션 확인 중..."
+						: "Checking your session..."}
+				</p>
 			</div>
 		);
 	}

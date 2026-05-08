@@ -14,6 +14,8 @@ create table if not exists public.user_settings (
   pin_lock_mode text default 'immediate',
   clock_style text default 'digital',
   bg_image text,
+  fixed_interests jsonb default '[]',
+  onboarding_perms jsonb default '{"fit": false, "cal": false}',
   vis jsonb default '{}',
   created_at timestamptz default now(),
   updated_at timestamptz default now()
@@ -21,6 +23,12 @@ create table if not exists public.user_settings (
 
 alter table public.user_settings
   add column if not exists pin_lock_mode text default 'immediate';
+
+alter table public.user_settings
+  add column if not exists fixed_interests jsonb default '[]';
+
+alter table public.user_settings
+  add column if not exists onboarding_perms jsonb default '{"fit": false, "cal": false}';
 
 alter table public.user_settings enable row level security;
 

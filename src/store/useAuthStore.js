@@ -2,18 +2,19 @@ import { create } from "zustand";
 import { load, save } from "../utils/storage";
 import { supabase } from "../lib/supabase";
 import { runPersonalizationBatch } from "../services/personalizationService";
+import { normalizeFixedInterestIds } from "../utils/interests";
 import { useSettingsStore } from "./useSettingsStore";
 
 const PROVIDER_TOKEN_KEY = "mb_provider_token";
 
 export const useAuthStore = create((set, get) => ({
 	isLoggedIn: load("mb_login", false),
-	onboarded: load("mb_onboarded", false),
+	onboarded: false,
 	showOnboarding: false,
 	obStep: 0,
-	selCats: load("mb_cats", []),
-	perms: load("mb_perms", { fit: false, cal: false }),
-	persona: load("mb_persona", null),
+	selCats: [],
+	perms: { fit: false, cal: false },
+	persona: null,
 	user: null,
 	providerToken: load(PROVIDER_TOKEN_KEY, null),
 
@@ -67,9 +68,14 @@ export const useAuthStore = create((set, get) => ({
 			user: null,
 			providerToken: null,
 			onboarded: false,
+			showOnboarding: false,
+			obStep: 0,
+			selCats: [],
+			perms: { fit: false, cal: false },
+			persona: null,
 		});
+		useSettingsStore.setState({ fixedInterestIds: [], keywordInterests: [] });
 		save("mb_login", false);
-		save("mb_onboarded", false);
 		save(PROVIDER_TOKEN_KEY, null);
 
 		if (supabase) {
@@ -106,7 +112,18 @@ export const useAuthStore = create((set, get) => ({
 			return;
 		}
 
-		set({ isLoggedIn: false, user: null, providerToken: null });
+		set({
+			isLoggedIn: false,
+			user: null,
+			providerToken: null,
+			onboarded: false,
+			showOnboarding: false,
+			obStep: 0,
+			selCats: [],
+			perms: { fit: false, cal: false },
+			persona: null,
+		});
+		useSettingsStore.setState({ fixedInterestIds: [], keywordInterests: [] });
 		save("mb_login", false);
 		save(PROVIDER_TOKEN_KEY, null);
 	},
@@ -163,18 +180,29 @@ export const useAuthStore = create((set, get) => ({
 			.single();
 
 		if (data) {
+			const fixedInterestIds = normalizeFixedInterestIds(data.fixed_interests);
+			const onboardingPerms =
+				data.onboarding_perms &&
+				typeof data.onboarding_perms === "object"
+					? {
+							fit: Boolean(data.onboarding_perms.fit),
+							cal: Boolean(data.onboarding_perms.cal),
+						}
+					: { fit: false, cal: false };
 			set({
 				onboarded: true,
 				persona: data.persona,
-				perms: { fit: true, cal: true },
+				perms: onboardingPerms,
+				selCats: fixedInterestIds,
 			});
-			save("mb_onboarded", true);
-			save("mb_persona", data.persona);
+			useSettingsStore.setState({
+				fixedInterestIds: fixedInterestIds,
+				keywordInterests: Array.isArray(data.keyword_interests)
+					? data.keyword_interests
+					: [],
+			});
 
 			// 이미 DB에 저장된 keyword_interests를 즉시 store에 반영 (배치 전에도 표시)
-			if (Array.isArray(data.keyword_interests) && data.keyword_interests.length > 0) {
-				useSettingsStore.setState({ keywordInterests: data.keyword_interests });
-			}
 
 			// 개인화 배치: 백그라운드 실행. 배치가 직접 DB에 쓰므로 setState만 (syncSettings 이중 write 방지)
 			runPersonalizationBatch().then((interests) => {
@@ -184,8 +212,15 @@ export const useAuthStore = create((set, get) => ({
 			}).catch(() => {});
 		} else {
 			// 신규 유저: 온보딩 모달 표시
-			set({ onboarded: false, showOnboarding: true, obStep: 0 });
-			save("mb_onboarded", false);
+			set({
+				onboarded: false,
+				showOnboarding: true,
+				obStep: 0,
+				selCats: [],
+				perms: { fit: false, cal: false },
+				persona: null,
+			});
+			useSettingsStore.setState({ fixedInterestIds: [] });
 		}
 	},
 
@@ -193,7 +228,6 @@ export const useAuthStore = create((set, get) => ({
 	setObStep: (v) => set({ obStep: v }),
 	setPersona: (p) => {
 		set({ persona: p });
-		save("mb_persona", p);
 	},
 	toggleCat: (id) =>
 		set((s) => ({
@@ -208,21 +242,38 @@ export const useAuthStore = create((set, get) => ({
 
 	finishOB: async () => {
 		const { selCats, perms, persona } = get();
-		set({ onboarded: true, showOnboarding: false });
-		save("mb_onboarded", true);
-		save("mb_cats", selCats);
-		save("mb_perms", perms);
-		save("mb_persona", persona);
+		const normalizedSelCats = normalizeFixedInterestIds(selCats);
+		const normalizedPerms = {
+			fit: Boolean(perms?.fit),
+			cal: Boolean(perms?.cal),
+		};
+		set({
+			onboarded: true,
+			showOnboarding: false,
+			selCats: normalizedSelCats,
+			perms: normalizedPerms,
+		});
+		useSettingsStore.setState({ fixedInterestIds: normalizedSelCats });
 
 		if (supabase) {
 			const {
 				data: { user },
 			} = await supabase.auth.getUser();
 			if (user) {
-				await supabase.from("user_settings").upsert({
+				const { error } = await supabase.from("user_settings").upsert({
 					id: user.id,
 					persona,
+					fixed_interests: normalizedSelCats,
+					onboarding_perms: normalizedPerms,
 				});
+				if (error) {
+					console.warn("Fixed interests save failed:", error.message);
+					await supabase.from("user_settings").upsert({
+						id: user.id,
+						persona,
+						onboarding_perms: normalizedPerms,
+					});
+				}
 			}
 		}
 	},

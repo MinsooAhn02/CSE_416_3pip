@@ -10,6 +10,7 @@ import { useTodoStore } from "../../store/useTodoStore";
 import { useDiaryStore } from "../../store/useDiaryStore";
 import { useAuthStore } from "../../store/useAuthStore";
 import { useWidgetStore } from "../../store/useWidgetStore";
+import { mergeInterestLists } from "../../utils/interests";
 import {
 	generateDetailedBriefing,
 	generateDiary,
@@ -55,6 +56,7 @@ const BriefingWidget = () => {
 	const bLen = useSettingsStore((s) => s.bLen) || "medium";
 	const setBLen = useSettingsStore((s) => s.setBLen);
 	const priorityOrder = useSettingsStore((s) => s.priorityOrder) || [];
+	const fixedInterestIds = useSettingsStore((s) => s.fixedInterestIds) || [];
 	const keywordInterests = useSettingsStore((s) => s.keywordInterests) || [];
 	const persona = useAuthStore((s) => s.persona);
 
@@ -88,6 +90,10 @@ const BriefingWidget = () => {
 	const yesterdayEntry = diaryEntries?.[yesterdayDateStr] || null;
 	const yesterdayMemo = yesterdayEntry?.memo || "";
 	const yesterdayDiary = yesterdayEntry?.diary || "";
+	const effectiveInterests = useMemo(
+		() => mergeInterestLists(fixedInterestIds, keywordInterests),
+		[fixedInterestIds, keywordInterests],
+	);
 
 	// Store briefings for all lengths: { short: {...}, medium: {...}, long: {...} }
 	const [briefingVersions, setBriefingVersions] = useState({
@@ -204,7 +210,7 @@ const BriefingWidget = () => {
 				todos,
 				activeWidgetIds,
 				yesterdayMemo,
-				keywordInterests,
+				keywordInterests: effectiveInterests,
 				persona,
 				newsResults: (newsResults ?? []).slice(0, 5),
 				newsAnswer: newsAnswer ?? "",

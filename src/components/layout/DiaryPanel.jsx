@@ -41,6 +41,60 @@ const DiaryPanel = ({ selectedDate, onClose, compact = false }) => {
 	const [memoContent, setMemoContent] = useState("");
 	const [isSaving, setIsSaving] = useState(false);
 	const [isGeneratingDiary, setIsGeneratingDiary] = useState(false);
+	const isKo = i18n.language?.toLowerCase().startsWith("ko");
+	const copy = useMemo(
+		() =>
+			isKo
+				? {
+						diaryTitle: "Diary",
+						previewFallback: "이 날짜에는 아직 일기 내용이 없습니다.",
+						lockDiary: "Diary 잠금",
+						diarySettings: "Diary 설정",
+						closeDiary: "Diary 닫기",
+						lockedDiary: "Diary가 잠겨 있습니다.",
+						pinRequired: "Diary를 열기 전에 PIN 설정이 필요합니다.",
+						unlock: "잠금 해제",
+						setupPin: "PIN 설정",
+						aiDiaryLabel: "AI 생성 일기",
+						revert: "되돌리기",
+						revertTitle: "원래 AI 일기로 되돌리기",
+						editDiary: "일기 편집",
+						noDiary: "이 날짜에는 아직 AI 일기가 생성되지 않았습니다.",
+						editDiaryPlaceholder: "일기 내용을 수정해보세요...",
+						saving: "저장 중...",
+						save: "저장",
+						cancel: "취소",
+						memo: "메모",
+						editMemo: "메모 편집",
+						clickMemo: "클릭해서 메모 추가...",
+						memoPlaceholder: "메모를 입력해보세요...",
+				  }
+				: {
+						diaryTitle: "Diary",
+						previewFallback: "No diary content for this date.",
+						lockDiary: "Lock diary",
+						diarySettings: "Diary settings",
+						closeDiary: "Close diary",
+						lockedDiary: "Diary is locked.",
+						pinRequired: "Diary PIN is required before opening this diary.",
+						unlock: "Unlock",
+						setupPin: "Set up PIN",
+						aiDiaryLabel: "AI Generated Diary",
+						revert: "Revert",
+						revertTitle: "Revert to original AI diary",
+						editDiary: "Edit diary",
+						noDiary: "No AI diary generated for this date yet.",
+						editDiaryPlaceholder: "Edit diary content...",
+						saving: "Saving...",
+						save: "Save",
+						cancel: "Cancel",
+						memo: "Memo",
+						editMemo: "Edit memo",
+						clickMemo: "Click to add memo...",
+						memoPlaceholder: "Write your memo here...",
+				  },
+		[isKo],
+	);
 
 	const diaryUiText = useMemo(
 		() =>
@@ -172,20 +226,24 @@ const DiaryPanel = ({ selectedDate, onClose, compact = false }) => {
 
 	const formatDate = (dateStr) => {
 		const d = new Date(`${dateStr}T00:00:00`);
-		const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-		return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")} ${days[d.getDay()]}`;
+		return d.toLocaleDateString(isKo ? "ko-KR" : "en-US", {
+			year: "numeric",
+			month: "2-digit",
+			day: "2-digit",
+			weekday: "short",
+		});
 	};
 
 	if (compact) {
 		const previewText =
-			diaryContent || memoContent || "No diary content for this date.";
+			diaryContent || memoContent || copy.previewFallback;
 
 		return (
 			<div className={`rounded-xl border p-3 ${cardCls}`}>
 				<div className="flex items-center justify-between gap-2 mb-2">
 					<div className="flex items-center gap-2">
 						<BookOpen size={15} className="text-blue-500" />
-						<h3 className="font-bold text-xs">Diary</h3>
+						<h3 className="font-bold text-xs">{copy.diaryTitle}</h3>
 						{pinRequired && !isAuthenticated && (
 							<Lock size={13} className="text-gray-500" />
 						)}
@@ -194,7 +252,7 @@ const DiaryPanel = ({ selectedDate, onClose, compact = false }) => {
 						{pinRequired && isAuthenticated && (
 							<button
 								onClick={handleLock}
-								title="Lock diary"
+								title={copy.lockDiary}
 								className={`p-1 rounded-md transition-colors ${hoverCls}`}
 							>
 								<Lock size={14} />
@@ -203,7 +261,7 @@ const DiaryPanel = ({ selectedDate, onClose, compact = false }) => {
 						{pinSet && (
 							<button
 								onClick={handleOpenDiarySettings}
-								title="Diary settings"
+								title={copy.diarySettings}
 								className={`p-1 rounded-md transition-colors ${hoverCls}`}
 							>
 								<Settings size={14} />
@@ -237,8 +295,8 @@ const DiaryPanel = ({ selectedDate, onClose, compact = false }) => {
 								className={`text-xs text-left ${isDark ? "text-gray-400" : "text-gray-600"}`}
 							>
 								{pinSet
-									? "Diary is locked."
-									: "Diary PIN is required before opening this diary."}
+									? copy.lockedDiary
+									: copy.pinRequired}
 							</p>
 						</div>
 						<button
@@ -246,7 +304,7 @@ const DiaryPanel = ({ selectedDate, onClose, compact = false }) => {
 							onClick={() => setShowPinModal(true)}
 							className="w-full rounded-lg bg-blue-500 px-3 py-2 text-xs font-medium text-white transition-colors hover:bg-blue-600"
 						>
-							{pinSet ? "Unlock" : "Set up PIN"}
+							{pinSet ? copy.unlock : copy.setupPin}
 						</button>
 					</div>
 				) : (
@@ -274,7 +332,7 @@ const DiaryPanel = ({ selectedDate, onClose, compact = false }) => {
 			<div className="flex items-center justify-between gap-2 mb-4">
 				<div className="flex items-center gap-2">
 					<BookOpen size={16} className="text-blue-500" />
-					<h3 className="font-bold text-sm">Diary</h3>
+					<h3 className="font-bold text-sm">{copy.diaryTitle}</h3>
 					{pinRequired && !isAuthenticated && (
 						<Lock size={14} className="text-gray-500" />
 					)}
@@ -283,7 +341,7 @@ const DiaryPanel = ({ selectedDate, onClose, compact = false }) => {
 					{pinRequired && isAuthenticated && (
 						<button
 							onClick={handleLock}
-							title="Lock diary"
+							title={copy.lockDiary}
 							className={`p-1.5 rounded-lg transition-colors ${hoverCls}`}
 						>
 							<Lock size={16} />
@@ -292,7 +350,7 @@ const DiaryPanel = ({ selectedDate, onClose, compact = false }) => {
 					{pinSet && (
 						<button
 							onClick={handleOpenDiarySettings}
-							title="Diary settings"
+							title={copy.diarySettings}
 							className={`p-1.5 rounded-lg transition-colors ${hoverCls}`}
 						>
 							<Settings size={16} />
@@ -301,7 +359,7 @@ const DiaryPanel = ({ selectedDate, onClose, compact = false }) => {
 					{onClose && (
 						<button
 							onClick={onClose}
-							title="Close diary"
+							title={copy.closeDiary}
 							className={`p-1.5 rounded-lg transition-colors ${hoverCls}`}
 						>
 							<X size={16} />
@@ -334,15 +392,15 @@ const DiaryPanel = ({ selectedDate, onClose, compact = false }) => {
 						className={`text-xs font-medium text-center ${isDark ? "text-gray-400" : "text-gray-600"}`}
 					>
 						{pinSet
-							? "This diary is locked."
-							: "PIN setup is required before opening the diary."}
+							? copy.lockedDiary
+							: copy.pinRequired}
 					</p>
 					<button
 						type="button"
 						onClick={() => setShowPinModal(true)}
 						className="mt-4 rounded-lg bg-blue-500 px-4 py-2 text-xs font-medium text-white transition-colors hover:bg-blue-600"
 					>
-						{pinSet ? "Unlock" : "Set up PIN"}
+						{pinSet ? copy.unlock : copy.setupPin}
 					</button>
 				</div>
 			)}
@@ -360,7 +418,7 @@ const DiaryPanel = ({ selectedDate, onClose, compact = false }) => {
 							<label
 								className={`text-xs font-medium block ${isDark ? "text-blue-300" : "text-blue-600"}`}
 							>
-								AI Generated Diary
+								{copy.aiDiaryLabel}
 							</label>
 							<div className="flex items-center gap-1">
 								<button
@@ -384,17 +442,17 @@ const DiaryPanel = ({ selectedDate, onClose, compact = false }) => {
 										onClick={handleRevertDiary}
 										disabled={isSaving}
 										className={`px-2 py-1 rounded-lg text-[11px] font-medium transition-colors flex items-center gap-1 ${hoverCls} disabled:opacity-50`}
-										title="Revert to original AI diary"
+										title={copy.revertTitle}
 									>
 										<RotateCcw size={13} />
-										Revert
+										{copy.revert}
 									</button>
 								)}
 								{canEditDiary && !isEditingDiary && (
 									<button
 										onClick={() => setIsEditingDiary(true)}
 										className={`p-1 rounded-lg text-xs transition-colors ${hoverCls}`}
-										title="Edit diary"
+										title={copy.editDiary}
 									>
 										<Edit2 size={14} />
 									</button>
@@ -411,7 +469,7 @@ const DiaryPanel = ({ selectedDate, onClose, compact = false }) => {
 									}
 								}}
 							>
-								{diaryContent || "No AI diary generated for this date yet."}
+								{diaryContent || copy.noDiary}
 							</div>
 						) : (
 							<div className="space-y-2">
@@ -420,7 +478,7 @@ const DiaryPanel = ({ selectedDate, onClose, compact = false }) => {
 									onChange={(e) => setDiaryContent(e.target.value)}
 									rows={4}
 									className={`w-full px-3 py-2 rounded-lg text-xs outline-none border transition-all focus:ring-2 focus:ring-blue-500/30 resize-none ${inputCls}`}
-									placeholder="Edit diary content..."
+									placeholder={copy.editDiaryPlaceholder}
 								/>
 								<div className="flex gap-2">
 									<button
@@ -429,7 +487,7 @@ const DiaryPanel = ({ selectedDate, onClose, compact = false }) => {
 										className="flex-1 px-3 py-2 rounded-lg text-xs font-medium bg-blue-500 hover:bg-blue-600 text-white transition-colors flex items-center justify-center gap-1 disabled:opacity-50"
 									>
 										<Save size={14} />
-										{isSaving ? "Saving..." : "Save"}
+										{isSaving ? copy.saving : copy.save}
 									</button>
 									<button
 										onClick={() => {
@@ -438,7 +496,7 @@ const DiaryPanel = ({ selectedDate, onClose, compact = false }) => {
 										}}
 										className={`flex-1 px-3 py-2 rounded-lg text-xs font-medium transition-colors ${`${secondaryBgCls} ${hoverCls}`}`}
 									>
-										Cancel
+										{copy.cancel}
 									</button>
 								</div>
 							</div>
@@ -450,13 +508,13 @@ const DiaryPanel = ({ selectedDate, onClose, compact = false }) => {
 							<label
 								className={`text-xs font-medium block ${isDark ? "opacity-70" : "text-gray-600"}`}
 							>
-								Memo
+								{copy.memo}
 							</label>
 							{!isEditingMemo && (
 								<button
 									onClick={() => setIsEditingMemo(true)}
 									className={`p-1 rounded-lg text-xs transition-colors ${hoverCls}`}
-									title="Edit Memo"
+									title={copy.editMemo}
 								>
 									<Edit2 size={14} />
 								</button>
@@ -467,7 +525,7 @@ const DiaryPanel = ({ selectedDate, onClose, compact = false }) => {
 								className={`p-3 rounded-lg text-xs leading-relaxed whitespace-pre-wrap min-h-[80px] cursor-pointer transition-all ${`${secondaryBgCls} ${hoverCls}`}`}
 								onClick={() => setIsEditingMemo(true)}
 							>
-								{memoContent || "Click to add memo..."}
+								{memoContent || copy.clickMemo}
 							</div>
 						) : (
 							<div className="space-y-2">
@@ -476,7 +534,7 @@ const DiaryPanel = ({ selectedDate, onClose, compact = false }) => {
 									onChange={(e) => setMemoContent(e.target.value)}
 									rows={4}
 									className={`w-full px-3 py-2 rounded-lg text-xs outline-none border transition-all focus:ring-2 focus:ring-blue-500/30 resize-none ${inputCls}`}
-									placeholder="Write your memo here..."
+									placeholder={copy.memoPlaceholder}
 								/>
 								<div className="flex gap-2">
 									<button
@@ -485,7 +543,7 @@ const DiaryPanel = ({ selectedDate, onClose, compact = false }) => {
 										className="flex-1 px-3 py-2 rounded-lg text-xs font-medium bg-blue-500 hover:bg-blue-600 text-white transition-colors flex items-center justify-center gap-1 disabled:opacity-50"
 									>
 										<Save size={14} />
-										{isSaving ? "Saving..." : "Save"}
+										{isSaving ? copy.saving : copy.save}
 									</button>
 									<button
 										onClick={() => {
@@ -494,7 +552,7 @@ const DiaryPanel = ({ selectedDate, onClose, compact = false }) => {
 										}}
 										className={`flex-1 px-3 py-2 rounded-lg text-xs font-medium transition-colors ${`${secondaryBgCls} ${hoverCls}`}`}
 									>
-										Cancel
+										{copy.cancel}
 									</button>
 								</div>
 							</div>

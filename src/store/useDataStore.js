@@ -3,6 +3,7 @@ import { supabase } from "../lib/supabase";
 import { load, save } from "../utils/storage";
 import { DEFAULT_VIS } from "../constants";
 import { formatLocalDate } from "../utils/date";
+import { getInterestFingerprint, getTopInterestKeywords } from "../utils/interests";
 import { useSettingsStore } from "./useSettingsStore";
 import { useAuthStore } from "./useAuthStore";
 import i18n from "../l10n/i18n";
@@ -105,6 +106,70 @@ const invokeEdgeDetailed = async (fnName, body = {}) => {
 const invokeEdge = async (fnName, body = {}) => {
 	const result = await invokeEdgeDetailed(fnName, body);
 	return result?.ok ? result.data : null;
+};
+
+const resolveAppLanguage = (value = i18n.language) =>
+	String(value || "en").toLowerCase().startsWith("ko") ? "ko" : "en";
+
+const getI18nText = (key, options, fallback) => {
+	const translated = i18n.t(key, options);
+	return translated && translated !== key ? translated : fallback;
+};
+
+const getErrorText = (key, options, fallback) =>
+	getI18nText(`errors.${key}`, options, fallback);
+
+const extractEdgeErrorMessage = (raw) => {
+	const text = String(raw || "").trim();
+	if (!text) return "";
+
+	const jsonMatch = text.match(/\{[\s\S]*\}$/);
+	if (jsonMatch) {
+		try {
+			const parsed = JSON.parse(jsonMatch[0]);
+			if (typeof parsed?.error === "string" && parsed.error.trim()) {
+				return parsed.error.trim();
+			}
+			if (typeof parsed?.message === "string" && parsed.message.trim()) {
+				return parsed.message.trim();
+			}
+		} catch {
+			/* ignore */
+		}
+	}
+
+	return text;
+};
+
+const getTavilyErrorMessage = (raw) => {
+	const message = extractEdgeErrorMessage(raw);
+	const normalized = message.toLowerCase();
+
+	if (!message) {
+		return getErrorText(
+			"connection_failed",
+			{},
+			"Connection failed. Please try again later.",
+		);
+	}
+	if (normalized.includes("tavily_api_key not set")) {
+		return i18n.language?.toLowerCase().startsWith("ko")
+			? "Supabase에 Tavily API 키가 설정되어 있지 않습니다."
+			: "Tavily API key is not configured in Supabase.";
+	}
+	if (normalized.includes("tavily 401") || normalized.includes("tavily 403")) {
+		return i18n.language?.toLowerCase().startsWith("ko")
+			? "Tavily 요청이 거부되었습니다. API 키 또는 권한 설정을 확인해주세요."
+			: "Tavily request was rejected. Check the API key and permissions.";
+	}
+	if (normalized.includes("failed to fetch") || normalized.includes("networkerror")) {
+		return getErrorText(
+			"network_error",
+			{},
+			"Network error. Please try again.",
+		);
+	}
+	return message;
 };
 
 /* ── 로컬 캐시 헬퍼 (localStorage graceful fallback) ── */
@@ -230,6 +295,29 @@ const extractLayoutWidgetIds = (layouts) => {
 };
 
 const defaultStockSymbols = ["KOSPI", "NASDAQ", "SP500", "USDKRW"];
+const KO_NEWS_DOMAINS = [
+	"news.naver.com",
+	"yna.co.kr",
+	"chosun.com",
+	"joins.com",
+	"hani.co.kr",
+	"news1.kr",
+];
+const EN_NEWS_DOMAINS = [
+	"reuters.com",
+	"apnews.com",
+	"bbc.com",
+	"cnn.com",
+	"nytimes.com",
+	"theguardian.com",
+	"npr.org",
+	"wsj.com",
+	"bloomberg.com",
+];
+const HANGUL_REGEX = /[\uac00-\ud7a3]/;
+const LATIN_REGEX = /[A-Za-z\u00C0-\u024F]/;
+const FOREIGN_SCRIPT_REGEX =
+	/[\u0400-\u04FF\u3040-\u30FF\u3400-\u4DBF\u4E00-\u9FFF\uF900-\uFAFF\u0600-\u06FF\u0E00-\u0E7F\u0900-\u097F]/;
 
 const normalizeStockSymbols = (symbols) => {
 	if (!Array.isArray(symbols) || symbols.length === 0)
@@ -248,6 +336,258 @@ const normalizeStockSymbols = (symbols) => {
 	if (unique.length === 0) return defaultStockSymbols;
 	return unique.slice(0, 4);
 };
+
+const normalizeReadableText = (value) =>
+	String(value || "")
+		.replace(/\s+/g, " ")
+		.trim();
+
+const getUrlHost = (value = "") => {
+	try {
+		return new URL(String(value || "")).hostname.toLowerCase();
+	} catch {
+		return String(value || "").toLowerCase();
+	}
+};
+
+const cleanTrendTitle = (raw = "") =>
+	normalizeReadableText(raw)
+		.replace(/\s*[-–|]\s*[^-–|]{2,35}$/, "")
+		.replace(/\[.*?\]/g, "")
+		.replace(/["'`*_#]/g, "")
+		.trim();
+
+const scoreLocalizedText = (text, language) => {
+	const sample = normalizeReadableText(text);
+	if (!sample) return 0;
+
+	const hasHangul = HANGUL_REGEX.test(sample);
+	const hasLatin = LATIN_REGEX.test(sample);
+	const hasForeignScript = FOREIGN_SCRIPT_REGEX.test(sample);
+
+	if (language === "ko") {
+		let score = 0;
+		if (hasHangul) score += 3;
+		if (hasLatin && !hasHangul) score -= 2;
+		if (hasForeignScript && !hasHangul) score -= 3;
+		return score;
+	}
+
+	let score = 0;
+	if (hasLatin) score += 3;
+	if (hasHangul) score -= 3;
+	if (hasForeignScript) score -= 3;
+	return score;
+};
+
+const scoreArticleForLanguage = (item, language) => {
+	const title = normalizeReadableText(item?.title);
+	const host = getUrlHost(item?.url);
+
+	const titleScore = scoreLocalizedText(title, language);
+	const hostBonus =
+		language === "ko"
+			? KO_NEWS_DOMAINS.some((domain) => host.includes(domain))
+				? 2
+				: 0
+			: EN_NEWS_DOMAINS.some((domain) => host.includes(domain))
+				? 2
+				: 0;
+
+	if (language === "ko") {
+		return titleScore > 0 ? titleScore * 4 + hostBonus : -1;
+	}
+
+	if (titleScore > 0) return titleScore * 4 + hostBonus;
+	return hostBonus > 1 ? hostBonus : -1;
+};
+
+const normalizeArticleItem = (item) => ({
+	title: normalizeReadableText(item?.title),
+	url: String(item?.url || "").trim(),
+	content: normalizeReadableText(item?.content),
+	image: item?.image ?? null,
+	published_date: item?.published_date ?? null,
+});
+
+const normalizeArticleList = (items = [], limit = 10) =>
+	(Array.isArray(items) ? items : [])
+		.map(normalizeArticleItem)
+		.filter((item) => item.title || item.url)
+		.slice(0, limit);
+
+const hasHangulText = (value = "") => HANGUL_REGEX.test(String(value || ""));
+
+const needsKoreanTranslation = (value = "") => {
+	const sample = normalizeReadableText(value);
+	if (!sample) return false;
+	return !hasHangulText(sample);
+};
+
+const extractJsonArray = (text) => {
+	if (!text || typeof text !== "string") return null;
+	const trimmed = text.trim();
+	try {
+		const parsed = JSON.parse(trimmed);
+		return Array.isArray(parsed) ? parsed : null;
+	} catch {
+		const match = trimmed.match(/\[[\s\S]*\]/);
+		if (!match) return null;
+		try {
+			const parsed = JSON.parse(match[0]);
+			return Array.isArray(parsed) ? parsed : null;
+		} catch {
+			return null;
+		}
+	}
+};
+
+const translateTextToKorean = async (value = "") => {
+	const sourceText = normalizeReadableText(value);
+	if (!sourceText || !needsKoreanTranslation(sourceText)) return sourceText;
+
+	const edge = await invokeEdgeDetailed("groq", {
+		system: [
+			"You translate the user's text into natural Korean.",
+			"Return only the translated Korean text.",
+			"Do not add quotes, bullets, labels, or explanations.",
+		].join("\n"),
+		prompt: sourceText,
+		temperature: 0.1,
+	});
+
+	const translated = normalizeReadableText(edge?.data?.text);
+	return translated || sourceText;
+};
+
+const translateArticlesToKorean = async (items = []) => {
+	const normalizedItems = normalizeArticleList(items, items.length || 10);
+	if (normalizedItems.length === 0) return [];
+
+	const targets = normalizedItems
+		.map((item, index) => ({
+			index,
+			title: item.title || "",
+			content: normalizeReadableText(item.content).slice(0, 240),
+			needsTitle: needsKoreanTranslation(item.title),
+			needsContent: needsKoreanTranslation(item.content),
+		}))
+		.filter((item) => item.needsTitle || item.needsContent);
+
+	let translatedByIndex = new Map();
+
+	if (targets.length > 0) {
+		const payload = targets.map(
+			({ index, title, content, needsTitle, needsContent }) => ({
+				index,
+				title,
+				content,
+				needsTitle,
+				needsContent,
+			}),
+		);
+
+		const edge = await invokeEdgeDetailed("groq", {
+			system: [
+				"You translate news titles and short summaries into natural Korean.",
+				"Return only a JSON array.",
+				"Each item must be {\"index\": number, \"title\": string, \"content\": string}.",
+				"Keep the same order and indexes.",
+				"Translate only the fields that need Korean and leave the others natural.",
+				"Do not add code fences or explanations.",
+			].join("\n"),
+			prompt: `Translate the following JSON array into Korean and return JSON only:\n${JSON.stringify(
+				payload,
+			)}`,
+			temperature: 0.1,
+		});
+
+		const parsed = extractJsonArray(edge?.data?.text);
+		if (Array.isArray(parsed) && parsed.length > 0) {
+			translatedByIndex = new Map(
+				parsed
+					.map((item) => {
+						const index = Number(item?.index);
+						if (!Number.isInteger(index) || index < 0) return null;
+						return [
+							index,
+							{
+								title: normalizeReadableText(item?.title),
+								content: normalizeReadableText(item?.content),
+							},
+						];
+					})
+					.filter(Boolean),
+			);
+		}
+	}
+
+	const mergedItems = normalizedItems.map((item, index) => {
+		const translated = translatedByIndex.get(index);
+		if (!translated) return item;
+		return {
+			...item,
+			title: translated.title || item.title,
+			content: translated.content || item.content,
+		};
+	});
+
+	const fallbackTranslated = await Promise.all(
+		mergedItems.map(async (item) => {
+			const nextTitle = needsKoreanTranslation(item.title)
+				? await translateTextToKorean(item.title)
+				: item.title;
+			const nextContent =
+				item.content && needsKoreanTranslation(item.content)
+					? await translateTextToKorean(
+							normalizeReadableText(item.content).slice(0, 240),
+						)
+					: item.content;
+			return {
+				...item,
+				title: nextTitle || item.title,
+				content: nextContent || item.content,
+			};
+		}),
+	);
+
+	return fallbackTranslated;
+};
+
+const dedupeArticles = (items = []) => {
+	const seen = new Set();
+	return items.filter((item) => {
+		const key =
+			String(item?.url || "").trim().toLowerCase() ||
+			String(item?.title || "").trim().toLowerCase();
+		if (!key || seen.has(key)) return false;
+		seen.add(key);
+		return true;
+	});
+};
+
+const filterLocalizedArticles = (items, language, limit = 10) =>
+	dedupeArticles(
+		(Array.isArray(items) ? items : [])
+			.map((item) => {
+				const normalized = normalizeArticleItem(item);
+				const score = scoreArticleForLanguage(normalized, language);
+				return score > 0 ? { ...normalized, __score: score } : null;
+			})
+			.filter(Boolean)
+			.sort((a, b) => b.__score - a.__score),
+	)
+		.slice(0, limit)
+		.map(({ __score, ...rest }) => rest);
+
+const buildTrendTitlesFromResults = (items, limit = 8) =>
+	Array.from(
+		new Set(
+			(Array.isArray(items) ? items : [])
+				.map((item) => cleanTrendTitle(item?.title))
+				.filter((title) => title.length >= 5 && title.length <= 80),
+		),
+	).slice(0, limit);
 
 const numberFormatter = new Intl.NumberFormat("ko-KR", {
 	maximumFractionDigits: 2,
@@ -336,12 +676,6 @@ const normalizeHealthData = (raw) => {
 	};
 };
 
-const GOOGLE_HEALTH_AUTH_ERROR =
-	"Google Health connection expired. Reconnect Google to sync Health again.";
-
-const GOOGLE_HEALTH_API_DISABLED_ERROR =
-	"Google Fitness API is disabled for this Google Cloud project. Enable it in Google Cloud, wait a few minutes, then reconnect Google.";
-
 const isGoogleHealthAuthErrorMessage = (message = "") => {
 	const normalized = String(message || "").toLowerCase();
 	return (
@@ -367,12 +701,23 @@ const isGoogleHealthApiDisabledMessage = (message = "") => {
 
 const getGoogleHealthErrorMessage = (message = "") => {
 	if (isGoogleHealthApiDisabledMessage(message)) {
-		return GOOGLE_HEALTH_API_DISABLED_ERROR;
+		return getErrorText(
+			"google_health_api_disabled",
+			{},
+			"Google Fitness API is disabled for this Google Cloud project. Enable it in Google Cloud, wait a few minutes, then reconnect Google.",
+		);
 	}
 	if (isGoogleHealthAuthErrorMessage(message)) {
-		return GOOGLE_HEALTH_AUTH_ERROR;
+		return getErrorText(
+			"google_health_auth",
+			{},
+			"Google Health connection expired. Reconnect Google to sync Health again.",
+		);
 	}
-	return message || "Failed to load Google Health data.";
+	return (
+		message ||
+		getErrorText("load_error", {}, "Failed to load Google Health data.")
+	);
 };
 
 /* ══════════════════════════════════════════════
@@ -444,14 +789,30 @@ export const useDataStore = create((set, get) => ({
 				{ headers: { "Accept-Language": "en" } },
 			);
 			const results = await res.json();
-			if (!results?.length) return { ok: false, error: `City "${trimmed}" not found` };
+			if (!results?.length) {
+				return {
+					ok: false,
+					error: getErrorText(
+						"city_not_found",
+						{ city: trimmed },
+						`City "${trimmed}" not found.`,
+					),
+				};
+			}
 			const { lat, lon, display_name } = results[0];
 			const cityData = { name: trimmed, displayName: display_name.split(",")[0], lat: parseFloat(lat), lon: parseFloat(lon) };
 			save("mb_manual_city", cityData);
 			set({ manualWeatherCity: cityData });
 			return { ok: true };
 		} catch {
-			return { ok: false, error: "Geocoding failed" };
+			return {
+				ok: false,
+				error: getErrorText(
+					"geocoding_failed",
+					{},
+					"Failed to find the city location.",
+				),
+			};
 		}
 	},
 
@@ -516,13 +877,31 @@ export const useDataStore = create((set, get) => ({
 				}
 			}
 
-			set((s) => ({ errors: { ...s.errors, weather: "Connection failed. Please try again later." } }));
+			set((s) => ({
+				errors: {
+					...s.errors,
+					weather: getErrorText(
+						"connection_failed",
+						{},
+						"Connection failed. Please try again later.",
+					),
+				},
+			}));
 			set({ weather: null });
 			get().markFetched("weather");
 			get().setApiStatus("weather", "error");
 		} catch (e) {
 			console.warn("fetchWeather failed:", e?.message || e);
-			set((s) => ({ errors: { ...s.errors, weather: "Connection failed. Please try again later." } }));
+			set((s) => ({
+				errors: {
+					...s.errors,
+					weather: getErrorText(
+						"connection_failed",
+						{},
+						"Connection failed. Please try again later.",
+					),
+				},
+			}));
 			set({ weather: null });
 			get().markFetched("weather");
 			get().setApiStatus("weather", "error");
@@ -581,7 +960,14 @@ export const useDataStore = create((set, get) => ({
 			}
 
 			set((s) => ({
-				errors: { ...s.errors, stocks: "Connection failed. Please try again later." },
+				errors: {
+					...s.errors,
+					stocks: getErrorText(
+						"connection_failed",
+						{},
+						"Connection failed. Please try again later.",
+					),
+				},
 				rawData: { ...s.rawData, stocks: edge?.data ?? null },
 			}));
 			set({ stocks: [] });
@@ -589,7 +975,16 @@ export const useDataStore = create((set, get) => ({
 			get().setApiStatus("stocks", "error");
 		} catch (e) {
 			console.warn("fetchStocks failed:", e?.message || e);
-			set((s) => ({ errors: { ...s.errors, stocks: "Connection failed. Please try again later." } }));
+			set((s) => ({
+				errors: {
+					...s.errors,
+					stocks: getErrorText(
+						"connection_failed",
+						{},
+						"Connection failed. Please try again later.",
+					),
+				},
+			}));
 			set({ stocks: [] });
 			get().markFetched("stocks");
 			get().setApiStatus("stocks", "error");
@@ -605,7 +1000,7 @@ export const useDataStore = create((set, get) => ({
 	   trendsResults: 출처 배열 [{title, url, content}, ...]
 	   ══════════════════════════════════════════ */
 	fetchTrends: async (userId, force = false) => {
-		const lang = i18n.language || "ko";
+		const lang = resolveAppLanguage();
 		const isEn = lang === "en";
 
 		// 트렌드는 관심사 무관 — 세상에서 실제로 뜨는 것을 보여줌
@@ -619,11 +1014,27 @@ export const useDataStore = create((set, get) => ({
 		// ✅ 캐시 우선 확인
 		if (!force) {
 			const dbCached = await readApiCache(cacheKey, userId, false);
-			if (dbCached?.data?.trends || dbCached?.data?.results?.length) {
+			const localizedResults = filterLocalizedArticles(
+				dbCached?.data?.results ?? [],
+				lang,
+				7,
+			);
+			const fallbackResults = normalizeArticleList(dbCached?.data?.results ?? [], 7);
+			const rawDisplayResults =
+				localizedResults.length > 0 ? localizedResults : fallbackResults;
+			const displayResults =
+				lang === "ko"
+					? await translateArticlesToKorean(rawDisplayResults)
+					: rawDisplayResults;
+			const displayTrends =
+				buildTrendTitlesFromResults(displayResults, 8).length > 0
+					? buildTrendTitlesFromResults(displayResults, 8)
+					: dbCached?.data?.trends ?? [];
+			if (displayResults.length > 0 || displayTrends.length > 0) {
 				set({
-					trends: dbCached.data.trends ?? [],
+					trends: displayTrends,
 					trendsAnswer: dbCached.data.answer ?? null,
-					trendsResults: dbCached.data.results ?? [],
+					trendsResults: displayResults,
 					fetchedLanguage: { ...get().fetchedLanguage, trends: lang },
 				});
 				cacheIt("trends", dbCached.data);
@@ -640,27 +1051,39 @@ export const useDataStore = create((set, get) => ({
 		}));
 		try {
 			const trendsQuery = isEn
-				? "today major trending news worldwide technology AI politics economy entertainment sports latest"
-				: "오늘 대한민국 주요 이슈 인공지능 기술 정치 경제 연예 스포츠 최신 뉴스";
-			const koNewsDomains = ["news.naver.com", "yna.co.kr", "chosun.com", "joins.com", "hani.co.kr", "news1.kr"];
+				? "English-language major trending news headlines today worldwide technology AI politics economy entertainment sports latest"
+				: "반드시 한국어 기사 제목만 사용. 영어/일본어/중국어/러시아어 등 외국어 제목 제외. 오늘 대한민국 주요 이슈 인공지능 기술 정치 경제 연예 스포츠 최신 뉴스";
+			const includeDomains = isEn ? EN_NEWS_DOMAINS : KO_NEWS_DOMAINS;
 
 			const edge = await invokeEdgeDetailed("tavily", {
 				query: trendsQuery,
-				include_domains: isEn ? [] : koNewsDomains,
+				include_domains: includeDomains,
 			});
 			if (edge?.data) {
 				set((s) => ({ rawData: { ...s.rawData, trends: edge.data } }));
 			}
 
 			if (edge?.ok && edge.data?.trends) {
+				const localizedResults = filterLocalizedArticles(
+					edge.data.results ?? [],
+					lang,
+					7,
+				);
+				const fallbackResults = normalizeArticleList(edge.data.results ?? [], 7);
+				const rawDisplayResults =
+					localizedResults.length > 0 ? localizedResults : fallbackResults;
+				const displayResults =
+					lang === "ko"
+						? await translateArticlesToKorean(rawDisplayResults)
+						: rawDisplayResults;
+				const displayTrends =
+					buildTrendTitlesFromResults(displayResults, 8).length > 0
+						? buildTrendTitlesFromResults(displayResults, 8)
+						: edge.data.trends ?? [];
 				const full = {
-					trends: edge.data.trends,
+					trends: displayTrends,
 					answer: edge.data.answer ?? null,
-					results: (edge.data.results ?? []).slice(0, 7).map((r) => ({
-						title: r.title ?? "",
-						url: r.url ?? "",
-						content: r.content ?? "",
-					})),
+					results: displayResults,
 				};
 				set({
 					trends: full.trends,
@@ -675,13 +1098,23 @@ export const useDataStore = create((set, get) => ({
 				return;
 			}
 
-			set((s) => ({ errors: { ...s.errors, trends: "Connection failed. Please try again later." } }));
+			set((s) => ({
+				errors: {
+					...s.errors,
+					trends: getTavilyErrorMessage(edge?.error || edge?.data?.error || ""),
+				},
+			}));
 			set({ trendsResults: [], trends: [] });
 			get().markFetched("trends");
 			get().setApiStatus("trends", "error");
 		} catch (e) {
 			console.warn("fetchTrends failed:", e?.message || e);
-			set((s) => ({ errors: { ...s.errors, trends: "Connection failed. Please try again later." } }));
+			set((s) => ({
+				errors: {
+					...s.errors,
+					trends: getTavilyErrorMessage(e?.message || ""),
+				},
+			}));
 			set({ trendsResults: [], trends: [] });
 			get().markFetched("trends");
 			get().setApiStatus("trends", "error");
@@ -697,17 +1130,22 @@ export const useDataStore = create((set, get) => ({
 	   newsResults: 뉴스 기사 배열 [{title, url, content}, ...]
 	   ══════════════════════════════════════════ */
 	fetchNews: async (userId, force = false) => {
-		const lang = i18n.language || "ko";
+		const lang = resolveAppLanguage();
 		const isEn = lang === "en";
 
 		// 관심사 키워드 (상위 5개)
-		const keywordInterests = useSettingsStore.getState().keywordInterests ?? [];
-		const topKeywords = keywordInterests
-			.sort((a, b) => (b.score ?? 0) - (a.score ?? 0))
-			.slice(0, 5)
-			.map((k) => k.keyword)
-			.filter(Boolean);
-		const interestFingerprint = topKeywords.join("+") || "base";
+		const settingsState = useSettingsStore.getState();
+		const topKeywords = getTopInterestKeywords(
+			settingsState.fixedInterestIds,
+			settingsState.keywordInterests,
+			5,
+		);
+		const interestFingerprint =
+			getInterestFingerprint(
+				settingsState.fixedInterestIds,
+				settingsState.keywordInterests,
+				5,
+			);
 
 		// 위치 정보로 지역 뉴스 캐시 키 결정
 		let locationLabel = "KR";
@@ -730,11 +1168,23 @@ export const useDataStore = create((set, get) => ({
 		// ✅ 캐시 우선 확인
 		if (!force) {
 			const dbCached = await readApiCache(cacheKey, userId, false);
-			if (dbCached?.data?.results) {
+			const localizedResults = filterLocalizedArticles(
+				dbCached?.data?.results ?? [],
+				lang,
+				10,
+			);
+			const fallbackResults = normalizeArticleList(dbCached?.data?.results ?? [], 10);
+			const rawDisplayResults =
+				localizedResults.length > 0 ? localizedResults : fallbackResults;
+			const displayResults =
+				lang === "ko"
+					? await translateArticlesToKorean(rawDisplayResults)
+					: rawDisplayResults;
+			if (displayResults.length > 0) {
 				set({
 					news: dbCached.data.news ?? [],
 					newsAnswer: dbCached.data.answer ?? null,
-					newsResults: dbCached.data.results ?? [],
+					newsResults: displayResults,
 					fetchedLanguage: { ...get().fetchedLanguage, news: lang },
 				});
 				cacheIt("news", dbCached.data);
@@ -752,20 +1202,20 @@ export const useDataStore = create((set, get) => ({
 		try {
 			// 지역 뉴스 5개 + 글로벌 뉴스 5개 병렬 호출
 			const interestClause = topKeywords.length > 0
-				? (isEn ? ` topics: ${topKeywords.join(", ")}` : ` 관심: ${topKeywords.join(", ")}`)
+				? (isEn ? ` topics: ${topKeywords.join(", ")}` : ` 관심사: ${topKeywords.join(", ")}`)
 				: "";
 			const localQuery = isEn
 				? (locationObj
-					? `latest local news today near lat ${locationObj.lat} lon ${locationObj.lon}${interestClause}`
-					: `latest South Korea news today breaking${interestClause}`)
+					? `latest English-language local breaking news today near latitude ${locationObj.lat} longitude ${locationObj.lon}${interestClause}`
+					: `latest English-language South Korea breaking news today${interestClause}`)
 				: (locationObj
-					? `현재 위치(위도 ${locationObj.lat}, 경도 ${locationObj.lon}) 주변 지역 최신 뉴스 속보${interestClause}`
-					: `대한민국 최신 뉴스 속보${interestClause}`);
+					? `반드시 한국어 기사 제목만 사용하고 영어/외국어 기사 제목은 제외. 현재 위치(위도 ${locationObj.lat}, 경도 ${locationObj.lon}) 주변 지역의 한국어 최신 뉴스 속보${interestClause}`
+					: `반드시 한국어 기사 제목만 사용하고 영어/외국어 기사 제목은 제외. 대한민국 한국어 최신 뉴스 속보${interestClause}`);
 
-			const koNewsDomains = ["news.naver.com", "yna.co.kr", "chosun.com", "joins.com", "hani.co.kr", "news1.kr"];
+			const includeDomains = isEn ? EN_NEWS_DOMAINS : KO_NEWS_DOMAINS;
 			const globalNewsQuery = isEn
-				? "world top breaking news headlines today"
-				: "세계 주요 뉴스 속보 오늘";
+				? "top English-language world breaking news headlines today"
+				: "반드시 한국어 기사 제목만 사용하고 영어/외국어 기사 제목은 제외. 한국어 기사 기준 세계 주요 뉴스 속보 오늘";
 
 			const [localEdge, globalEdge] = await Promise.all([
 				invokeEdgeDetailed("tavily", {
@@ -773,13 +1223,13 @@ export const useDataStore = create((set, get) => ({
 					mode: "news",
 					max_results: 5,
 					location: locationObj,
-					include_domains: isEn ? [] : koNewsDomains,
+					include_domains: includeDomains,
 				}),
 				invokeEdgeDetailed("tavily", {
 					query: globalNewsQuery,
 					mode: "news",
 					max_results: 5,
-					include_domains: isEn ? [] : koNewsDomains,
+					include_domains: includeDomains,
 				}),
 			]);
 
@@ -787,21 +1237,37 @@ export const useDataStore = create((set, get) => ({
 				set((s) => ({ rawData: { ...s.rawData, news: localEdge.data } }));
 			}
 
-			const localResults = localEdge?.ok ? (localEdge.data?.results ?? []) : [];
-			const globalResults = globalEdge?.ok ? (globalEdge.data?.results ?? []) : [];
+			const localResults = localEdge?.ok
+				? filterLocalizedArticles(localEdge.data?.results ?? [], lang, 5)
+				: [];
+			const globalResults = globalEdge?.ok
+				? filterLocalizedArticles(globalEdge.data?.results ?? [], lang, 5)
+				: [];
+			const fallbackLocalResults = localEdge?.ok
+				? normalizeArticleList(localEdge.data?.results ?? [], 5)
+				: [];
+			const fallbackGlobalResults = globalEdge?.ok
+				? normalizeArticleList(globalEdge.data?.results ?? [], 5)
+				: [];
+			const chosenLocalResults =
+				localResults.length > 0 ? localResults : fallbackLocalResults;
+			const chosenGlobalResults =
+				globalResults.length > 0 ? globalResults : fallbackGlobalResults;
+			const didFetchAny = Boolean(localEdge?.ok || globalEdge?.ok);
 
-			if (localResults.length > 0 || globalResults.length > 0) {
-				const merged = [...localResults, ...globalResults].slice(0, 10).map((r) => ({
-					title: r.title ?? "",
-					url: r.url ?? "",
-					content: r.content ?? "",
-					image: r.image ?? null,
-					published_date: r.published_date ?? null,
-				}));
+			if (chosenLocalResults.length > 0 || chosenGlobalResults.length > 0) {
+				const merged = dedupeArticles([
+					...chosenLocalResults,
+					...chosenGlobalResults,
+				]).slice(0, 10);
+				const finalResults =
+					lang === "ko"
+						? await translateArticlesToKorean(merged)
+						: merged;
 				const full = {
 					news: [],
 					answer: localEdge?.data?.answer ?? globalEdge?.data?.answer ?? null,
-					results: merged,
+					results: finalResults,
 				};
 				set({
 					news: full.news,
@@ -816,13 +1282,48 @@ export const useDataStore = create((set, get) => ({
 				return;
 			}
 
-			set((s) => ({ errors: { ...s.errors, news: "Connection failed. Please try again later." } }));
+			if (didFetchAny) {
+				const full = {
+					news: [],
+					answer: localEdge?.data?.answer ?? globalEdge?.data?.answer ?? null,
+					results: [],
+				};
+				set({
+					news: full.news,
+					newsAnswer: full.answer,
+					newsResults: full.results,
+				});
+				cacheIt("news", full);
+				await writeApiCache(cacheKey, full, userId);
+				get().markFetched("news");
+				get().setApiStatus("news", "ok");
+				set((s) => ({ fetchedLanguage: { ...s.fetchedLanguage, news: lang } }));
+				return;
+			}
+
+			set((s) => ({
+				errors: {
+					...s.errors,
+					news: getTavilyErrorMessage(
+						localEdge?.error ||
+						localEdge?.data?.error ||
+						globalEdge?.error ||
+						globalEdge?.data?.error ||
+						"",
+					),
+				},
+			}));
 			set({ newsResults: [] });
 			get().markFetched("news");
 			get().setApiStatus("news", "error");
 		} catch (e) {
 			console.warn("fetchNews failed:", e?.message || e);
-			set((s) => ({ errors: { ...s.errors, news: "Connection failed. Please try again later." } }));
+			set((s) => ({
+				errors: {
+					...s.errors,
+					news: getTavilyErrorMessage(e?.message || ""),
+				},
+			}));
 			set({ newsResults: [] });
 			get().markFetched("news");
 			get().setApiStatus("news", "error");
@@ -903,7 +1404,16 @@ export const useDataStore = create((set, get) => ({
 	   ══════════════════════════════════════════ */
 	fetchHealth: async (userId, force = false) => {
 		if (!supabase) {
-			set((s) => ({ errors: { ...s.errors, health: "Connection failed. Please try again later." } }));
+			set((s) => ({
+				errors: {
+					...s.errors,
+					health: getErrorText(
+						"connection_failed",
+						{},
+						"Connection failed. Please try again later.",
+					),
+				},
+			}));
 			set({ healthData: null });
 			get().setApiStatus("health", "error");
 			return;
@@ -922,6 +1432,7 @@ export const useDataStore = create((set, get) => ({
 				if (dbCached?.data) {
 					set({ healthData: dbCached.data });
 					cacheIt("health", dbCached.data);
+					get().markFetched("health", dbCached.fetchedAt);
 					get().setApiStatus("health", "ok");
 					return;
 				}
@@ -929,7 +1440,12 @@ export const useDataStore = create((set, get) => ({
 
 			const token = await useAuthStore.getState().ensureProviderToken?.();
 			if (!token) {
-				set((s) => ({ errors: { ...s.errors, health: "Connection failed. Please try again later." } }));
+				set((s) => ({
+					errors: {
+						...s.errors,
+						health: getGoogleHealthErrorMessage("unauthorized"),
+					},
+				}));
 				set({ healthData: null });
 				get().setApiStatus("health", "error");
 				return;
@@ -941,17 +1457,36 @@ export const useDataStore = create((set, get) => ({
 				set({ healthData: normalized });
 				cacheIt("health", normalized);
 				await writeApiCache(cacheKey, normalized, userId);
+				get().markFetched("health");
 				get().setApiStatus("health", "ok");
 			} else {
-				set((s) => ({ errors: { ...s.errors, health: "Connection failed. Please try again later." } }));
+				set((s) => ({
+					errors: {
+						...s.errors,
+						health: getGoogleHealthErrorMessage(
+							edge?.error || edge?.data?.error || "",
+						),
+					},
+				}));
 				set({ healthData: null });
+				get().markFetched("health");
 				get().setApiStatus("health", "error");
 			}
 		} catch (e) {
 			console.warn("fetchHealth failed:", e?.message || e);
-			set((s) => ({ errors: { ...s.errors, health: "Connection failed. Please try again later." } }));
+			set((s) => ({
+				errors: {
+					...s.errors,
+					health: getGoogleHealthErrorMessage(e?.message || ""),
+				},
+			}));
 			set({ healthData: null });
+			get().markFetched("health");
 			get().setApiStatus("health", "error");
+		} finally {
+			set((s) => ({
+				loading: { ...s.loading, health: false },
+			}));
 		}
 	},
 
@@ -1102,22 +1637,19 @@ i18n.on("languageChanged", () => {
 });
 
 // 관심사 변경 시 뉴스/트렌드 자동 재호출
-const getInterestFingerprint = (keywordInterests) => {
-	const top = (keywordInterests ?? [])
-		.slice()
-		.sort((a, b) => (b.score ?? 0) - (a.score ?? 0))
-		.slice(0, 5)
-		.map((k) => k.keyword)
-		.filter(Boolean);
-	return top.join("+") || "base";
-};
+const getInterestFingerprintFromState = (settingsState) =>
+	getInterestFingerprint(
+		settingsState?.fixedInterestIds,
+		settingsState?.keywordInterests,
+		5,
+	);
 
-let _prevInterestFingerprint = getInterestFingerprint(
-	useSettingsStore.getState().keywordInterests,
+let _prevInterestFingerprint = getInterestFingerprintFromState(
+	useSettingsStore.getState(),
 );
 
 useSettingsStore.subscribe((state) => {
-	const fingerprint = getInterestFingerprint(state.keywordInterests);
+	const fingerprint = getInterestFingerprintFromState(state);
 	if (fingerprint === _prevInterestFingerprint) return;
 	_prevInterestFingerprint = fingerprint;
 

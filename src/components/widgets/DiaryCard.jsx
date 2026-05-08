@@ -1,15 +1,18 @@
 import { useEffect, useRef, useState } from "react";
 import { Check, Loader2, MessageCircle } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { useTheme } from "../../hooks/useTheme";
 import { useDiaryStore } from "../../store/useDiaryStore";
 import { useAuthStore } from "../../store/useAuthStore";
 import { useDataStore } from "../../store/useDataStore";
 import { generatePersonalizedQuestion } from "../../services/aiService";
+import { formatLocalDate } from "../../utils/date";
 
 const todayStr = () => formatLocalDate();
 
 const DiaryCard = () => {
 	const { cardCls, cardShadowCls, isDark, inputCls, muted } = useTheme();
+	const { t, i18n } = useTranslation();
 
 	const addAnswer = useDiaryStore((s) => s.addAnswer);
 	const persona = useAuthStore((s) => s.persona);
@@ -24,6 +27,9 @@ const DiaryCard = () => {
 
 	// 이번 세션에 물어본 질문 목록 (중복 방지)
 	const askedRef = useRef([]);
+	const questionLanguage = i18n.language?.toLowerCase().startsWith("ko")
+		? "ko"
+		: "en";
 
 	const fetchNextQuestion = async () => {
 		setIsLoadingQ(true);
@@ -36,23 +42,24 @@ const DiaryCard = () => {
 				city: weather?.city ?? "",
 				weatherCondition: weather?.condition ?? "",
 				previousQuestions: askedRef.current,
+				language: questionLanguage,
 			});
 			if (q) {
 				askedRef.current = [...askedRef.current, q];
 				setQuestion(q);
 			}
 		} catch {
-			setQuestion("지금 뭐 하고 계세요?");
+			setQuestion(t("diary.daily_question_fallback"));
 		} finally {
 			setIsLoadingQ(false);
 		}
 	};
 
-	// 처음 마운트 시 질문 생성
 	useEffect(() => {
+		askedRef.current = [];
 		fetchNextQuestion();
 		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, []);
+	}, [questionLanguage]);
 
 	const handleSubmit = async () => {
 		if (!answerText.trim() || isSaving || !question) return;
@@ -86,7 +93,7 @@ const DiaryCard = () => {
 			{/* 헤더 */}
 			<div className="flex items-center gap-2 mb-4">
 				<MessageCircle size={16} className="text-blue-400" />
-				<h2 className="font-bold text-sm">오늘의 질문</h2>
+				<h2 className="font-bold text-sm">{t("diary.daily_question_title")}</h2>
 			</div>
 
 			{/* 질문 영역 */}
@@ -94,7 +101,9 @@ const DiaryCard = () => {
 				{isLoadingQ ? (
 					<div className="flex items-center gap-2">
 						<Loader2 size={14} className={`animate-spin ${muted}`} />
-						<span className={`text-xs ${muted}`}>질문 생성 중...</span>
+						<span className={`text-xs ${muted}`}>
+							{t("diary.daily_question_loading")}
+						</span>
 					</div>
 				) : (
 					<p className="text-sm font-medium leading-relaxed">{question}</p>
@@ -109,7 +118,7 @@ const DiaryCard = () => {
 				value={answerText}
 				onChange={(e) => setAnswerText(e.target.value)}
 				onKeyDown={handleKeyDown}
-				placeholder="답변을 입력하세요 (Enter로 제출)"
+				placeholder={t("diary.daily_question_placeholder")}
 				disabled={isLoadingQ || isSaving || saved}
 			/>
 
@@ -120,11 +129,13 @@ const DiaryCard = () => {
 					{saved && (
 						<span className="flex items-center gap-1 text-xs text-emerald-400">
 							<Check size={12} />
-							저장됨 — 다음 질문 준비 중
+							{t("diary.daily_question_saved")}
 						</span>
 					)}
 					{saveError && (
-						<span className="text-xs text-red-400">저장 실패, 다시 시도해주세요</span>
+						<span className="text-xs text-red-400">
+							{t("diary.daily_question_save_error")}
+						</span>
 					)}
 				</div>
 
@@ -142,7 +153,7 @@ const DiaryCard = () => {
 					{isSaving ? (
 						<Loader2 size={14} className="animate-spin" />
 					) : (
-						"확인"
+						t("common.confirm")
 					)}
 				</button>
 			</div>

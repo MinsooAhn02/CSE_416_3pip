@@ -1,8 +1,10 @@
 import { X } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { useTheme } from "../../hooks/useTheme";
 import { useSettingsStore } from "../../store/useSettingsStore";
 
 const BriefSettingsModal = () => {
+	const { i18n } = useTranslation();
 	const { isDark, muted } = useTheme();
 	const {
 		showBriefSettings,
@@ -12,6 +14,40 @@ const BriefSettingsModal = () => {
 		setTone,
 		setBLen,
 	} = useSettingsStore();
+	const isKo = i18n.language?.toLowerCase().startsWith("ko");
+	const copy = isKo
+		? {
+				title: "🤖 AI 브리핑 설정",
+				tone: "톤앤매너",
+				length: "요약 길이",
+				save: "저장",
+				tones: {
+					friendly: "친절한 😊",
+					professional: "냉철한 📊",
+					humorous: "유머러스 😄",
+				},
+				lengths: {
+					short: "짧게",
+					medium: "보통",
+					long: "자세히",
+				},
+		  }
+		: {
+				title: "🤖 AI Briefing Settings",
+				tone: "Tone",
+				length: "Summary length",
+				save: "Save",
+				tones: {
+					friendly: "Friendly 😊",
+					professional: "Professional 📊",
+					humorous: "Humorous 😄",
+				},
+				lengths: {
+					short: "Short",
+					medium: "Medium",
+					long: "Detailed",
+				},
+		  };
 
 	if (!showBriefSettings) return null;
 
@@ -25,19 +61,19 @@ const BriefSettingsModal = () => {
 				}`}
 			>
 				<div className="flex items-center justify-between mb-6">
-					<h2 className="text-lg font-bold">🤖 AI 브리핑 설정</h2>
+					<h2 className="text-lg font-bold">{copy.title}</h2>
 					<button onClick={() => setShowBriefSettings(false)}>
 						<X size={20} className="opacity-60 hover:opacity-100" />
 					</button>
 				</div>
 				<div className="space-y-5">
 					<div>
-						<p className="text-sm font-medium mb-2">톤앤매너</p>
+						<p className="text-sm font-medium mb-2">{copy.tone}</p>
 						<div className="grid grid-cols-3 gap-2">
 							{[
-								{ id: "friendly", label: "친절한 😊" },
-								{ id: "professional", label: "냉철한 📊" },
-								{ id: "humorous", label: "유머러스 😄" },
+								{ id: "friendly", label: copy.tones.friendly },
+								{ id: "professional", label: copy.tones.professional },
+								{ id: "humorous", label: copy.tones.humorous },
 							].map((t) => (
 								<button
 									key={t.id}
@@ -56,12 +92,12 @@ const BriefSettingsModal = () => {
 						</div>
 					</div>
 					<div>
-						<p className="text-sm font-medium mb-2">요약 길이</p>
+						<p className="text-sm font-medium mb-2">{copy.length}</p>
 						<div className="grid grid-cols-3 gap-2">
 							{[
-								{ id: "short", label: "짧게" },
-								{ id: "medium", label: "보통" },
-								{ id: "long", label: "자세히" },
+								{ id: "short", label: copy.lengths.short },
+								{ id: "medium", label: copy.lengths.medium },
+								{ id: "long", label: copy.lengths.long },
 							].map((l) => (
 								<button
 									key={l.id}
@@ -84,7 +120,7 @@ const BriefSettingsModal = () => {
 					onClick={() => setShowBriefSettings(false)}
 					className="w-full mt-6 bg-blue-600 hover:bg-blue-500 text-white py-3 rounded-xl font-bold transition-colors"
 				>
-					저장
+					{copy.save}
 				</button>
 			</div>
 		</div>

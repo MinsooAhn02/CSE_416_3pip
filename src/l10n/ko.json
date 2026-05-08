@@ -81,6 +81,8 @@
     "date_details": "날짜 상세",
     "open_diary_for_date": "이 날짜의 일기 열기",
     "cycle_view": "뷰 전환",
+    "today": "오늘",
+    "go_to_today": "오늘로 이동",
     "days": ["일", "월", "화", "수", "목", "금", "토"],
     "days_full": ["일요일", "월요일", "화요일", "수요일", "목요일", "금요일", "토요일"]
   },
@@ -150,6 +152,12 @@
     "title": "일기",
     "card_title": "오늘의 이야기",
     "question": "오늘 가장 기분 좋았던 순간은 언제였나요?",
+    "daily_question_title": "오늘의 질문",
+    "daily_question_loading": "질문 생성 중...",
+    "daily_question_placeholder": "답변을 입력하세요 (Enter로 제출)",
+    "daily_question_saved": "저장됨 - 다음 질문 준비 중",
+    "daily_question_save_error": "저장 실패, 다시 시도해주세요",
+    "daily_question_fallback": "지금 뭐 하고 계세요?",
     "placeholder": "오늘의 이야기를 적어보세요...",
     "no_entry": "이 날짜에 일기가 없습니다",
     "write_diary": "일기 작성",
@@ -252,9 +260,14 @@
   },
   "errors": {
     "network_error": "네트워크 오류입니다. 다시 시도해주세요.",
+    "connection_failed": "연결에 실패했습니다. 잠시 후 다시 시도해주세요.",
     "auth_error": "인증에 실패했습니다.",
     "load_error": "데이터를 불러오지 못했습니다.",
-    "save_error": "데이터를 저장하지 못했습니다."
+    "save_error": "데이터를 저장하지 못했습니다.",
+    "city_not_found": "\"{{city}}\" 도시를 찾지 못했습니다.",
+    "geocoding_failed": "도시 위치를 찾지 못했습니다.",
+    "google_health_auth": "Google Health 연결이 만료되었습니다. 다시 연결한 뒤 동기화해주세요.",
+    "google_health_api_disabled": "이 Google Cloud 프로젝트에서 Google Fitness API가 비활성화되어 있습니다. Google Cloud에서 API를 켠 뒤 몇 분 후 다시 연결해주세요."
   },
   "time": {
     "greeting_morning": "좋은 아침이에요!",

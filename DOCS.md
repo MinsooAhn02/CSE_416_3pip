@@ -1,6 +1,6 @@
 # MorningBriefing.AI - 통합 프로젝트 문서
 
-> 최종 정리일: 2026-05-07
+> 최종 정리일: 2026-05-09
 > 관리 정책: 문서는 DOCS.md 단일 파일로 유지
 
 ---
@@ -69,7 +69,7 @@ src/
       WidgetCard.jsx              # 모든 위젯의 공통 카드 래퍼
     layout/
       DashboardLayout.jsx         # 1:3:3 컬럼 레이아웃, 슬라이더
-      DatePanelContainer.jsx      # 이벤트+태스크+다이어리 패널 통합
+      DatePanelContainer.jsx      # 선택 날짜용 Events/Tasks/Diary 컨테이너
       DiaryPanel.jsx
       EventPanel.jsx
       FixedButtons.jsx
@@ -85,7 +85,7 @@ src/
       OnboardingModal.jsx
       PINModal.jsx
       SettingsModal.jsx
-      WidgetSettingsModal.jsx     # 글자 크기/뷰 타입/관심사 반영 설정
+      WidgetSettingsModal.jsx     # 개별 위젯 설정(뉴스 보기 방식, 스마트 위젯 관심사 반영)
     widgets/
       BriefingWidget.jsx
       CalendarWidget.jsx
@@ -113,7 +113,7 @@ src/
     useAuthStore.js
     useDataStore.js
     useDiaryStore.js
-    useGoogleCalendarStore.js     # 현재 Mock 기반
+    useGoogleCalendarStore.js     # Google Calendar/Tasks 동기화 + 로컬 fallback
     useQuickLinksStore.js
     useSettingsStore.js
     useTodoStore.js
@@ -126,6 +126,7 @@ supabase/
   schema.sql                      # 기본 테이블 정의
   migrations/
     add_personalization.sql       # diaries, keyword_score_log, keyword_interests 컬럼
+    add_fixed_interests.sql       # fixed_interests, onboarding_perms 컬럼
     add_user_qa.sql               # user_qa 테이블
   functions/
     calendar/
@@ -189,9 +190,9 @@ Fallback: user.id 지연 시 1200ms 타임아웃 후 fetchAll() 단독 실행
 | `onboarded` | boolean | localStorage |
 | `showOnboarding` | boolean | 메모리 |
 | `obStep` | number | 메모리 |
-| `selCats` | string[] | localStorage |
-| `perms` | { fit, cal } | localStorage |
-| `persona` | string | localStorage |
+| `selCats` | string[] | DB (`user_settings.fixed_interests`) hydrate |
+| `perms` | { fit, cal } | DB (`user_settings.onboarding_perms`) hydrate |
+| `persona` | string | DB (`user_settings.persona`) |
 | `user` | { id, email, displayName, avatarUrl } | null | 메모리 |
 | `providerToken` | string | null | 메모리 |
 
@@ -201,8 +202,8 @@ Fallback: user.id 지연 시 1200ms 타임아웃 후 fetchAll() 단독 실행
 - `logout()`: 로컬 상태 즉시 초기화 → Supabase signOut
 - `handleAuthChange(session)`: 세션 처리, `loadUserSettings()` 호출
 - `ensureProviderToken()`: Google access token 획득/캐시
-- `loadUserSettings()`: `user_settings` DB 로드 + `runPersonalizationBatch()` 백그라운드 실행
-- `finishOB()`: 온보딩 완료, localStorage + DB 저장
+- `loadUserSettings()`: `user_settings` DB 로드, `fixed_interests`/`onboarding_perms` hydrate, `runPersonalizationBatch()` 백그라운드 실행
+- `finishOB()`: 온보딩 완료, `persona`/`fixed_interests`/`onboarding_perms` DB 저장
 
 ---
 
@@ -225,11 +226,12 @@ Fallback: user.id 지연 시 1200ms 타임아웃 후 fetchAll() 단독 실행
 | `showFirstLoginBriefing` | boolean | localStorage |
 | `lastBriefingShown` | date string \| null | localStorage |
 | `showFirstLoginModal` | boolean | 메모리 |
+| `fixedInterestIds` | string[] | DB (`user_settings.fixed_interests`) |
 | `keywordInterests` | `[{keyword, category, score}]` | DB (`user_settings.keyword_interests`) |
 
 **주요 액션:**
 
-- `hydrateFromDB(data)`: DB → 로컬 상태 동기화, showFirstLoginModal 조건 판단
+- `hydrateFromDB(data)`: DB → 로컬 상태 동기화, `fixed_interests`/`keyword_interests` hydrate, showFirstLoginModal 조건 판단
 - `set*`: 각 설정 변경 → localStorage 저장 + DB upsert (`syncSettings()`) + toast
 - `addKeywordInterest(keyword, category)`: 중복 없이 추가, score=1 초기화
 - `removeKeywordInterest(keyword)`: 제거
@@ -365,11 +367,15 @@ useSettingsStore.subscribe((state) => {
 
 ### 5.7 useGoogleCalendarStore
 
-**상태:** MOCK_EVENTS, MOCK_TASKS (실 API 미연동)
+**상태:** `events`, `tasks`, `taskLists`, `selectedTaskListFilter`, `selectedDate`, `loading`, `error`
 
-`fetchEventsAndTasks()`: 300ms 지연 후 mock 데이터 반환
+**주요 액션:**
 
-> 실 Google Calendar API 연동은 미완료 상태. `/functions/v1/calendar`는 구현됨.
+- `fetchEvents()`: 월 단위 Google Calendar 이벤트 로드, 실패 시 로컬 캐시 fallback
+- `fetchTasks()`: Google Tasks + task list 로드, list filter 지원
+- `fetchEventsAndTasks()`: 선택 날짜 기준 이벤트/태스크 동시 hydrate
+- `addTask/updateTask/deleteTask()`: Google Tasks가 실제 지원하는 `title`, `notes`, `due`, `completed`, `taskListId` 중심으로 저장
+- 레거시 `[MB_META]...[/MB_META]` task metadata는 읽을 때 제거하고, 새 저장에는 더 이상 쓰지 않음
 
 ---
 
@@ -443,13 +449,13 @@ useSettingsStore.subscribe((state) => {
 └─────────────────────────────────────────────────────┘
 ```
 
-- 중간 컬럼: 슬라이더 deck 방식 (엣지 호버로 전환)
+- 중간 컬럼: 슬라이더 deck 방식 (버튼 + 트랙패드 가로 스와이프, 브라우저 히스토리 오작동 방지)
 - 오른쪽: 스마트 위젯 (`smart_{keyword}` ID 형식)
 - 전체: `@hello-pangea/dnd` 드래그앤드롭, breakpoint(lg/md/sm) 반응형
 
 ### 7.2 WidgetCard 공통 기능
 
-- 타이틀 클릭 → `openWidgetSettings(widgetId)` 호출 (설정 모달 오픈)
+- 헤더: 드래그 핸들 + 수동 새로고침 + 닫기 버튼
 - 새로고침 아이콘 클릭 → 개별 fetch `force=true`
 - 닫기 → `closeWidget(widgetId)` (vis=false)
 - apiStatus "ok"/"error" 표시
@@ -514,6 +520,8 @@ useSettingsStore.subscribe((state) => {
 
 - 데이터: `calEvents` (오늘 일정)
 - 달력 그리드 + 이벤트 인디케이터
+- `Today` 버튼으로 현재 달 즉시 복귀
+- 월/주/일 뷰 전환 시 열려 있던 `Date Details` 자동 닫힘
 
 #### BriefingWidget
 
@@ -547,7 +555,7 @@ useSettingsStore.subscribe((state) => {
 | `SettingsModal` | 테마, 시계, 온도 단위, 주식 심볼, 우선순위, 브리핑 모달 토글 |
 | `BriefSettingsModal` | AI 브리핑 어조 + 길이 선택 |
 | `FirstLoginBriefingModal` | 당일 첫 로그인 시 브리핑 표시 (REQ-WS-006), 오늘 날짜 기록으로 재표시 방지 |
-| `WidgetSettingsModal` | 글자 크기 전체 적용, 뉴스 뷰 타입 선택(text/news/grid), 스마트 위젯 관심사 반영 토글 |
+| `WidgetSettingsModal` | 뉴스 뷰 타입 선택(text/news/grid), 스마트 위젯 관심사 반영 토글 |
 | `PINModal` | 일기 접근 PIN 입력/확인 |
 | `DiaryListModal` | 날짜별 일기 목록 조회 |
 | `NewsDetailModal` | **현재 미사용** — 직접 URL 이동으로 대체됨 |
@@ -596,6 +604,8 @@ show_first_login_briefing boolean
 last_briefing_shown       date
 keyword_interests         jsonb default '[]'   -- [{keyword, category, score}]
 keyword_interests_updated date
+fixed_interests           jsonb default '[]'   -- 온보딩 고정 관심사 id 배열
+onboarding_perms          jsonb default '{"fit": false, "cal": false}'
 created_at / updated_at   timestamptz
 ```
 
@@ -720,7 +730,7 @@ $$score = \sum \left(base\_weight \times \frac{30 - elapsed\_days}{30}\right), \
 ### 11.5 뉴스 쿼리 반영
 
 `fetchNews` 실행 시:
-1. `useSettingsStore.getState().keywordInterests` 읽기
+1. `fixedInterestIds` + `keywordInterests`를 merge한 관심사 목록 계산
 2. score 내림차순 상위 5개 추출
 3. 한국어: `관심: kw1, kw2, ...` / 영어: `topics: kw1, kw2, ...` 쿼리에 삽입
 4. `interestFingerprint = topKeywords.join("+") || "base"` → 캐시 키 포함
@@ -761,10 +771,13 @@ $$score = \sum \left(base\_weight \times \frac{30 - elapsed\_days}{30}\right), \
 
 ## 13) i18n
 
-- **지원 언어:** 한국어(ko, 기본값), 영어(en)
+- **한국어 표시 보정:** 한국어 모드에서 Tavily 결과가 영어로 와도 `useDataStore`가 기사 제목/요약을 한국어로 후처리 번역해 `newsResults`, `trendsResults`에 반영
+
+- **지원 언어:** 영어(en, 기본값), 한국어(ko)
 - **저장:** localStorage에 언어 설정 유지
 - **언어 변경 시:** `i18n.changeLanguage()` → `languageChanged` 이벤트 → useDataStore 리스너가 뉴스/트렌드 force refresh
 - **API 연동:** 언어에 따라 Tavily 쿼리 언어 전환 + 한국어 시 한국 뉴스 도메인 필터 적용
+- **Diary 질문 카드:** 현재 앱 언어에 맞춰 질문 생성 언어와 UI 문구를 함께 전환
 
 ---
 
@@ -814,7 +827,7 @@ https://www.googleapis.com/auth/fitness.activity.read
 1. 환경 변수 확인
 2. Auth/DB/RLS 정책 확인
 3. Edge Functions 배포 상태 확인
-4. 마이그레이션 실행 여부 확인 (`add_personalization.sql`, `add_user_qa.sql`)
+4. 마이그레이션 실행 여부 확인 (`add_personalization.sql`, `add_user_qa.sql`, `add_fixed_interests.sql`)
 
 ### 15.2 런타임 확인
 
@@ -856,3 +869,15 @@ https://www.googleapis.com/auth/fitness.activity.read
 2. 병합 완료 후 임시 문서는 삭제
 3. 동일 주제는 DOCS.md 내부 단일 섹션만 유지
 4. 코드 변경 시 관련 섹션(위젯/스토어/스키마) 동시 업데이트
+
+---
+
+## 18) 최근 반영 사항 (2026-05-09)
+
+- 뉴스/트렌드는 언어 변경 시 강제 재요청되고, 한국어 모드에서는 영어 응답이 와도 기사 제목/요약을 한국어로 후처리 번역해 표시
+
+- 온보딩 관심사는 `user_settings.fixed_interests`, 연동 권한 선택은 `user_settings.onboarding_perms`로 서버 저장/복원
+- Date Details는 `Events` / `Tasks`를 동시에 보여주지 않고 탭처럼 하나씩만 전체 폭으로 표시
+- 위젯 deck은 마우스 엣지 호버 전환을 제거했고, 트랙패드 가로 스와이프는 위젯 섹션 안에서만 소비
+- 전역 글자 크기 조절은 `설정 > 위젯 관리`로 이동했고, 위젯 제목줄의 숨김 설정 진입점은 제거
+- Diary 질문 카드는 깨진 다국어 출력 방지 검증/fallback과 현재 언어 기반 질문 생성을 적용

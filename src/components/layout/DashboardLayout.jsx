@@ -31,10 +31,10 @@ const STANDARD_WIDGET_COMPONENTS = {
 // Stable wrapper to avoid re-mount on every render
 const SmartWidget = ({ keyword }) => <SmartWidgetContent keyword={keyword} />;
 
-const EDGE_HOVER_THRESHOLD = 24;
-const EDGE_HOVER_COOLDOWN_MS = 650;
-const WHEEL_PANEL_THRESHOLD = 32;
+const WHEEL_GESTURE_EPSILON = 2;
+const WHEEL_PANEL_THRESHOLD = 42;
 const WHEEL_NAV_COOLDOWN_MS = 420;
+const WHEEL_GESTURE_RESET_MS = 160;
 
 const chunkArray = (items, size) => {
 	if (!Array.isArray(items) || items.length === 0) return [];
@@ -73,9 +73,10 @@ const DashboardLayout = () => {
 		useSettingsStore((s) => s.priorityOrder) || DEFAULT_PRIORITY_ORDER;
 	const [activePanel, setActivePanel] = useState(0);
 	const [cardsPerView, setCardsPerView] = useState(2);
-	const lastEdgeTriggerAt = useRef(0);
+	const deckRef = useRef(null);
 	const lastWheelTriggerAt = useRef(0);
-	const suppressEdgeHoverUntil = useRef(0);
+	const lastWheelEventAt = useRef(0);
+	const wheelGestureAccumulator = useRef(0);
 
 	const expandedWidgetOrder = useMemo(() => {
 		const normalized = [];
@@ -223,36 +224,6 @@ const DashboardLayout = () => {
 		[maxStartIndex],
 	);
 
-	const handleWindowEdgeHover = useCallback(
-		(event) => {
-			const now = Date.now();
-			if (now < suppressEdgeHoverUntil.current) return;
-			if (now - lastEdgeTriggerAt.current < EDGE_HOVER_COOLDOWN_MS) return;
-
-			const cursorX = event.clientX;
-			const isNearLeft = cursorX <= EDGE_HOVER_THRESHOLD;
-			const isNearRight = cursorX >= window.innerWidth - EDGE_HOVER_THRESHOLD;
-
-			if (isNearLeft && activePanel > 0) {
-				lastEdgeTriggerAt.current = now;
-				movePanel(-1);
-				return;
-			}
-
-			if (isNearRight && activePanel < totalPanels - 1) {
-				lastEdgeTriggerAt.current = now;
-				movePanel(1);
-			}
-		},
-		[activePanel, movePanel, totalPanels],
-	);
-
-	useEffect(() => {
-		if (typeof window === "undefined") return;
-		window.addEventListener("mousemove", handleWindowEdgeHover);
-		return () => window.removeEventListener("mousemove", handleWindowEdgeHover);
-	}, [handleWindowEdgeHover]);
-
 	const handleDeckWheel = useCallback(
 		(event) => {
 			const interactiveTarget = event.target?.closest?.(
@@ -261,34 +232,67 @@ const DashboardLayout = () => {
 			if (interactiveTarget) return;
 
 			const horizontalIntent = event.shiftKey ? event.deltaY : event.deltaX;
-			if (Math.abs(horizontalIntent) < WHEEL_PANEL_THRESHOLD) return;
+			const absHorizontal = Math.abs(horizontalIntent);
+			const absVertical = Math.abs(event.deltaY);
+			const isHorizontalGesture =
+				event.shiftKey || absHorizontal > absVertical;
+			if (!isHorizontalGesture || absHorizontal < WHEEL_GESTURE_EPSILON) {
+				return;
+			}
+
+			event.preventDefault();
 
 			const now = Date.now();
-			if (now - lastEdgeTriggerAt.current < EDGE_HOVER_COOLDOWN_MS) {
-				event.preventDefault();
+			if (now - lastWheelEventAt.current > WHEEL_GESTURE_RESET_MS) {
+				wheelGestureAccumulator.current = 0;
+			}
+			lastWheelEventAt.current = now;
+
+			const previousAccumulated = wheelGestureAccumulator.current;
+			if (
+				previousAccumulated !== 0 &&
+				Math.sign(previousAccumulated) !== Math.sign(horizontalIntent)
+			) {
+				wheelGestureAccumulator.current = 0;
+			}
+			wheelGestureAccumulator.current += horizontalIntent;
+
+			if (now - lastWheelTriggerAt.current < WHEEL_NAV_COOLDOWN_MS) {
 				return;
 			}
-			if (now - lastWheelTriggerAt.current < WHEEL_NAV_COOLDOWN_MS) {
-				event.preventDefault();
+			if (
+				Math.abs(wheelGestureAccumulator.current) < WHEEL_PANEL_THRESHOLD
+			) {
 				return;
 			}
 
-			const direction = horizontalIntent > 0 ? 1 : -1;
+			const direction = wheelGestureAccumulator.current > 0 ? 1 : -1;
 			const canMoveLeft = direction < 0 && activePanel > 0;
 			const canMoveRight = direction > 0 && activePanel < totalPanels - 1;
+			wheelGestureAccumulator.current = 0;
 
 			if (!canMoveLeft && !canMoveRight) {
-				event.preventDefault();
 				return;
 			}
 
 			lastWheelTriggerAt.current = now;
-			suppressEdgeHoverUntil.current = now + EDGE_HOVER_COOLDOWN_MS;
-			event.preventDefault();
 			movePanel(direction);
 		},
 		[activePanel, movePanel, totalPanels],
 	);
+
+	useEffect(() => {
+		const deckElement = deckRef.current;
+		if (!deckElement) return undefined;
+
+		const nativeWheelHandler = (event) => handleDeckWheel(event);
+		deckElement.addEventListener("wheel", nativeWheelHandler, {
+			passive: false,
+		});
+
+		return () =>
+			deckElement.removeEventListener("wheel", nativeWheelHandler);
+	}, [handleDeckWheel]);
 
 	const dotCount = totalPanels;
 	const slideTranslate = activePanel * (100 / cardsPerView);
@@ -302,9 +306,10 @@ const DashboardLayout = () => {
 				</aside>
 
 				<section
+					ref={deckRef}
 					className="relative min-h-0 pb-3 xl:col-start-3"
 					data-widget-overlay-host="true"
-					onWheel={handleDeckWheel}
+					style={{ overscrollBehaviorX: "contain" }}
 				>
 					{!pinModalVisible && (
 						<div className="absolute -top-11 right-2 z-20 flex items-center gap-2 xl:-top-12">

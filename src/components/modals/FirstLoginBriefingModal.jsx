@@ -1,6 +1,7 @@
 import { useEffect, useState, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Sparkles, X, RefreshCw } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { useTheme } from "../../hooks/useTheme";
 import { useSettingsStore } from "../../store/useSettingsStore";
 import { useDataStore } from "../../store/useDataStore";
@@ -20,6 +21,7 @@ import { buildPersonaContext } from "../../utils/personaContext";
  * - Tracked via lastBriefingShown timestamp (idempotency)
  */
 const FirstLoginBriefingModal = () => {
+	const { i18n } = useTranslation();
 	const { isDark, cardCls, muted } = useTheme();
 	const showFirstLoginModal = useSettingsStore((s) => s.showFirstLoginModal);
 	const dismissFirstLoginModal = useSettingsStore((s) => s.dismissFirstLoginModal);
@@ -38,6 +40,26 @@ const FirstLoginBriefingModal = () => {
 	const [briefing, setBriefing] = useState(null);
 	const [isLoading, setIsLoading] = useState(false);
 	const [dismissCountdown, setDismissCountdown] = useState(10); // 10-second block (REQ-AJ-004)
+	const isKo = i18n.language?.toLowerCase().startsWith("ko");
+	const copy = isKo
+		? {
+				close: "닫기",
+				title: "오늘의 AI 브리핑",
+				subtitle: "좋은 아침 브리핑",
+				refresh: "브리핑 새로고침",
+				loading: "브리핑을 불러오는 중입니다...",
+				countdown: (seconds) => `${seconds}초 후 시작하기`,
+				start: "오늘 하루 시작하기",
+		  }
+		: {
+				close: "Close",
+				title: "Today's AI Briefing",
+				subtitle: "Good Morning Briefing",
+				refresh: "Refresh briefing",
+				loading: "Loading your briefing...",
+				countdown: (seconds) => `Start in ${seconds}s`,
+				start: "Start the day",
+		  };
 
 	// Time-based greeting
 	const greeting = useMemo(() => getTimeGreeting(), []);
@@ -176,7 +198,7 @@ const FirstLoginBriefingModal = () => {
 			<button
 				onClick={() => dismissFirstLoginModal()}
 				className="absolute top-4 right-4 p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors rounded-full z-10 hover:bg-gray-200/10 dark:hover:bg-gray-700/10"
-				title="닫기"
+				title={copy.close}
 				>
 					<X size={20} />
 				</button>
@@ -190,8 +212,8 @@ const FirstLoginBriefingModal = () => {
 							<Sparkles size={24} className="text-blue-500" />
 						</div>
 						<div>
-							<h2 className="font-bold text-lg">오늘의 AI 브리핑</h2>
-							<p className={`text-xs ${muted}`}>Good Morning Briefing</p>
+							<h2 className="font-bold text-lg">{copy.title}</h2>
+							<p className={`text-xs ${muted}`}>{copy.subtitle}</p>
 						</div>
 					</div>
 				{/* PHASE 23: Repositioned Refresh button to avoid overlap with X close button */}
@@ -201,7 +223,7 @@ const FirstLoginBriefingModal = () => {
 					className={`absolute top-4 right-14 p-2 rounded-full transition-colors ${
 						isDark ? "hover:bg-morning-dark-hover" : "hover:bg-morning-light-hover/20"
 					} ${isLoading ? "opacity-50" : ""}`}
-					title="브리핑 새로고침"
+					title={copy.refresh}
 				>
 					<RefreshCw size={18} className={isLoading ? "animate-spin" : ""} />
 				</button>
@@ -243,7 +265,7 @@ const FirstLoginBriefingModal = () => {
 						</div>
 					) : (
 						<p className={`text-sm ${muted}`}>
-							브리핑을 불러오는 중입니다...
+							{copy.loading}
 						</p>
 					)}
 
@@ -263,8 +285,8 @@ const FirstLoginBriefingModal = () => {
 						}`}
 					>
 						{dismissCountdown > 0
-							? `${dismissCountdown}초 후 시작하기`
-							: "오늘 하루 시작하기"}
+							? copy.countdown(dismissCountdown)
+							: copy.start}
 					</button>
 				</div>
 			</motion.div>

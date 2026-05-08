@@ -11,8 +11,8 @@ import { initReactI18next } from 'react-i18next';
 import en from './en.json';
 import ko from './ko.json';
 
-// Get saved language from localStorage or default to 'ko'
-const savedLanguage = localStorage.getItem('language') || 'ko';
+// Get saved language from localStorage or default to 'en'
+const savedLanguage = localStorage.getItem('language') || 'en';
 
 i18n
   .use(initReactI18next)
@@ -22,7 +22,7 @@ i18n
       ko: { translation: ko },
     },
     lng: savedLanguage,
-    fallbackLng: 'ko',
+    fallbackLng: 'en',
     interpolation: {
       escapeValue: false, // React already escapes values
     },

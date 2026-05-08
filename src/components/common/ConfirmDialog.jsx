@@ -1,5 +1,6 @@
 import { createPortal } from "react-dom";
 import { AlertTriangle } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { useTheme } from "../../hooks/useTheme";
 
 /**
@@ -15,15 +16,19 @@ import { useTheme } from "../../hooks/useTheme";
  *   onCancel  — called when user cancels or clicks backdrop
  */
 const ConfirmDialog = ({
-	title = "확인",
+	title,
 	message,
-	confirmLabel = "확인",
-	cancelLabel = "취소",
+	confirmLabel,
+	cancelLabel,
 	danger = true,
 	onConfirm,
 	onCancel,
 }) => {
+	const { t } = useTranslation();
 	const { isDark, hoverCls } = useTheme();
+	const resolvedTitle = title ?? t("common.confirm");
+	const resolvedConfirmLabel = confirmLabel ?? t("common.confirm");
+	const resolvedCancelLabel = cancelLabel ?? t("common.cancel");
 
 	const cardCls = isDark
 		? "bg-morning-dark-card border-morning-dark-hover text-morning-dark-text"
@@ -54,7 +59,7 @@ const ConfirmDialog = ({
 						className={`mt-0.5 flex-shrink-0 ${danger ? "text-red-400" : "text-amber-400"}`}
 					/>
 					<div className="space-y-1">
-						<h3 className="font-bold text-base">{title}</h3>
+						<h3 className="font-bold text-base">{resolvedTitle}</h3>
 						{message && (
 							<p className={`text-sm ${isDark ? "text-gray-300" : "text-gray-600"}`}>
 								{message}
@@ -68,13 +73,13 @@ const ConfirmDialog = ({
 						onClick={onCancel}
 						className={`flex-1 px-4 py-2 rounded-xl text-sm font-medium transition-colors ${cancelCls}`}
 					>
-						{cancelLabel}
+						{resolvedCancelLabel}
 					</button>
 					<button
 						onClick={onConfirm}
 						className={`flex-1 px-4 py-2 rounded-xl text-sm font-medium transition-colors ${confirmCls}`}
 					>
-						{confirmLabel}
+						{resolvedConfirmLabel}
 					</button>
 				</div>
 			</div>
