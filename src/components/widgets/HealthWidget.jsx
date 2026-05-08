@@ -8,6 +8,7 @@ const HealthWidget = () => {
 	const { isDark, muted, secondaryBgCls } = useTheme();
 	const { t } = useTranslation();
 	const healthData  = useDataStore((s) => s.healthData);
+	const error       = useDataStore((s) => s.errors.health);
 	const apiStatus   = useDataStore((s) => s.apiStatus.health ?? null);
 	const isRealData  = apiStatus === "ok";
 
@@ -76,6 +77,8 @@ const HealthWidget = () => {
 						</p>
 					)}
 				</div>
+			) : error ? (
+				<p className="text-[11px] text-red-400">{error}</p>
 			) : (
 				<p className="text-sm opacity-50">{t("widgets.health.loading")}</p>
 			)}

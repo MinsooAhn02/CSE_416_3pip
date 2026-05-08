@@ -15,8 +15,9 @@ const initLayouts = () => {
 	const savedVer = load("mb_layout_ver", 0);
 	if (savedVer < LAYOUT_VERSION) {
 		save("mb_layout_ver", LAYOUT_VERSION);
-		save("mb_layouts", DEFAULT_LAYOUTS);
-		return DEFAULT_LAYOUTS;
+		// localStorage의 레이아웃은 지우지 않음 — hydrateFromDB()가 DB에서 로드함
+		// 로컬에 저장된 값이 있으면 우선 사용, 없으면 DEFAULT_LAYOUTS
+		return load("mb_layouts", DEFAULT_LAYOUTS);
 	}
 	return load("mb_layouts", DEFAULT_LAYOUTS);
 };

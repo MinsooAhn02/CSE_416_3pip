@@ -17,40 +17,13 @@ const PIN_AUTH_SESSION_KEY = "mb_diary_pin_auth";
 
 const todayStr = () => new Date().toISOString().slice(0, 10);
 
-/**
- * REFINEMENT #6: Mock Diary Data for Testing
- * Provides realistic diary entries for specific dates to test:
- * - Locked/unlocked UI states
- * - Conditional rendering when diary exists
- * - Empty state handling when diary is missing
- */
-const MOCK_DIARY_ENTRIES = {
-	"2026-03-27": { // Today
-		diary: "Today was quite productive. I managed to complete all the calendar refinements and UI improvements. The team's feedback on the conditional diary layout was very positive. Looking forward to testing with users tomorrow.",
-		memo: "Remember to send the refined UI screenshots to stakeholders for final approval."
-	},
-	"2026-03-26": { // Yesterday
-		diary: "A good day for feature development. Implemented the save buttons for Events and Tasks panels. The clean lock UI looks much better without the blur effect. Testing the new date highlighting revealed some edge cases we need to handle.",
-		memo: "Follow up with backend team about Google Calendar API implementation timeline."
-	},
-	"2026-03-25": { // 2 days ago
-		diary: "Started working on the conditional diary panel feature. When there's no diary entry, the Events and Tasks panels should expand to fill the full width. This is a significant UX improvement. Also began addressing the clipping issues with the Add buttons.",
-		memo: "Test the 2-column layout thoroughly on mobile and tablet screens."
-	},
-};
-
-/**
- * Load diary entries: merge mock data with stored data (stored data takes precedence)
- */
-const getInitialEntries = () => {
-	const storedEntries = load(STORAGE_KEY, {});
-	return { ...MOCK_DIARY_ENTRIES, ...storedEntries }; // Stored entries override mock
-};
+const getInitialEntries = () => load(STORAGE_KEY, {});
 
 export const useDiaryStore = create((set, get) => ({
 	/* ── 상태 ── */
 	entries: getInitialEntries(),                // { "2026-03-18": { diary: "...", memo: "..." } }
 	diaryAnswers: {},                            // { "2026-03-18": string[] } — DB에서 hydrate
+	todayQA: [],                                // [{ question, answer }] — 오늘의 Q&A 답변
 	wasActiveToday: load(ACTIVE_KEY, "") === todayStr(),
 	
 	/* ── PIN Authentication State ── */
@@ -217,6 +190,24 @@ export const useDiaryStore = create((set, get) => ({
 			asked_date: dateStr,
 		});
 		if (error) throw error;
+		// 오늘 날짜이면 로컬 todayQA 상태도 즉시 업데이트
+		if (dateStr === todayStr()) {
+			set((s) => ({ todayQA: [...s.todayQA, { question, answer }] }));
+		}
+	},
+
+	/** 오늘의 Q&A 답변을 user_qa 테이블에서 로드 */
+	fetchTodayQA: async () => {
+		if (!supabase) return;
+		const { data: { user } } = await supabase.auth.getUser();
+		if (!user) return;
+		const { data } = await supabase
+			.from("user_qa")
+			.select("question, answer")
+			.eq("user_id", user.id)
+			.eq("asked_date", todayStr())
+			.order("created_at", { ascending: true });
+		if (data) set({ todayQA: data });
 	},
 
 	/** 특정 날짜의 답변 가져오기 (레거시 호환) */

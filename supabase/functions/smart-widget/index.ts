@@ -206,42 +206,6 @@ const callFitness = async (token: string) => {
 	return { steps, calories: Math.round(calories) };
 };
 
-const callKakaoPlaces = async (
-	apiKey: string,
-	query: string,
-	lat: number,
-	lon: number,
-) => {
-	const params = new URLSearchParams({
-		query,
-		x: String(lon),
-		y: String(lat),
-		radius: "1200",
-		category_group_code: "FD6",
-		size: "8",
-		sort: "accuracy",
-	});
-
-	const res = await fetch(
-		`https://dapi.kakao.com/v2/local/search/keyword.json?${params}`,
-		{ headers: { Authorization: `KakaoAK ${apiKey}` } },
-	);
-	if (!res.ok) throw new Error(`Kakao ${res.status}: ${await res.text()}`);
-	const data = await res.json();
-	return (data.documents ?? []).map(
-		(d: {
-			place_name?: string;
-			category_name?: string;
-			distance?: string;
-			place_url?: string;
-		}) => ({
-			name: d.place_name ?? "",
-			category: d.category_name ?? "",
-			distance: d.distance ?? "",
-			url: d.place_url ?? null,
-		}),
-	);
-};
 
 const summarizeRouteWidget = async (
 	groqApiKey: string,
@@ -362,7 +326,6 @@ serve(async (req) => {
 			let apiData: unknown = null;
 			const weatherKey = Deno.env.get("OPENWEATHER_API_KEY");
 			const stockKey = Deno.env.get("TWELVEDATA_API_KEY");
-			const kakaoKey = Deno.env.get("KAKAO_REST_KEY");
 			const tavilyApiKey = Deno.env.get("TAVILY_API_KEY");
 
 			if (route === "weather" && weatherKey) {
@@ -381,14 +344,6 @@ serve(async (req) => {
 				apiData = await callTavily(
 					tavilyApiKey,
 					routeDecision.apiPrompt || `${keyword} 최신 트렌드`,
-				);
-			}
-			if (route === "restaurants" && kakaoKey) {
-				apiData = await callKakaoPlaces(
-					kakaoKey,
-					routeDecision.apiPrompt || keyword,
-					Number(lat),
-					Number(lon),
 				);
 			}
 

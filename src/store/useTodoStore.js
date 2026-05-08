@@ -1,7 +1,6 @@
 import { create } from "zustand";
 import { load, save } from "../utils/storage";
 import { supabase } from "../lib/supabase";
-import { mockTodos } from "../mock/data";
 
 const TODAY_KEY = "mb_todo_last_reset";
 
@@ -18,7 +17,7 @@ const applyLocalDailyReset = (todos) =>
 	todos.filter((t) => t.isFixed).map((t) => ({ ...t, completed: false }));
 
 export const useTodoStore = create((set, get) => ({
-	todos: load("mb_todos", mockTodos).map((t) => ({
+	todos: load("mb_todos", []).map((t) => ({
 		id: t.id,
 		text: t.text,
 		completed: !!t.completed,
