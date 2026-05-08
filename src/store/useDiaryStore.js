@@ -12,10 +12,96 @@ const STORAGE_KEY = "mb_diary_entries";
 const ACTIVE_KEY = "mb_last_access_date";
 const PIN_KEY = "mb_diary_pin";
 const PIN_AUTH_SESSION_KEY = "mb_diary_pin_auth";
+const PIN_AUTH_EXPIRES_AT_KEY = "mb_diary_pin_auth_expires_at";
 
 const todayStr = () => new Date().toISOString().slice(0, 10);
 
-const getInitialEntries = () => load(STORAGE_KEY, {});
+const getPinLockMode = () =>
+	useSettingsStore.getState()?.pinLockMode ||
+	load("mb_pin_lock_mode", DEFAULT_PIN_LOCK_MODE);
+
+const getStoredPinExpiry = () => {
+	const raw = load(PIN_AUTH_EXPIRES_AT_KEY, null);
+	const n = Number(raw);
+	return Number.isFinite(n) ? n : null;
+};
+
+const isPinExpiryValid = (expiresAt) =>
+	Number.isFinite(expiresAt) && expiresAt > Date.now();
+
+const clearPersistedPinSession = () => {
+	save(PIN_AUTH_SESSION_KEY, false);
+	save(PIN_AUTH_EXPIRES_AT_KEY, null);
+};
+
+const normalizeDateKey = (dateStr) => {
+	const parsed = parseDateString?.(dateStr);
+	return parsed ? formatLocalDate(parsed) : dateStr;
+};
+
+const normalizeEntry = (entry) => {
+	const safeEntry =
+		entry && typeof entry === "object" ? entry : {};
+	const diary = typeof safeEntry.diary === "string" ? safeEntry.diary : "";
+	const aiGeneratedDiary =
+		typeof safeEntry.aiGeneratedDiary === "string"
+			? safeEntry.aiGeneratedDiary
+			: diary;
+	const editedDiary =
+		typeof safeEntry.editedDiary === "string" ? safeEntry.editedDiary : "";
+	const notes =
+		typeof safeEntry.notes === "string"
+			? safeEntry.notes
+			: typeof safeEntry.memo === "string"
+				? safeEntry.memo
+				: "";
+
+	return {
+		...safeEntry,
+		diary,
+		aiGeneratedDiary,
+		editedDiary,
+		notes,
+		memo: notes,
+	};
+};
+
+const saveEntriesLocally = (entries) => {
+	const normalizedEntries = Object.fromEntries(
+		Object.entries(entries || {}).map(([dateStr, entry]) => [
+			normalizeDateKey(dateStr),
+			normalizeEntry(entry),
+		]),
+	);
+	save(STORAGE_KEY, normalizedEntries);
+	return normalizedEntries;
+};
+
+const buildInitialPinSessionState = () => {
+	const pinLockMode = getPinLockMode();
+
+	if (pinLockMode === "off") {
+		clearPersistedPinSession();
+		return { isPinAuthenticated: true, pinAuthExpiresAt: null };
+	}
+
+	if (pinLockMode === "immediate") {
+		return { isPinAuthenticated: false, pinAuthExpiresAt: null };
+	}
+
+	const isAuthed = load(PIN_AUTH_SESSION_KEY, false);
+	const expiresAt = getStoredPinExpiry();
+	if (isAuthed && isPinExpiryValid(expiresAt)) {
+		return { isPinAuthenticated: true, pinAuthExpiresAt: expiresAt };
+	}
+
+	clearPersistedPinSession();
+	return { isPinAuthenticated: false, pinAuthExpiresAt: null };
+};
+
+const initialPinSessionState = buildInitialPinSessionState();
+
+const getInitialEntries = () => saveEntriesLocally(load(STORAGE_KEY, {}));
 
 export const useDiaryStore = create((set, get) => ({
 	/* ── 상태 ── */
@@ -335,6 +421,10 @@ export const useDiaryStore = create((set, get) => ({
 		} catch (error) {
 			console.warn("Memo save to DB failed:", error?.message);
 		}
+	},
+
+	saveMemo: async (dateStr, memoText) => {
+		return get().saveNotes(dateStr, memoText);
 	},
 
 	/* ── DiaryCard Q&A 관리 (user_qa 테이블) ── */

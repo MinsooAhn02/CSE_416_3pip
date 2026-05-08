@@ -1,24 +1,34 @@
-import { Activity, RefreshCw, RefreshCcw } from "lucide-react";
+import { Activity, RefreshCw } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useTheme } from "../../hooks/useTheme";
 import { useDataStore } from "../../store/useDataStore";
-import { useAuthStore } from "../../store/useAuthStore";
 import WidgetCard from "../common/WidgetCard";
 
 const HealthWidget = () => {
 	const { isDark, muted, secondaryBgCls } = useTheme();
 	const { t } = useTranslation();
-	const healthData  = useDataStore((s) => s.healthData);
-	const error       = useDataStore((s) => s.errors.health);
-	const apiStatus   = useDataStore((s) => s.apiStatus.health ?? null);
-	const isRealData  = apiStatus === "ok";
+	const healthData = useDataStore((s) => s.healthData);
+	const loading = useDataStore((s) => s.loading.health);
+	const error = useDataStore((s) => s.errors.health);
+	const apiStatus = useDataStore((s) => s.apiStatus.health ?? null);
+	const fetchHealth = useDataStore((s) => s.fetchHealth);
+	const getLastUpdatedMinutes = useDataStore((s) => s.getLastUpdatedMinutes);
+	const isRealData = apiStatus === "ok";
+
+	const formatLastUpdated = (minutes) => {
+		if (minutes == null) return t("common.before_refresh");
+		if (minutes <= 0) return t("common.just_now");
+		return t("common.minutes_ago", { count: minutes });
+	};
+
+	const lastUpdatedText = formatLastUpdated(getLastUpdatedMinutes("health"));
 
 	return (
 		<WidgetCard
 			title={t("widgets.health.title")}
 			icon={Activity}
 			widgetId="health"
-			headerMeta={formatLastUpdated(getLastUpdatedMinutes("health"))}
+			headerMeta={lastUpdatedText}
 			onRefresh={() => fetchHealth(undefined, true)}
 			refreshing={!!loading}
 			refreshIcon={RefreshCw}

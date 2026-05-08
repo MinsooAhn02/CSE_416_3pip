@@ -20,19 +20,34 @@ const normalizeTaskAsTodo = (task) => ({
 	repeat: task.repeat || null,
 });
 
-const getCurrentTodos = () =>
-	materializeTasksForDate(
+const getCalendarStoreState = () => {
+	if (
+		typeof useGoogleCalendarStore === "undefined" ||
+		typeof useGoogleCalendarStore?.getState !== "function"
+	) {
+		return null;
+	}
+	return useGoogleCalendarStore.getState();
+};
+
+const getCurrentTodos = () => {
+	const calendarState = getCalendarStoreState();
+	if (!calendarState) return [];
+	return materializeTasksForDate(
 		filterTasksByTaskList(
-			useGoogleCalendarStore.getState().tasks || [],
-			useGoogleCalendarStore.getState().selectedTaskListFilter,
+			calendarState.tasks || [],
+			calendarState.selectedTaskListFilter ?? ALL_TASK_LIST_FILTER_ID,
 		),
 		todayStamp(),
 	).map(normalizeTaskAsTodo);
+};
 
-const syncTodosFromCalendarStore = (tasks = useGoogleCalendarStore.getState().tasks) => {
+const syncTodosFromCalendarStore = (tasksArg) => {
+	const calendarState = getCalendarStoreState();
+	const tasks = tasksArg ?? calendarState?.tasks ?? [];
 	const filteredTasks = filterTasksByTaskList(
 		tasks || [],
-		useGoogleCalendarStore.getState().selectedTaskListFilter,
+		calendarState?.selectedTaskListFilter ?? ALL_TASK_LIST_FILTER_ID,
 	);
 	const todos = materializeTasksForDate(filteredTasks, todayStamp()).map(normalizeTaskAsTodo);
 	save(TODO_CACHE_KEY, todos);
@@ -56,8 +71,9 @@ export const useTodoStore = create((set, get) => ({
 			const today = todayStamp();
 			if (lastReset === today) return;
 
-			if (useGoogleCalendarStore.getState().tasks.length === 0) {
-				await useGoogleCalendarStore.getState().fetchTasks({ skipLoading: true });
+			const calendarState = getCalendarStoreState();
+			if (calendarState && (calendarState.tasks || []).length === 0) {
+				await calendarState.fetchTasks?.({ skipLoading: true });
 			}
 
 			save(TODAY_KEY, today);
@@ -69,7 +85,8 @@ export const useTodoStore = create((set, get) => ({
 
 	hydrateFromDB: async () => {
 		try {
-			await useGoogleCalendarStore.getState().fetchTasks({ skipLoading: true });
+			const calendarState = getCalendarStoreState();
+			await calendarState?.fetchTasks?.({ skipLoading: true });
 			syncTodosFromCalendarStore();
 			await get().ensureDailyReset();
 			return get().todos;
@@ -82,8 +99,10 @@ export const useTodoStore = create((set, get) => ({
 	toggleTodo: async (id) => {
 		const currentTodo = get().todos.find((todo) => todo.id === id);
 		if (!currentTodo) return;
+		const calendarState = getCalendarStoreState();
+		if (!calendarState?.updateTask) return;
 
-		await useGoogleCalendarStore.getState().updateTask(id, {
+		await calendarState.updateTask(id, {
 			completed: !currentTodo.completed,
 			occurrenceDate: currentTodo.date || todayStamp(),
 		});
@@ -98,8 +117,10 @@ export const useTodoStore = create((set, get) => ({
 		if (!text) return;
 
 		const date = safeOpts.date || todayStamp();
+		const calendarState = getCalendarStoreState();
+		if (!calendarState?.addTask) return;
 
-		await useGoogleCalendarStore.getState().addTask({
+		await calendarState.addTask({
 			title: text,
 			description: safeOpts.description || "",
 			date,
@@ -107,8 +128,8 @@ export const useTodoStore = create((set, get) => ({
 			endTime: safeOpts.endTime || "",
 			completed: false,
 			taskListId:
-				useGoogleCalendarStore.getState().selectedTaskListFilter !== ALL_TASK_LIST_FILTER_ID
-					? useGoogleCalendarStore.getState().selectedTaskListFilter
+				calendarState.selectedTaskListFilter !== ALL_TASK_LIST_FILTER_ID
+					? calendarState.selectedTaskListFilter
 					: undefined,
 		});
 
@@ -120,7 +141,9 @@ export const useTodoStore = create((set, get) => ({
 	},
 
 	deleteTodo: async (id) => {
-		await useGoogleCalendarStore.getState().deleteTask(id);
+		const calendarState = getCalendarStoreState();
+		if (!calendarState?.deleteTask) return;
+		await calendarState.deleteTask(id);
 		syncTodosFromCalendarStore();
 	},
 
@@ -146,11 +169,16 @@ export const useTodoStore = create((set, get) => ({
 	},
 }));
 
-useGoogleCalendarStore.subscribe((state, previousState) => {
-	if (
-		state.tasks !== previousState.tasks ||
-		state.selectedTaskListFilter !== previousState.selectedTaskListFilter
-	) {
-		syncTodosFromCalendarStore(state.tasks);
-	}
-});
+if (
+	typeof useGoogleCalendarStore !== "undefined" &&
+	typeof useGoogleCalendarStore?.subscribe === "function"
+) {
+	useGoogleCalendarStore.subscribe((state, previousState) => {
+		if (
+			state.tasks !== previousState.tasks ||
+			state.selectedTaskListFilter !== previousState.selectedTaskListFilter
+		) {
+			syncTodosFromCalendarStore(state.tasks);
+		}
+	});
+}

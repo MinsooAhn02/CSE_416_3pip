@@ -4,6 +4,8 @@ import { supabase } from "../lib/supabase";
 import { runPersonalizationBatch } from "../services/personalizationService";
 import { useSettingsStore } from "./useSettingsStore";
 
+const PROVIDER_TOKEN_KEY = "mb_provider_token";
+
 export const useAuthStore = create((set, get) => ({
 	isLoggedIn: load("mb_login", false),
 	onboarded: load("mb_onboarded", false),
