@@ -10,9 +10,23 @@
    - 시스템 프롬프트 영어화 + 언어 동적 설정 (ko/en)
    - [추가 버그픽스] aiService.js 633번줄 `.slice` 앞 `.` 누락 → ReferenceError로 브리핑 항상 실패하던 문제 수정
    - [정리] BriefingWidget.jsx useEffect: `isLoading` 불필요 deps 제거, bLen 변경 시 Groq 이중 호출 race condition 제거
+5. [x] 자동 일기 적는 형태 통일화 — 관심사 + 언어 일관성 적용
+   - `generateDiary()`에 `interests` 파라미터 추가 → promptContext에 포함, 프롬프트 규칙 1줄 추가
+   - `buildDiaryGenerationContext()`에서 `mergeInterestLists(fixedInterestIds, keywordInterests)` 포함
+   - 자정 자동일기(useMidnightTrigger → diaryGenerationService)는 변경 없이 위 context 자동 수혜
+   - `ensureYesterdayDiaryForMorning()`에 `language: resolveDiaryGenerationLanguage()` + `interests: effectiveInterests` 추가 (이전엔 language 미전달로 항상 기본값 "ko" 사용)
+   - `resolveDiaryGenerationLanguage` export → BriefingWidget에서 import해 사용
 7. [x] 오늘의 질문 무한로딩 해결 (DiaryCard.jsx: handleSubmit 성공 후 setIsSaving(false) 누락)
 8. [x] API 실패 시 dummy 대신 에러 메시지 표시 (Weather/Stocks/Trends/News/Health 전체)
+16. [x] 온보딩 데이터 → 고정 interest 전체 적용
+   - `personaContext.js`: `fixedInterestIds` + `keywordInterests` 병합 → 브리핑 스코어러에 통합 전달
+   - `DiaryCard.jsx`: `fixedInterestIds` 구독, `generatePersonalizedQuestion()`에 전달
 18. [x] DB 기반 초기 데이터 (mockTodos 제거, layout DB값 우선 적용)
+26. [x] Interest keywords logics application (locally stored)
+   - `INTEREST_TOPIC_MAP` 추가 (ko/en × 8개 고정 관심사 → 자연어 주제 문구)
+   - `pickTopics()`: `fixedInterestIds` 파라미터 추가 → 관심사 1개 + 일반 주제 1개 혼합 선택, 관심사 없을 시 기존 랜덤 유지
+   - `generatePersonalizedQuestion()`: `fixedInterestIds` 파라미터 추가, DiaryCard에서 전달
+   - `generateBriefing()` (단순 3줄): `keywordInterests` → `Interest guidance:` 줄 추가 (기존 상세 브리핑과 동일 패턴)
 
 ## 완료(다현)
 
@@ -44,14 +58,15 @@
 
 ## 진행 예정
 
-5. 일기 적는 형태 통일화 (로직 직접 구현 필요)
 9. 위젯 세부 내용 popup modal + 좌우 버튼 넘기기 (news, trends, stocks 등)
 10. Stocks 위젯 종목/지수 max 개수 설정 (kospi, nasdaq, spy, vix 등)
 14. 달력: 월/년 헤더("May 2026") 클릭 시 드롭다운 날짜 이동 (Windows 작업표시줄 달력 방식)
-#15. 달력: event/task 텍스트 영역 가로 확장
-#16. 온보딩 데이터 → 고정 interest로 반영
 17. 스마트 위젯 format 정의 (일반 widget 양식 참고)
 19. Diary PIN 설정 기능 — ⚙️ 설정에서 PIN 저장/수정, 재설정 시 본인 확인 질문(유저 직접 작성) 통해 authenticate
+24. 설정에서 글씨 크기 전체 위젯에 적용 (현재는 trends 에만 적용됨)
+25. 설정 모달 크기 고정(현재는 widget management, smart widgets 등과 같은 왼쪽 패널을 클릭할 때마다 오른쪽 패널의 길이가 들쭉날쭉해서 크기도 같이 변동되지만, 지향하는 디자인은 오른쪽 패널의 길이가 특정 설정 모달 박스를 넘어간다면 스크롤할 수 있게)
+
+100. (마무리 단계) i18n En/Ko 설정 적용. dashboard, user settings, briefing에서도 설정한 언어로 display.
 
 
 ## 5/8/2026

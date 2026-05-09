@@ -5,6 +5,7 @@ import { useTheme } from "../../hooks/useTheme";
 import { useDiaryStore } from "../../store/useDiaryStore";
 import { useAuthStore } from "../../store/useAuthStore";
 import { useDataStore } from "../../store/useDataStore";
+import { useSettingsStore } from "../../store/useSettingsStore";
 import { generatePersonalizedQuestion } from "../../services/aiService";
 import { formatLocalDate } from "../../utils/date";
 
@@ -17,6 +18,7 @@ const DiaryCard = () => {
 	const addAnswer = useDiaryStore((s) => s.addAnswer);
 	const persona = useAuthStore((s) => s.persona);
 	const weather = useDataStore((s) => s.weather);
+	const fixedInterestIds = useSettingsStore((s) => s.fixedInterestIds) || [];
 
 	const [question, setQuestion] = useState(null);
 	const [isLoadingQ, setIsLoadingQ] = useState(true);
@@ -43,6 +45,7 @@ const DiaryCard = () => {
 				weatherCondition: weather?.condition ?? "",
 				previousQuestions: askedRef.current,
 				language: questionLanguage,
+				fixedInterestIds,
 			});
 			if (q) {
 				askedRef.current = [...askedRef.current, q];

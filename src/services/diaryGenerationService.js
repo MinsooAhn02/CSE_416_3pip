@@ -7,8 +7,9 @@ import i18n from "../l10n/i18n";
 import { formatLocalDate, isSameLocalDate } from "../utils/date";
 import { materializeTasksForDate } from "../utils/taskRecurrence";
 import { generateDiary } from "./aiService";
+import { mergeInterestLists } from "../utils/interests";
 
-const resolveDiaryGenerationLanguage = () => {
+export const resolveDiaryGenerationLanguage = () => {
 	const diaryLanguage = useSettingsStore.getState().diaryLanguage || "app";
 	if (diaryLanguage === "ko" || diaryLanguage === "en") {
 		return diaryLanguage;
@@ -100,6 +101,8 @@ export const buildDiaryGenerationContext = async (
 		diaryAnswers.length > 0 ||
 		!!(existingEntry?.notes || existingEntry?.memo || "").trim();
 
+	const settingsStore = useSettingsStore.getState();
+
 	return {
 		completedTodos: await fetchCompletedTasksForDate(dateStr),
 		diaryAnswers,
@@ -113,6 +116,10 @@ export const buildDiaryGenerationContext = async (
 			typeof wasActiveDay === "boolean"
 				? wasActiveDay
 				: inferredWasActiveDay,
+		interests: mergeInterestLists(
+			settingsStore.fixedInterestIds ?? [],
+			settingsStore.keywordInterests ?? []
+		).slice(0, 10),
 	};
 };
 

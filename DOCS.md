@@ -1,6 +1,6 @@
 # MorningBriefing.AI - 통합 프로젝트 문서
 
-> 최종 정리일: 2026-05-09
+> 최종 정리일: 2026-05-09 (2차)
 > 관리 정책: 문서는 DOCS.md 단일 파일로 유지
 
 ---
@@ -530,6 +530,8 @@ useSettingsStore.subscribe((state) => {
 - 브리핑 3가지 길이(short/medium/long) 캐시
 - 어조(tone) + 길이(bLen) 설정 반영
 - 어제 메모 + 오늘 일정/할일을 컨텍스트로 포함
+- `effectiveInterests = mergeInterestLists(fixedInterestIds, keywordInterests)` → 상세/단순 브리핑 모두 `Interest guidance:` 포함
+- 아침 자동일기(`ensureYesterdayDiaryForMorning`): `language: resolveDiaryGenerationLanguage()` + `interests: effectiveInterests` 전달
 
 #### SmartWidgetContent
 
@@ -544,6 +546,7 @@ useSettingsStore.subscribe((state) => {
 - 데이터: 오늘의 질문 + `diaryAnswers[today]`
 - PIN 인증 후 접근
 - 질문 응답 입력 → `user_qa` 테이블 저장
+- `fixedInterestIds` 구독 → `generatePersonalizedQuestion()` 에 전달 → `INTEREST_TOPIC_MAP` 기반 관심사 주제 1개 + 일반 주제 1개 혼합 질문 생성
 
 ---
 
@@ -737,6 +740,27 @@ $$score = \sum \left(base\_weight \times \frac{30 - elapsed\_days}{30}\right), \
 
 트렌드는 관심사 미반영 — 세계/국내 실시간 트렌드 전용.
 
+### 11.6 관심사 적용 범위 (전체)
+
+| 적용 지점 | 방식 | 파일 |
+|-----------|------|------|
+| **뉴스 쿼리** | 관심사 상위 5개를 Tavily 쿼리에 삽입 | `useDataStore.js` |
+| **상세 AI 브리핑** | `Interest guidance:` 줄로 Groq 프롬프트에 포함 | `aiService.generateDetailedBriefing()` |
+| **단순 AI 브리핑** | 동일 패턴 — `keywordInterests` → `Interest guidance:` | `aiService.generateBriefing()` |
+| **Diary Q&A 질문** | `fixedInterestIds` → `INTEREST_TOPIC_MAP` → 관심사 주제 1개 + 일반 주제 1개 혼합 | `aiService.generatePersonalizedQuestion()` |
+| **AI 일기 자동 생성** | `interests` → `promptContext`에 포함, 관련 데이터 있으면 자연스럽게 언급 | `aiService.generateDiary()` |
+| **브리핑 스코어러 / 페르소나** | `fixedInterestIds` + `keywordInterests` 병합 → `interests` 배열 | `personaContext.buildPersonaContext()` |
+
+**INTEREST_TOPIC_MAP** (ko/en × 8): `news`, `tech`, `fashion`, `finance`, `health`, `food`, `entertainment`, `sports` → 각 언어별 자연어 주제 문구로 매핑. 관심사가 없으면 기존 `TOPIC_POOL` 랜덤 선택으로 fallback.
+
+**일기 언어 결정 흐름:**
+```
+resolveDiaryGenerationLanguage()  [diaryGenerationService.js, exported]
+  1. useSettingsStore.diaryLanguage === "ko" | "en" → 명시 설정 우선
+  2. 아니면 i18n.language → "en"/"ko" 매핑
+```
+`BriefingWidget`의 아침 자동일기(`ensureYesterdayDiaryForMorning`)와 자정 자동일기(`useMidnightTrigger → generateAndSaveDiaryForDate`) 모두 이 함수를 사용해 언어 일관성 보장.
+
 ---
 
 ## 12) 유틸리티 / 훅 / 상수
@@ -874,8 +898,19 @@ https://www.googleapis.com/auth/fitness.activity.read
 
 ## 18) 최근 반영 사항 (2026-05-09)
 
-- 뉴스/트렌드는 언어 변경 시 강제 재요청되고, 한국어 모드에서는 영어 응답이 와도 기사 제목/요약을 한국어로 후처리 번역해 표시
+### 2026-05-09 (2차) — 관심사 전체 적용 + 자동일기 일관성
 
+- **관심사 기반 Q&A 질문 생성**: `DiaryCard`가 `fixedInterestIds`를 `generatePersonalizedQuestion()`에 전달. `INTEREST_TOPIC_MAP`(ko/en × 8 카테고리)으로 관심사 주제 1개 + 일반 주제 1개 혼합 선택; 관심사 없으면 기존 랜덤 fallback 유지.
+- **단순 AI 브리핑 관심사 반영**: `generateBriefing()`(3줄 버전)에 `Interest guidance:` 줄 추가 — 기존 상세 브리핑과 동일 패턴으로 통일.
+- **자동일기 관심사 포함**: `generateDiary()`에 `interests` 파라미터 추가 → `promptContext`에 포함 → AI가 관련 트렌드/뉴스/주식 데이터와 연결해 언급.
+- **일기 생성 컨텍스트 보강**: `buildDiaryGenerationContext()`에서 `mergeInterestLists(fixedInterestIds, keywordInterests)` 포함 → 자정 자동일기(`useMidnightTrigger`)도 자동 수혜.
+- **아침 자동일기 언어 수정**: `ensureYesterdayDiaryForMorning()`이 이전엔 `language` 미전달(기본값 "ko" 고정)이었으나, 이제 `resolveDiaryGenerationLanguage()` 호출로 사용자 설정 언어 반영.
+- **페르소나 컨텍스트 통합**: `personaContext.buildPersonaContext()` — `fixedInterestIds`만 사용하던 것을 `mergeInterestLists(fixedInterestIds, keywordInterests)`로 변경, 브리핑 스코어러에 동적 키워드까지 전달.
+- **`resolveDiaryGenerationLanguage` export**: `diaryGenerationService.js`에서 export로 변경 → `BriefingWidget` 등 외부 모듈에서 일관된 언어 해결 함수 공유.
+
+### 2026-05-09 (1차)
+
+- 뉴스/트렌드는 언어 변경 시 강제 재요청되고, 한국어 모드에서는 영어 응답이 와도 기사 제목/요약을 한국어로 후처리 번역해 표시
 - 온보딩 관심사는 `user_settings.fixed_interests`, 연동 권한 선택은 `user_settings.onboarding_perms`로 서버 저장/복원
 - Date Details는 `Events` / `Tasks`를 동시에 보여주지 않고 탭처럼 하나씩만 전체 폭으로 표시
 - 위젯 deck은 마우스 엣지 호버 전환을 제거했고, 트랙패드 가로 스와이프는 위젯 섹션 안에서만 소비

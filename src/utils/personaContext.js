@@ -2,6 +2,7 @@ import { useAuthStore } from "../store/useAuthStore";
 import { useDataStore } from "../store/useDataStore";
 import { useDiaryStore } from "../store/useDiaryStore";
 import { useSettingsStore } from "../store/useSettingsStore";
+import { mergeInterestLists } from "./interests";
 import { formatLocalDate } from "./date";
 
 export const buildPersonaContext = ({
@@ -19,11 +20,13 @@ export const buildPersonaContext = ({
 		persona:
 			authState.persona ?? dataState.onboardingProfile?.persona ?? null,
 		age: dataState.onboardingProfile?.age ?? null,
-		interests:
-			dataState.onboardingProfile?.interests ??
+		interests: mergeInterestLists(
 			settingsState.fixedInterestIds ??
-			authState.selCats ??
-			[],
+				dataState.onboardingProfile?.interests ??
+				authState.selCats ??
+				[],
+			settingsState.keywordInterests ?? []
+		).slice(0, 10).map((i) => i.keyword),
 		job: null,
 		memo: includeMemo
 			? diaryState.getRecentMemoSummary?.({

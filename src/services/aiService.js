@@ -79,11 +79,46 @@ const TOPIC_POOL = {
 	],
 };
 
-function pickTopics(previousQuestions, count = 2, language = "ko") {
-	// 이미 물어본 질문에서 언급된 주제는 우선순위 낮춤 (단순 랜덤으로도 충분)
-	const pool = TOPIC_POOL[normalizeQuestionLanguage(language)] || TOPIC_POOL.ko;
-	const shuffled = [...pool].sort(() => Math.random() - 0.5);
-	return shuffled.slice(0, count);
+const INTEREST_TOPIC_MAP = {
+	ko: {
+		news: "최근에 관심 있게 본 뉴스나 시사 이슈",
+		tech: "관심 있는 기술이나 IT 제품, 앱",
+		fashion: "요즘 눈여겨보는 패션 아이템이나 스타일",
+		finance: "관심 있는 재테크나 경제 이슈",
+		health: "요즘 신경 쓰는 건강 습관이나 운동",
+		food: "먹고 싶거나 가 보고 싶은 음식이나 음식점",
+		entertainment: "요즘 즐겨 보는 드라마, 영화, 유튜브 등",
+		sports: "즐기거나 관심 있는 운동이나 스포츠 경기",
+	},
+	en: {
+		news: "recent news or current events you followed",
+		tech: "technology, gadgets, or apps you're curious about",
+		fashion: "fashion trends or items you've been eyeing",
+		finance: "money topics or investment ideas on your mind",
+		health: "health habits or wellness routines lately",
+		food: "food or restaurants you've been wanting to try",
+		entertainment: "movies, shows, or videos you've enjoyed recently",
+		sports: "sports or exercise you've been playing or following",
+	},
+};
+
+function pickTopics(previousQuestions, count = 2, language = "ko", fixedInterestIds = []) {
+	const resolvedLang = normalizeQuestionLanguage(language);
+	const pool = TOPIC_POOL[resolvedLang] || TOPIC_POOL.ko;
+	const interestMap = INTEREST_TOPIC_MAP[resolvedLang] || INTEREST_TOPIC_MAP.ko;
+
+	const interestTopics = (fixedInterestIds ?? [])
+		.map((id) => interestMap[id])
+		.filter(Boolean);
+
+	if (interestTopics.length === 0) {
+		return [...pool].sort(() => Math.random() - 0.5).slice(0, count);
+	}
+
+	const pickedInterest = interestTopics[Math.floor(Math.random() * interestTopics.length)];
+	const genericPool = [...pool].filter((t) => t !== pickedInterest);
+	const pickedGeneric = genericPool.sort(() => Math.random() - 0.5).slice(0, count - 1);
+	return [pickedInterest, ...pickedGeneric].slice(0, count);
 }
 
 const DAY_NAMES = {
@@ -213,6 +248,7 @@ export async function generatePersonalizedQuestion({
 	weatherCondition = "",
 	previousQuestions = [],
 	language,
+	fixedInterestIds = [],
 } = {}) {
 	const resolvedLanguage = normalizeQuestionLanguage(language);
 	const copy = QUESTION_COPY[resolvedLanguage];
@@ -225,7 +261,7 @@ export async function generatePersonalizedQuestion({
 		return pickFallbackQuestion(previousQuestions, resolvedLanguage);
 	}
 
-	const topics = pickTopics(previousQuestions, 2, resolvedLanguage);
+	const topics = pickTopics(previousQuestions, 2, resolvedLanguage, fixedInterestIds);
 	const contextParts = [
 		`${isWeekend ? copy.weekend : copy.weekday} / ${dayOfWeek}`,
 		city && weatherCondition
@@ -991,6 +1027,13 @@ export async function generateBriefing({ tone, length, context }) {
 		return `${title}:\n${pending.map((task) => `- ${task}`).join("\n")}`;
 	})();
 
+	const briefingKeywordInterests = Array.isArray(context?.keywordInterests)
+		? context.keywordInterests : [];
+	const briefingTopKeywords = briefingKeywordInterests.slice(0, 10).map((k) => k.keyword);
+	const briefingInterestsGuidance = briefingTopKeywords.length > 0
+		? `User's recent interest keywords: ${briefingTopKeywords.join(", ")}. Naturally incorporate relevant information into the briefing.`
+		: "";
+
 	const prompt = [
 		"You are a time-aware dashboard briefing AI.",
 		`Tone: ${tone}`,
@@ -999,6 +1042,7 @@ export async function generateBriefing({ tone, length, context }) {
 		`Mode guidance: ${timeProfile.desc}`,
 		"Write exactly 3 lines. Each line must be one sentence.",
 		"Do not use bullets, numbering, or headings.",
+		briefingInterestsGuidance ? `Interest guidance: ${briefingInterestsGuidance}` : "",
 		weatherSection,
 		newsSection,
 		trendsSection,
@@ -1613,6 +1657,7 @@ export async function generateDiary({
 	date = "",
 	wasActiveDay = false,
 	language = "ko",
+	interests = [],
 }) {
 	const resolvedLanguage = resolveDiaryLanguage(language);
 	const diaryCopy = getDiaryCopy(resolvedLanguage);
@@ -1655,6 +1700,9 @@ export async function generateDiary({
 		diaryAnswers: Array.isArray(diaryAnswers) ? diaryAnswers.slice(0, 3) : [],
 		memo: normalizeDiaryLineText(memo),
 		briefingText: normalizeDiaryLineText(briefingText),
+		interests: Array.isArray(interests)
+			? interests.map((i) => (typeof i === "string" ? i : i?.keyword)).filter(Boolean).slice(0, 8)
+			: [],
 	};
 
 	const systemPromptV2 = [
@@ -1675,6 +1723,7 @@ export async function generateDiary({
 		"- The schedule and completed lists will already be shown separately, so connect the day naturally instead of repeating every bullet verbatim.",
 		"- If memo exists, weave it in naturally as a factual note.",
 		"- If the day was inactive, mention that naturally.",
+		"- If user interests are listed and relevant data (trends, news, stocks) exists, briefly reference them naturally.",
 		"",
 		"Input data:",
 		JSON.stringify(promptContext, null, 2),

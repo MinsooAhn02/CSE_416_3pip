@@ -16,6 +16,7 @@ import {
 	generateDiary,
 	getTimeGreeting,
 } from "../../services/aiService";
+import { resolveDiaryGenerationLanguage } from "../../services/diaryGenerationService";
 
 /** 스켈레톤 라인 컴포넌트 */
 const SkeletonLine = ({ width = "100%" }) => (
@@ -183,6 +184,8 @@ const BriefingWidget = () => {
 				calEvents,
 				date: yesterdayDateStr,
 				wasActiveDay: false,
+				language: resolveDiaryGenerationLanguage(),
+				interests: effectiveInterests,
 			});
 			const normalized = String(generatedDiary || "").trim();
 			if (normalized) {
