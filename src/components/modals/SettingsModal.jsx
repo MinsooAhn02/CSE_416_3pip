@@ -1,18 +1,12 @@
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
 	X,
-	Moon,
-	Sun,
-	Image,
 	User,
 	LogOut,
 	GripVertical,
 	RefreshCw,
 	Sparkles,
-	Clock,
-	Calendar,
-	Timer,
 	ListOrdered,
 	Heart,
 	Plus,
@@ -28,7 +22,7 @@ import {
 import { useWidgetStore } from "../../store/useWidgetStore";
 import { useAuthStore } from "../../store/useAuthStore";
 import { useDiaryStore } from "../../store/useDiaryStore";
-import { WIDGET_LIST, STANDARD_WIDGETS, DEFAULT_PRIORITY_ORDER } from "../../constants";
+import { WIDGET_LIST, DEFAULT_PRIORITY_ORDER } from "../../constants";
 import {
 	buildFixedInterests,
 	getFixedInterestLabel,
@@ -114,20 +108,13 @@ const SettingsModal = () => {
 	const {
 		showSettings,
 		settingsTab,
-		theme,
-		bgImage,
-		clockStyle,
 		priorityOrder,
 		showFirstLoginBriefing,
 		fixedInterestIds,
 		keywordInterests,
 		setShowSettings,
 		setSettingsTab,
-		setTheme,
-		setBgImage,
-		removeBg,
 		pinLockMode,
-		setClockStyle,
 		setPriorityOrder,
 		setPinLockMode,
 		diaryLanguage,
@@ -158,7 +145,6 @@ const SettingsModal = () => {
 	const setOnboarded = (v) => {
 		useAuthStore.setState({ onboarded: v });
 	};
-	const bgRef = useRef(null);
 	const isKo = i18n.language?.toLowerCase().startsWith("ko");
 	const settingsCopy = useMemo(
 		() =>
@@ -169,10 +155,8 @@ const SettingsModal = () => {
 							widgets: "위젯 관리",
 							smart: "스마트 위젯",
 							priority: "데이터 우선순위",
-							clock: "시계 스타일",
 							briefing: "AI 브리핑",
 							interests: "관심사",
-							theme: "테마",
 							diary: "Diary",
 							profile: "프로필",
 						},
@@ -211,23 +195,6 @@ const SettingsModal = () => {
 							delete: "삭제",
 							placeholder: "키워드 입력...",
 							add: "추가",
-						},
-						clock: {
-							intro: "대시보드 상단의 시계 표시 형태를 선택하세요.",
-							options: {
-								digital: { label: "디지털", desc: "기본 숫자 시계" },
-								dateInfo: { label: "날짜 상세", desc: "연도·초 포함" },
-								analog: { label: "아날로그", desc: "원형 시계" },
-							},
-						},
-						theme: {
-							mode: "테마 모드",
-							dark: "다크",
-							light: "라이트",
-							background: "배경 이미지",
-							upload: "이미지 업로드",
-							remove: "배경 제거",
-							previewAlt: "배경 미리보기",
 						},
 						profile: {
 							noLogin: "로그인 정보 없음",
@@ -274,10 +241,8 @@ const SettingsModal = () => {
 							widgets: "Widget Management",
 							smart: "Smart Widgets",
 							priority: "Data Priority",
-							clock: "Clock Style",
 							briefing: "AI Briefing",
 							interests: "Interests",
-							theme: "Theme",
 							diary: "Diary",
 							profile: "Profile",
 						},
@@ -316,23 +281,6 @@ const SettingsModal = () => {
 							delete: "Delete",
 							placeholder: "Enter keyword...",
 							add: "Add",
-						},
-						clock: {
-							intro: "Choose how the clock appears at the top of the dashboard.",
-							options: {
-								digital: { label: "Digital", desc: "Default numeric clock" },
-								dateInfo: { label: "Detailed date", desc: "Includes year and seconds" },
-								analog: { label: "Analog", desc: "Round clock" },
-							},
-						},
-						theme: {
-							mode: "Theme mode",
-							dark: "Dark",
-							light: "Light",
-							background: "Background image",
-							upload: "Upload image",
-							remove: "Remove background",
-							previewAlt: "Background preview",
 						},
 						profile: {
 							noLogin: "No login info",
@@ -416,14 +364,6 @@ const SettingsModal = () => {
 
 	if (!showSettings) return null;
 
-	const handleBgUpload = (e) => {
-		const f = e.target.files?.[0];
-		if (!f) return;
-		const r = new FileReader();
-		r.onloadend = () => setBgImage(r.result);
-		r.readAsDataURL(f);
-	};
-
 	return (
 		<div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[20500] p-4">
 			<div
@@ -449,10 +389,8 @@ const SettingsModal = () => {
 							{ id: "widgets", label: settingsCopy.tabs.widgets },
 							{ id: "smart", label: settingsCopy.tabs.smart },
 							{ id: "priority", label: settingsCopy.tabs.priority },
-							{ id: "clock", label: settingsCopy.tabs.clock },
 							{ id: "briefing", label: settingsCopy.tabs.briefing },
 							{ id: "interests", label: settingsCopy.tabs.interests },
-							{ id: "theme", label: settingsCopy.tabs.theme },
 							{ id: "diary", label: settingsCopy.tabs.diary },
 							{ id: "profile", label: settingsCopy.tabs.profile },
 						].map((tab) => (
@@ -688,131 +626,6 @@ const SettingsModal = () => {
 											</button>
 										</div>
 									))}
-								</div>
-							</div>
-						)}
-						{settingsTab === "clock" && (
-							<div className="space-y-4">
-								<p className={`text-xs mb-2 ${muted}`}>
-									{settingsCopy.clock.intro}
-								</p>
-								<div className="grid grid-cols-3 gap-3">
-									{[
-										{
-											id: "digital",
-											label: settingsCopy.clock.options.digital.label,
-											desc: settingsCopy.clock.options.digital.desc,
-											icon: Timer,
-										},
-										{
-											id: "dateInfo",
-											label: settingsCopy.clock.options.dateInfo.label,
-											desc: settingsCopy.clock.options.dateInfo.desc,
-											icon: Calendar,
-										},
-										{
-											id: "analog",
-											label: settingsCopy.clock.options.analog.label,
-											desc: settingsCopy.clock.options.analog.desc,
-											icon: Clock,
-										},
-									].map((s) => (
-										<button
-											key={s.id}
-											onClick={() => setClockStyle(s.id)}
-											className={`flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-all ${
-												clockStyle === s.id
-													? "border-blue-500 bg-blue-500/20"
-													: isDark
-														? "border-white/10 bg-white/5 hover:bg-white/10"
-														: "border-gray-200 bg-gray-50 hover:bg-gray-100"
-											}`}
-										>
-											<s.icon
-												size={24}
-												className={
-													clockStyle === s.id ? "text-blue-400" : muted
-												}
-											/>
-										<span className="text-sm font-bold">{s.label}</span>
-										<span className={`text-[10px] font-bold ${muted}`}>{s.desc}</span>
-										</button>
-									))}
-								</div>
-							</div>
-						)}
-						{settingsTab === "theme" && (
-							<div className="space-y-6">
-								<div>
-									<p className="text-sm font-medium mb-3">{settingsCopy.theme.mode}</p>
-									<div className="flex gap-3">
-										{[
-											{
-												id: "dark",
-												label: settingsCopy.theme.dark,
-												icon: <Moon size={18} />,
-											},
-											{
-												id: "light",
-												label: settingsCopy.theme.light,
-												icon: <Sun size={18} />,
-											},
-										].map((t) => (
-											<button
-												key={t.id}
-												onClick={() => setTheme(t.id)}
-												className={`flex-1 flex items-center justify-center gap-2 p-4 rounded-xl border-2 transition-all ${
-													theme === t.id
-														? "border-blue-500 bg-blue-500/20"
-														: isDark
-															? "border-white/10 bg-white/5 hover:bg-white/10"
-															: "border-gray-200 bg-gray-50 hover:bg-gray-100"
-												}`}
-											>
-												{t.icon}
-												<span className="text-sm font-medium">{t.label}</span>
-											</button>
-										))}
-									</div>
-								</div>
-								<div>
-									<p className="text-sm font-medium mb-3">{settingsCopy.theme.background}</p>
-									<input
-										type="file"
-										ref={bgRef}
-										accept="image/*"
-										onChange={handleBgUpload}
-										className="hidden"
-									/>
-									<div className="flex gap-3">
-										<button
-											onClick={() => bgRef.current?.click()}
-											className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm border transition-colors ${
-												isDark
-													? "border-white/20 bg-white/5 hover:bg-white/10"
-													: "border-gray-200 bg-gray-50 hover:bg-gray-100"
-											}`}
-										>
-											<Image size={16} /> {settingsCopy.theme.upload}
-										</button>
-										{bgImage && (
-											<button
-												onClick={removeBg}
-												className="px-4 py-2 rounded-xl text-sm bg-red-500/20 text-red-400 hover:bg-red-500/30"
-											>
-												{settingsCopy.theme.remove}
-											</button>
-										)}
-									</div>
-									{bgImage && (
-										<div className="mt-3 rounded-xl overflow-hidden h-24">
-											<img
-												src={bgImage}
-												alt={settingsCopy.theme.previewAlt}
-												className="w-full h-full object-cover"
-											/>
-										</div>
-									)}
 								</div>
 							</div>
 						)}

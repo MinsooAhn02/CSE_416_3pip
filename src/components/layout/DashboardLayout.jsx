@@ -1,9 +1,7 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTheme } from "../../hooks/useTheme";
 import { useSettingsStore } from "../../store/useSettingsStore";
 import { useWidgetStore } from "../../store/useWidgetStore";
-import { useDataStore } from "../../store/useDataStore";
 import { useDiaryStore } from "../../store/useDiaryStore";
 import { DEFAULT_PRIORITY_ORDER } from "../../constants";
 
@@ -17,9 +15,7 @@ import HealthWidget from "../widgets/HealthWidget";
 import NewsWidget from "../widgets/NewsWidget";
 import SmartWidgetContent from "../widgets/SmartWidgetContent";
 
-/* ── v8: 1:3:3 Layout Architecture with Widget Scroll Box (REQ-WS-001) ── */
-
-// Standard Widgets for Middle Column (REQ-WS-002)
+/* ── Standard widget registry ── */
 const STANDARD_WIDGET_COMPONENTS = {
 	weather: WeatherWidget,
 	stocks: StocksWidget,
@@ -28,361 +24,122 @@ const STANDARD_WIDGET_COMPONENTS = {
 	news: NewsWidget,
 };
 
-// Stable wrapper to avoid re-mount on every render
 const SmartWidget = ({ keyword }) => <SmartWidgetContent keyword={keyword} />;
 
-const WHEEL_GESTURE_EPSILON = 2;
-const WHEEL_PANEL_THRESHOLD = 42;
-const WHEEL_NAV_COOLDOWN_MS = 420;
-const WHEEL_GESTURE_RESET_MS = 160;
-
-const chunkArray = (items, size) => {
-	if (!Array.isArray(items) || items.length === 0) return [];
-	const chunks = [];
-	for (let i = 0; i < items.length; i += size) {
-		chunks.push(items.slice(i, i + size));
-	}
-	return chunks;
-};
-
-const getSmartPayloadWeight = (payload) => {
-	if (!payload || typeof payload !== "object") return 0;
-	if (!Array.isArray(payload.sections)) return 0;
-
-	return payload.sections.reduce((acc, section) => {
-		const bulletCount = Array.isArray(section?.bullets)
-			? section.bullets.length
-			: 0;
-		const itemCount = Array.isArray(section?.items) ? section.items.length : 0;
-		const tagCount = Array.isArray(section?.tags) ? section.tags.length : 0;
-		return acc + bulletCount + itemCount + tagCount;
-	}, 0);
-};
+/* Width of the collapsible right panel in px */
+const PANEL_W = 292;
+const DASHBOARD_VIEWPORT_H = "calc(100vh - 6rem)";
 
 const DashboardLayout = () => {
-	const { isDark, borderCls } = useTheme();
+	const { isDark } = useTheme();
 	const smartKeywords = useWidgetStore((s) => s.smartKeywords);
 	const vis = useWidgetStore((s) => s.vis);
-	const smartWidgetData = useWidgetStore((s) => s.smartWidgetData);
-	const trends = useDataStore((s) => s.trends);
-	const trendsResults = useDataStore((s) => s.trendsResults);
-	const newsResults = useDataStore((s) => s.newsResults);
-	const stocks = useDataStore((s) => s.stocks);
-	const pinModalVisible = useDiaryStore((s) => s.pinModalVisible);
 	const priorityOrder =
 		useSettingsStore((s) => s.priorityOrder) || DEFAULT_PRIORITY_ORDER;
-	const [activePanel, setActivePanel] = useState(0);
-	const [cardsPerView, setCardsPerView] = useState(2);
-	const deckRef = useRef(null);
-	const lastWheelTriggerAt = useRef(0);
-	const lastWheelEventAt = useRef(0);
-	const wheelGestureAccumulator = useRef(0);
+	const pinModalVisible = useDiaryStore((s) => s.pinModalVisible);
 
+	/* Panel open/close state — synced with TopNav hamburger via custom event */
+	const [panelOpen, setPanelOpen] = useState(true);
+
+	useEffect(() => {
+		const handler = (e) => {
+			const next = e.detail?.open ?? !panelOpen;
+			setPanelOpen(next);
+			// Notify TopNav of the actual new state so its icon stays in sync
+			window.dispatchEvent(
+				new CustomEvent("widget-panel-state", { detail: { open: next } }),
+			);
+		};
+		window.addEventListener("toggle-widget-panel", handler);
+		return () => window.removeEventListener("toggle-widget-panel", handler);
+	}, [panelOpen]);
+
+	/* Build ordered list of widget IDs (respects priorityOrder + vis) */
 	const expandedWidgetOrder = useMemo(() => {
-		const normalized = [];
-
-		priorityOrder.forEach((widgetId) => {
-			if (widgetId === "smart") {
-				if (smartKeywords?.length > 0) {
-					smartKeywords.forEach((kw) => normalized.push(`smart_${kw}`));
-				}
+		const list = [];
+		priorityOrder.forEach((id) => {
+			if (id === "smart") {
+				(smartKeywords ?? []).forEach((kw) => list.push(`smart_${kw}`));
 				return;
 			}
-			// vis[widgetId] === false면 숨김 (X 버튼으로 닫은 위젯)
-			if (vis[widgetId] === false) return;
-			normalized.push(widgetId);
+			if (vis[id] === false) return;
+			list.push(id);
 		});
-
-		return normalized;
+		return list;
 	}, [priorityOrder, smartKeywords, vis]);
 
-	const renderStandardWidget = useCallback((widgetId) => {
-		let Component = STANDARD_WIDGET_COMPONENTS[widgetId];
-
-		// Handle smart widgets (dynamic AI content)
-		if (!Component && widgetId.startsWith("smart_")) {
-			const keyword = widgetId.slice(6);
-			Component = () => <SmartWidget keyword={keyword} />;
+	/* Render a single widget by id */
+	const renderWidget = useCallback((id) => {
+		let Component = STANDARD_WIDGET_COMPONENTS[id];
+		if (!Component && id.startsWith("smart_")) {
+			const kw = id.slice(6);
+			Component = () => <SmartWidget keyword={kw} />;
 		}
-
 		if (!Component) return null;
-
-		return <Component />;
+		return (
+			<div key={id} className="min-w-0">
+				<Component />
+			</div>
+		);
 	}, []);
-
-	const isDenseWidget = useCallback(
-		(widgetId) => {
-			if (widgetId === "news") return (newsResults?.length || 0) > 5;
-			if (widgetId === "trends") {
-				const score = (trends?.length || 0) + (trendsResults?.length || 0);
-				return score > 7;
-			}
-			if (widgetId === "stocks") return (stocks?.length || 0) > 4;
-
-			if (widgetId.startsWith("smart_")) {
-				const keyword = widgetId.slice(6);
-				const payload = smartWidgetData?.[keyword];
-				return getSmartPayloadWeight(payload) > 8;
-			}
-
-			return false;
-		},
-		[newsResults, smartWidgetData, stocks, trends, trendsResults],
-	);
-
-	const widgetStacks = useMemo(() => {
-		const compact = chunkArray(expandedWidgetOrder, 2);
-		if (compact.length === 0) return compact;
-
-		const adaptiveStacks = [];
-		let carry = [];
-
-		expandedWidgetOrder.forEach((widgetId) => {
-			if (isDenseWidget(widgetId)) {
-				if (carry.length > 0) {
-					adaptiveStacks.push(carry);
-					carry = [];
-				}
-				adaptiveStacks.push([widgetId]);
-				return;
-			}
-
-			carry.push(widgetId);
-			if (carry.length === 2) {
-				adaptiveStacks.push(carry);
-				carry = [];
-			}
-		});
-
-		if (carry.length > 0) adaptiveStacks.push(carry);
-		return adaptiveStacks;
-	}, [expandedWidgetOrder, isDenseWidget]);
-
-	const deckItems = useMemo(() => {
-		const baseItems = [
-			{
-				id: "briefing-pack",
-				render: () => (
-					<div className="flex min-h-0 flex-col gap-4">
-						<BriefingWidget />
-						<DiaryCard />
-					</div>
-				),
-			},
-		];
-
-		widgetStacks.forEach((widgetGroup, stackIndex) => {
-			baseItems.push({
-				id: `widget-stack-${stackIndex}`,
-				render: () => (
-					<div className="flex min-h-0 flex-col gap-4">
-						{widgetGroup.map((widgetId) => (
-							<div key={`stack-${stackIndex}-${widgetId}`} className="min-h-0">
-								{renderStandardWidget(widgetId)}
-							</div>
-						))}
-					</div>
-				),
-			});
-		});
-
-		return baseItems;
-	}, [renderStandardWidget, widgetStacks]);
-
-	useEffect(() => {
-		if (typeof window === "undefined") return;
-
-		const mediaQuery = window.matchMedia("(min-width: 1280px)");
-		const syncCardsPerView = () => setCardsPerView(mediaQuery.matches ? 2 : 1);
-
-		syncCardsPerView();
-
-		if (typeof mediaQuery.addEventListener === "function") {
-			mediaQuery.addEventListener("change", syncCardsPerView);
-			return () => mediaQuery.removeEventListener("change", syncCardsPerView);
-		}
-
-		mediaQuery.addListener(syncCardsPerView);
-		return () => mediaQuery.removeListener(syncCardsPerView);
-	}, []);
-
-	const maxStartIndex = Math.max(deckItems.length - cardsPerView, 0);
-	const totalPanels = maxStartIndex + 1;
-
-	useEffect(() => {
-		setActivePanel((prev) => Math.min(prev, maxStartIndex));
-	}, [maxStartIndex]);
-
-	const movePanel = useCallback(
-		(delta) => {
-			setActivePanel((prev) => {
-				const next = prev + delta;
-				if (next < 0 || next > maxStartIndex) return prev;
-				return next;
-			});
-		},
-		[maxStartIndex],
-	);
-
-	const handleDeckWheel = useCallback(
-		(event) => {
-			const interactiveTarget = event.target?.closest?.(
-				"input, textarea, select, [contenteditable='true']",
-			);
-			if (interactiveTarget) return;
-
-			const horizontalIntent = event.shiftKey ? event.deltaY : event.deltaX;
-			const absHorizontal = Math.abs(horizontalIntent);
-			const absVertical = Math.abs(event.deltaY);
-			const isHorizontalGesture =
-				event.shiftKey || absHorizontal > absVertical;
-			if (!isHorizontalGesture || absHorizontal < WHEEL_GESTURE_EPSILON) {
-				return;
-			}
-
-			event.preventDefault();
-
-			const now = Date.now();
-			if (now - lastWheelEventAt.current > WHEEL_GESTURE_RESET_MS) {
-				wheelGestureAccumulator.current = 0;
-			}
-			lastWheelEventAt.current = now;
-
-			const previousAccumulated = wheelGestureAccumulator.current;
-			if (
-				previousAccumulated !== 0 &&
-				Math.sign(previousAccumulated) !== Math.sign(horizontalIntent)
-			) {
-				wheelGestureAccumulator.current = 0;
-			}
-			wheelGestureAccumulator.current += horizontalIntent;
-
-			if (now - lastWheelTriggerAt.current < WHEEL_NAV_COOLDOWN_MS) {
-				return;
-			}
-			if (
-				Math.abs(wheelGestureAccumulator.current) < WHEEL_PANEL_THRESHOLD
-			) {
-				return;
-			}
-
-			const direction = wheelGestureAccumulator.current > 0 ? 1 : -1;
-			const canMoveLeft = direction < 0 && activePanel > 0;
-			const canMoveRight = direction > 0 && activePanel < totalPanels - 1;
-			wheelGestureAccumulator.current = 0;
-
-			if (!canMoveLeft && !canMoveRight) {
-				return;
-			}
-
-			lastWheelTriggerAt.current = now;
-			movePanel(direction);
-		},
-		[activePanel, movePanel, totalPanels],
-	);
-
-	useEffect(() => {
-		const deckElement = deckRef.current;
-		if (!deckElement) return undefined;
-
-		const nativeWheelHandler = (event) => handleDeckWheel(event);
-		deckElement.addEventListener("wheel", nativeWheelHandler, {
-			passive: false,
-		});
-
-		return () =>
-			deckElement.removeEventListener("wheel", nativeWheelHandler);
-	}, [handleDeckWheel]);
-
-	const dotCount = totalPanels;
-	const slideTranslate = activePanel * (100 / cardsPerView);
-	const cardBasis = `${100 / cardsPerView}%`;
 
 	return (
-		<div className="mx-auto mt-0.5 w-full max-w-[96vw] px-2 pb-20 xl:px-4">
-			<div className="grid grid-cols-1 gap-4 pb-2 xl:gap-2 xl:grid-cols-[minmax(0,0.4fr)_minmax(0,1fr)_minmax(0,1.7fr)_minmax(0,0.4fr)] xl:items-start">
-				<aside className="min-h-0 pb-3 xl:col-start-2 xl:sticky xl:top-4 xl:max-h-[calc(100vh-11rem)] xl:overflow-y-auto custom-scrollbar">
-					<CalendarWidget />
-				</aside>
-
-				<section
-					ref={deckRef}
-					className="relative min-h-0 pb-3 xl:col-start-3"
-					data-widget-overlay-host="true"
-					style={{ overscrollBehaviorX: "contain" }}
+		<div
+			className="mx-auto w-full max-w-[90vw] px-4 pb-6 mt-1"
+			data-widget-overlay-host="true"
+		>
+			{/* ── Main 3-column layout ── */}
+			<div
+				className="flex items-start"
+				style={{
+					gap: panelOpen ? 15 : 0,
+					transition: "gap 0.38s cubic-bezier(0.4,0,0.2,1)",
+				}}
+			>
+				{/* ── Col A + B: Briefing+Diary | Calendar ── */}
+				<div
+					className="flex-1 min-w-0 grid items-start gap-5"
+					style={{ gridTemplateColumns: "1.3fr 1.5fr" }}
 				>
-					{!pinModalVisible && (
-						<div className="absolute -top-11 right-2 z-20 flex items-center gap-2 xl:-top-12">
-							<button
-								type="button"
-								onClick={() => movePanel(-1)}
-								disabled={activePanel === 0}
-								className={`h-9 w-9 rounded-full border flex items-center justify-center transition-all ${
-									activePanel === 0
-										? "cursor-not-allowed opacity-40"
-										: "opacity-90 hover:opacity-100"
-								} ${
-									isDark
-										? `bg-morning-dark-card ${borderCls}`
-										: "bg-white border-gray-200"
-								}`}
-								aria-label="Previous widget panel"
-							>
-								<ChevronLeft size={16} />
-							</button>
-
-							<button
-								type="button"
-								onClick={() => movePanel(1)}
-								disabled={activePanel === totalPanels - 1}
-								className={`h-9 w-9 rounded-full border flex items-center justify-center transition-all ${
-									activePanel === totalPanels - 1
-										? "cursor-not-allowed opacity-40"
-										: "opacity-90 hover:opacity-100"
-								} ${
-									isDark
-										? `bg-morning-dark-card ${borderCls}`
-										: "bg-white border-gray-200"
-								}`}
-								aria-label="Next widget panel"
-							>
-								<ChevronRight size={16} />
-							</button>
+					{/* Col A: AI Briefing + Diary */}
+					<div
+						className="flex flex-col gap-5 min-h-0"
+						style={{ height: DASHBOARD_VIEWPORT_H }}
+					>
+						<div className="basis-3/5 min-h-0">
+							<BriefingWidget />
 						</div>
-					)}
-
-					<div className="overflow-hidden pt-1 pb-2">
-						<div
-							className="flex transition-transform duration-500 ease-out"
-							style={{ transform: `translateX(-${slideTranslate}%)` }}
-						>
-							{deckItems.map((item) => (
-								<section
-									key={item.id}
-									className="min-h-0 min-w-0 flex-shrink-0 px-2"
-									style={{
-										width: cardBasis,
-										maxWidth: cardBasis,
-										flexBasis: cardBasis,
-									}}
-								>
-									{item.render()}
-								</section>
-							))}
+						<div className="basis-2/5 min-h-0">
+							<DiaryCard />
 						</div>
 					</div>
-				</section>
-			</div>
 
-			<div className="mt-4 flex items-center justify-center gap-2">
-				{Array.from({ length: dotCount }).map((_, i) => (
-					<button
-						key={`carousel-dot-${i}`}
-						onClick={() => setActivePanel(i)}
-						className={`h-2.5 rounded-full transition-all ${activePanel === i ? "w-6 bg-blue-500" : isDark ? "w-2.5 bg-gray-600" : "w-2.5 bg-gray-300"}`}
-						aria-label={`Go to panel ${i + 1}`}
-					/>
-				))}
+					{/* Col B: Calendar (sticky) */}
+					<div className={`${pinModalVisible ? "" : "sticky top-[3.75rem]"}`}>
+						<CalendarWidget />
+					</div>
+				</div>
+
+				{/* ── Col C: Collapsible widget panel ── */}
+				<div
+					className="shrink-0 overflow-hidden"
+					style={{
+						width: panelOpen ? PANEL_W : 0,
+						transition: "width 0.38s cubic-bezier(0.4,0,0.2,1)",
+						opacity: panelOpen ? 1 : 0,
+						transitionProperty: "width, opacity",
+					}}
+				>
+					<div
+						className="custom-scrollbar overflow-y-auto flex flex-col gap-3.5 pb-6 pr-0.5"
+						style={{
+							width: PANEL_W,
+							maxHeight: DASHBOARD_VIEWPORT_H,
+						}}
+					>
+						{expandedWidgetOrder.map((id) => renderWidget(id))}
+					</div>
+				</div>
 			</div>
 		</div>
 	);

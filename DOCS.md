@@ -1,6 +1,6 @@
 # MorningBriefing.AI - 통합 프로젝트 문서
 
-> 최종 정리일: 2026-05-09 (2차)
+> 최종 정리일: 2026-05-11 (3차)
 > 관리 정책: 문서는 DOCS.md 단일 파일로 유지
 
 ---
@@ -228,6 +228,7 @@ Fallback: user.id 지연 시 1200ms 타임아웃 후 fetchAll() 단독 실행
 | `showFirstLoginModal` | boolean | 메모리 |
 | `fixedInterestIds` | string[] | DB (`user_settings.fixed_interests`) |
 | `keywordInterests` | `[{keyword, category, score}]` | DB (`user_settings.keyword_interests`) |
+| `diaryLanguage` | `"app"` \| `"ko"` \| `"en"` | localStorage. `"app"`=i18n 언어 따름, 나머지는 명시 고정 |
 
 **주요 액션:**
 
@@ -785,6 +786,9 @@ resolveDiaryGenerationLanguage()  [diaryGenerationService.js, exported]
 |------|------------|
 | `contentUtils.js` | `cleanContent(text)`: 마크다운 헤더·볼드·이탤릭·링크, 해시태그(`#word`), "follow us/subscribe/sign up/newsletter/click here" 제거, 줄바꿈 → 공백 정규화 |
 | `storage.js` | `load(key, fallback)`, `save(key, value)`: localStorage 래퍼 |
+| `interests.js` | 고정(온보딩) + 동적(학습) 관심사 통합 관리. `normalizeFixedInterestIds(items)` (소문자 중복제거), `buildFixedInterests(ids)` (ID → `{id, keyword, label, category, score:1000, source:"onboarding", fixed:true}` 객체 변환), `mergeInterestLists(fixedIds, dynamicInterests)` (score 내림차순 병합), `getTopInterestKeywords(fixedIds, dynamic, limit)` (상위 N개 키워드 문자열 배열), `getInterestFingerprint(fixedIds, dynamic)` (top keywords join "+" → 캐시 키용). 8개 고정 ID: news·tech·fashion·finance·health·food·entertainment·sports |
+| `taskRecurrence.js` | 할일 날짜 처리. `doesTaskOccurOnDate(task, dateStr)` (task.date/due/occurrenceDate와 YYYY-MM-DD 비교), `isTaskCompletedOnDate(task, dateStr)` (날짜 일치 + completed=true 여부), `materializeTasksForDate(tasks, dateStr)` (날짜 기준 필터 + occurrenceDate·seriesStartDate 정규화), `getTaskDisplayDate(task)` (날짜 문자열 앞 10자 추출) |
+| `personaContext.js` | `buildPersonaContext(fixedInterestIds, keywordInterests, persona)` — `mergeInterestLists()`로 통합된 관심사 목록을 브리핑 스코어러/Groq 프롬프트에 전달 |
 
 ### 12.2 src/hooks/
 
@@ -898,6 +902,16 @@ https://www.googleapis.com/auth/fitness.activity.read
 | 음성 기능 (voiceOn) | 상태는 존재, UI/TTS 구현 없음 |
 | keyword_score_log 자동 집계 | runPersonalizationBatch 호출됨, 내부 상세 로직 미확인 |
 | NewsDetailModal | 파일 존재하나 미사용 (직접 URL 이동으로 대체) |
+| 위젯 상세 팝업 모달 | news/trends/stocks 상세보기 좌우 버튼 넘기기 미구현 |
+| 달력 헤더 클릭 날짜 이동 | "May 2026" 클릭 시 드롭다운 이동 미구현 |
+| 스마트 위젯 포맷 정의 | 일반 위젯 양식 기반 포맷 미확정 |
+| Diary PIN 설정 기능 | 설정 내 PIN 저장/수정, 본인 확인 질문 authenticate 미구현 |
+| 글씨 크기 전체 위젯 적용 | 현재 trends 위젯에만 적용됨 |
+| 설정 모달 크기 고정 | 왼쪽 패널 클릭 시 오른쪽 패널 높이 변동 → 스크롤 처리 필요 |
+| AI 브리핑 품질 개선 | 형식 고정 (날짜→날씨→일정→diary→관심사 순서), 새로고침 시 내용 변동성 제거, 모달 레이아웃 정갈화 |
+| Stocks 통화 단위 표시 | 미장 $, 국장 ₩ 표시 (normalizeStockItem 수정 필요) |
+| Stocks Edge Function 배포 | 로컬 수정 완료, Supabase Dashboard 수동 배포 후 KOSPI/NASDAQ/SP500 정상값 확인 필요 |
+| i18n 전체 적용 완료 | 대시보드, 설정, 브리핑 전 영역에 언어 설정 반영 마무리 |
 
 ---
 
@@ -912,6 +926,15 @@ https://www.googleapis.com/auth/fitness.activity.read
 
 ## 18) 최근 반영 사항
 
+### 2026-05-11 — 대시보드 레이아웃·설정 정리·브리핑 카드 개선
+
+- **대시보드 레이아웃 안정화** (`DashboardLayout.jsx`): 좌우 컬럼 gap 및 상단 간격 조정, 공통 viewport height 계산값으로 통일 → 스크롤 시 전체 컬럼이 같이 밀리는 버그 수정. 롤백 사항: 어디를 스크롤해도 오른쪽 위젯이 스크롤되게 하던 wheel 라우팅 로직은 문제 발생으로 원상복구(제거).
+- **좌측 2카드 비율 레이아웃** (`DashboardLayout.jsx`): AI Briefing : Diary Daily Card = 세로 기준 3/5 : 2/5 분할. 두 카드 모두 `h-full / min-h-0` 기반으로 할당 높이 채움.
+- **설정 모달 단순화** (`SettingsModal.jsx`): 시계 스타일(clockStyle) 설정 섹션 제거, 테마 설정 섹션 제거, 관련 탭/아이콘/상태 참조 정리.
+- **브리핑 길이 설정 전역 제거**: `BriefingWidget.jsx`의 1/3/5줄 선택 UI·로직 삭제, 길이는 `medium` 고정. `App.jsx`에서 `BriefSettingsModal` 연결 제거. `BriefSettingsModal.jsx` 파일 삭제. `useSettingsStore`의 `bLen`, `showBriefSettings` 및 setter 제거. `FirstLoginBriefingModal.jsx`의 길이 설정 의존성 제거. l10n 관련 번역 키 정리.
+- **브리핑 카드 미리보기 방식 변경** (`BriefingWidget.jsx`): 대시보드 카드에서 요약 대신 상세 브리핑 내용 미리보기 표시. 컨테이너 실제 높이 기준으로 텍스트 계산 → 넘치는 내용 `...` 처리, 하단 "클릭하여 상세 브리핑 보기" 문구가 가려지지 않도록 레이아웃 보정.
+- **버그 수정**: `useCallback is not defined` 에러 → React import에 `useCallback` 추가. 오른쪽 위젯 컬럼 내부 스크롤 유지, 브리핑/다이어리 본문 스크롤 제거 방향으로 정리.
+
 ### 2026-05-11 — Stocks 위젯 DnD 재정렬 + 지수 fetch 수정
 
 - **Stocks 모달 drag-and-drop 재정렬**: `@hello-pangea/dnd` 추가, compact 3열 카드 레이아웃, 순서 변경 시 `useSettingsStore.stockSymbols` 갱신
@@ -924,6 +947,11 @@ https://www.googleapis.com/auth/fitness.activity.read
 - **Stooq fallback 개선**: 커스텀 심볼에 대해 `sym.us` 시도 후 0이면 bare `sym` 재시도 (단일 URL → candidates 순차 loop)
 - **i18n 키 추가**: `widgets.stocks.drag_to_reorder`, `invalid_ticker`, `remove_symbol`, `common.view_more`
 - ⚠️ **배포 대기**: `stocks` Edge Function 로컬 수정 완료, Supabase Dashboard에서 수동 배포 후 KOSPI/NASDAQ/SP500 정상값 확인 필요
+
+### 2026-05-11 — 스크롤 이벤트 변경 가이드
+
+- 대시보드 전역 `wheel` 캡처 방식은 기본 스크롤 동작을 깨뜨릴 수 있으므로 기본 금지.
+- 스크롤 동작 변경은 각 컬럼의 `overflow`/`height`만으로 해결하고, 전역 이벤트 라우팅은 사용자 확인 후 제한적으로 적용.
 
 ### 2026-05-09 (2차) — 관심사 전체 적용 + 자동일기 일관성
 

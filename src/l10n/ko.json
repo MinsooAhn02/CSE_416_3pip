@@ -71,10 +71,6 @@
     "click_for_detail": "클릭하여 상세 브리핑 확인",
     "yesterday_notes_applied": "어제의 메모가 브리핑에 반영되었습니다",
     "last_updated": "마지막 업데이트",
-    "length_settings": "브리핑 길이 설정",
-    "length_short": "간략 (1줄)",
-    "length_medium": "기본 (3줄)",
-    "length_long": "상세 (5줄)",
     "loading_detail": "상세 브리핑을 불러오는 중입니다..."
   },
   "calendar": {

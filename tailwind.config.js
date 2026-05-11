@@ -5,26 +5,29 @@ export default {
 	theme: {
 		extend: {
 			colors: {
-				// Global palette theme (eye-comfort, clearly separated light/dark)
+				// Linear Slate — Light mode (eye-comfort neutral + indigo accent)
 				"morning-light": {
-					page: "#F7F3E9",
-					card: "#FFFDF8",
-					cardSecondary: "#F1EBDD",
-					hover: "#E6DECD",
-					accent: "#5D7FCB",
-					text: "#2F2A22",
-					muted: "rgba(47, 42, 34, 0.62)",
+					page: "#F2F2F5",
+					card: "#FFFFFF",
+					cardSecondary: "#F5F5F8",
+					hover: "#E2E2E9",
+					accent: "#4F46E5",
+					text: "#1A1A27",
+					muted: "rgba(26, 26, 39, 0.42)",
 				},
-				// Dark mode tuned for readability without harsh contrast
+				// Linear Slate — Dark mode (deep indigo-tinted dark)
 				"morning-dark": {
-					page: "#1A1B1E",
-					card: "#25272C",
-					cardSecondary: "#2F3238",
-					hover: "#3A3D45",
-					accent: "#84A0CF",
-					text: "#ECE8DF",
-					muted: "rgba(236, 232, 223, 0.66)",
+					page: "#13131C",
+					card: "#1E1E2C",
+					cardSecondary: "#26263A",
+					hover: "#2E2E42",
+					accent: "#6366F1",
+					text: "#E8E8F0",
+					muted: "rgba(232, 232, 240, 0.50)",
 				},
+			},
+			fontFamily: {
+				sans: ['"DM Sans"', '"Noto Sans KR"', "sans-serif"],
 			},
 		},
 	},

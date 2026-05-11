@@ -71,10 +71,6 @@
     "click_for_detail": "Click for detailed briefing",
     "yesterday_notes_applied": "✨ Yesterday's memo has been applied to the briefing",
     "last_updated": "Last updated",
-    "length_settings": "Briefing Length Settings",
-    "length_short": "Short (1 line)",
-    "length_medium": "Medium (3 lines)",
-    "length_long": "Long (5 lines)",
     "loading_detail": "Loading detailed briefing..."
   },
   "calendar": {

@@ -26,8 +26,8 @@ const FirstLoginBriefingModal = () => {
 	const showFirstLoginModal = useSettingsStore((s) => s.showFirstLoginModal);
 	const dismissFirstLoginModal = useSettingsStore((s) => s.dismissFirstLoginModal);
 	const tone = useSettingsStore((s) => s.tone);
-	const length = useSettingsStore((s) => s.bLen) || "medium";
 	const priorityOrder = useSettingsStore((s) => s.priorityOrder) || [];
+	const BRIEFING_LENGTH = "medium";
 
 	// Data context
 	const weather = useDataStore((s) => s.weather);
@@ -82,7 +82,7 @@ const FirstLoginBriefingModal = () => {
 				const result = await generateDetailedBriefing({ 
 					context, 
 					tone, 
-					length,
+					length: BRIEFING_LENGTH,
 					priorityOrder,  // REQ-US-006: Pass priority order to AI
 				});
 				if (result) {
@@ -96,7 +96,7 @@ const FirstLoginBriefingModal = () => {
 		};
 
 		generateBriefing();
-	}, [showFirstLoginModal, weather, stocks, trends, calEvents, todos, tone, length]);
+	}, [showFirstLoginModal, weather, stocks, trends, calEvents, todos, tone]);
 
 	// Countdown timer for dismiss button (REQ-AJ-004: block dismissal for 10 seconds)
 	useEffect(() => {
@@ -148,7 +148,7 @@ const FirstLoginBriefingModal = () => {
 			const result = await generateDetailedBriefing({ 
 				context, 
 				tone, 
-				length,
+				length: BRIEFING_LENGTH,
 				priorityOrder,  // REQ-US-006: Pass priority order to AI
 			});
 			if (result) {

@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { Sparkles, RefreshCw, X, Settings } from "lucide-react";
+import { Sparkles, RefreshCw, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useTheme } from "../../hooks/useTheme";
 import { useSettingsStore } from "../../store/useSettingsStore";
@@ -53,9 +53,8 @@ const BriefingSkeleton = () => (
 const BriefingWidget = () => {
 	const { isDark, cardCls, cardShadowCls, muted } = useTheme();
 	const { t, i18n } = useTranslation();
+	const BRIEFING_LENGTH = "medium";
 	const tone = useSettingsStore((s) => s.tone);
-	const bLen = useSettingsStore((s) => s.bLen) || "medium";
-	const setBLen = useSettingsStore((s) => s.setBLen);
 	const priorityOrder = useSettingsStore((s) => s.priorityOrder) || [];
 	const fixedInterestIds = useSettingsStore((s) => s.fixedInterestIds) || [];
 	const keywordInterests = useSettingsStore((s) => s.keywordInterests) || [];
@@ -105,34 +104,13 @@ const BriefingWidget = () => {
 	const [isLoading, setIsLoading] = useState(false);
 	const [isExpanded, setIsExpanded] = useState(false);
 	const [lastGenerated, setLastGenerated] = useState(null);
-	const [showLengthSettings, setShowLengthSettings] = useState(false);
-	const [dropdownPos, setDropdownPos] = useState({ top: 0, right: 0 });
-	const settingsBtnRef = useRef(null);
 	const autoDiaryStatusRef = useRef({ date: null, generated: false, attempted: false });
-
-	const lengthOptions = [
-		{ value: "short", label: t("briefing.length_short"), lines: 1 },
-		{ value: "medium", label: t("briefing.length_medium"), lines: 3 },
-		{ value: "long", label: t("briefing.length_long"), lines: 5 },
-	];
-
-	// Get current line limit based on bLen
-	const currentLineLimit =
-		lengthOptions.find((opt) => opt.value === bLen)?.lines || 3;
+	const detailPreviewContainerRef = useRef(null);
+	const detailPreviewRef = useRef(null);
+	const [dashboardDetailPreview, setDashboardDetailPreview] = useState("");
 
 	// 마운트 시 오늘의 Q&A 답변 로드
 	useEffect(() => { fetchTodayQA(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-	// Update dropdown position when settings button is clicked
-	useEffect(() => {
-		if (showLengthSettings && settingsBtnRef.current) {
-			const rect = settingsBtnRef.current.getBoundingClientRect();
-			setDropdownPos({
-				top: rect.bottom + 4,
-				right: window.innerWidth - rect.right,
-			});
-		}
-	}, [showLengthSettings]);
 
 	useEffect(() => {
 		if (isExpanded) {
@@ -262,20 +240,20 @@ const BriefingWidget = () => {
 			activeWidgetIds.length > 0;
 		if (!dataReady) return;
 		initialGenDoneRef.current = true;
-		generateBriefingVersion(bLen, true);
+		generateBriefingVersion(BRIEFING_LENGTH, true);
 		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [weather, calEvents, stocks, trends, activeWidgetIds, bLen]);
+	}, [weather, calEvents, stocks, trends, activeWidgetIds]);
 
 	// 톤이 변경되면 즉시 재생성 (초기 생성이 끝난 뒤에만)
 	useEffect(() => {
 		if (!initialGenDoneRef.current) return;
 		if (isLoading) return;
-		generateBriefingVersion(bLen, true);
+		generateBriefingVersion(BRIEFING_LENGTH, true);
 		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [tone, bLen]);
+	}, [tone]);
 
 	// Get the current briefing based on selected length
-	const currentBriefing = briefingVersions[bLen];
+	const currentBriefing = briefingVersions[BRIEFING_LENGTH];
 
 	const displayBriefing = useMemo(() => {
 		if (currentBriefing) {
@@ -290,32 +268,21 @@ const BriefingWidget = () => {
 		};
 	}, [currentBriefing, t]);
 
-	// Split summary into sentences (by . ! ?) for line limiting
-	const splitIntoSentences = (text) => {
-		if (!text) return [];
-		// Split by sentence endings, keeping the punctuation
-		return text
-			.split(/(?<=[.!?])\s+/)
-			.map((s) => s.trim())
-			.filter(Boolean);
-	};
-
-	// All sentences from summary
-	const allSentences = splitIntoSentences(displayBriefing.summary);
-
-	// Limit sentences for widget card based on selected length (1, 3, or 5)
-	const summaryLines = allSentences.slice(0, currentLineLimit);
-
 	const detailLines = (displayBriefing.detail || "")
 		.split("\n")
 		.map((line) => line.trim().replace(/^[*#`]+|[*#`]+$/g, "").trim())
 		.filter((line) => line && !line.startsWith("{") && !line.startsWith("}") && !line.startsWith('"'));
+	const dashboardDetailText = useMemo(() => {
+		const detailText = detailLines.join(" ").trim();
+		const fallback = displayBriefing.summary || t("briefing.loading_detail");
+		return (detailText || fallback).replace(/\s+/g, " ").trim();
+	}, [detailLines, displayBriefing.summary, t]);
 
 	const greeting = useMemo(() => getTimeGreeting(), [i18n.language]);
 
 	const handleRefresh = (e) => {
 		e.stopPropagation();
-		generateBriefingVersion(bLen, true);
+		generateBriefingVersion(BRIEFING_LENGTH, true);
 	};
 
 	const handleWidgetClick = () => {
@@ -328,22 +295,64 @@ const BriefingWidget = () => {
 		setIsExpanded(false);
 	};
 
-	const handleGearClick = (e) => {
-		e.stopPropagation();
-		setShowLengthSettings(!showLengthSettings);
-	};
+	const fitDashboardDetailPreview = useCallback(() => {
+		const el = detailPreviewRef.current;
+		const containerEl = detailPreviewContainerRef.current;
+		if (!el || !containerEl) return;
 
-	const handleLengthChange = (newLength) => {
-		setBLen(newLength);
-		setShowLengthSettings(false);
-		// No need to regenerate - we already have all versions prepared
-	};
+		const fullText = dashboardDetailText;
+		if (!fullText) {
+			setDashboardDetailPreview((prev) => (prev === "" ? prev : ""));
+			return;
+		}
+
+		const availableHeight = containerEl.clientHeight;
+		if (availableHeight <= 0) return;
+		el.style.height = `${availableHeight}px`;
+		el.style.maxHeight = `${availableHeight}px`;
+
+		el.textContent = fullText;
+		if (el.scrollHeight <= el.clientHeight) {
+			setDashboardDetailPreview((prev) => (prev === fullText ? prev : fullText));
+			return;
+		}
+
+		let low = 0;
+		let high = fullText.length;
+		let bestFit = "...";
+
+		while (low <= high) {
+			const mid = Math.floor((low + high) / 2);
+			const candidate = `${fullText.slice(0, mid).trimEnd()}...`;
+			el.textContent = candidate;
+			if (el.scrollHeight <= el.clientHeight) {
+				bestFit = candidate;
+				low = mid + 1;
+			} else {
+				high = mid - 1;
+			}
+		}
+
+		setDashboardDetailPreview((prev) => (prev === bestFit ? prev : bestFit));
+	}, [dashboardDetailText]);
+
+	useEffect(() => {
+		fitDashboardDetailPreview();
+	}, [fitDashboardDetailPreview]);
+
+	useEffect(() => {
+		const containerEl = detailPreviewContainerRef.current;
+		if (!containerEl || typeof ResizeObserver === "undefined") return undefined;
+		const observer = new ResizeObserver(() => fitDashboardDetailPreview());
+		observer.observe(containerEl);
+		return () => observer.disconnect();
+	}, [fitDashboardDetailPreview]);
 
 	return (
 		<>
 			<div
 				onClick={handleWidgetClick}
-				className={`rounded-2xl border p-5 ${cardShadowCls} transition-colors duration-300 cursor-pointer hover:shadow-sm ${cardCls}`}
+				className={`rounded-2xl border p-5 ${cardShadowCls} transition-colors duration-300 cursor-pointer hover:shadow-sm flex flex-col overflow-hidden h-full min-h-0 ${cardCls}`}
 			>
 				<div className="flex items-center justify-between mb-4">
 					<div className="flex items-center gap-2">
@@ -351,59 +360,6 @@ const BriefingWidget = () => {
 						<h2 className="font-bold text-sm">{t("briefing.title")}</h2>
 					</div>
 					<div className="flex items-center gap-1">
-						<div className="relative">
-							<button
-								ref={settingsBtnRef}
-								onClick={handleGearClick}
-								className={`p-1.5 rounded-full transition-colors ${
-									isDark
-										? "hover:bg-morning-dark-hover"
-										: "hover:bg-morning-light-hover/30"
-								}`}
-								title={t("briefing.length_settings")}
-							>
-								<Settings size={14} />
-							</button>
-
-							{showLengthSettings &&
-								createPortal(
-									<AnimatePresence>
-										<motion.div
-											initial={{ opacity: 0, y: -10 }}
-											animate={{ opacity: 1, y: 0 }}
-											exit={{ opacity: 0, y: -10 }}
-											className={`fixed rounded-lg border shadow-lg min-w-[140px] z-[9999] ${
-												isDark
-													? "bg-morning-dark-card border-morning-dark-hover"
-													: "bg-white border-morning-light-hover/30"
-											}`}
-											style={{
-												top: dropdownPos.top,
-												right: dropdownPos.right,
-											}}
-											onClick={(e) => e.stopPropagation()}
-										>
-											{lengthOptions.map((opt) => (
-												<button
-													key={opt.value}
-													onClick={() => handleLengthChange(opt.value)}
-													className={`w-full px-3 py-2 text-left text-xs transition-colors first:rounded-t-lg last:rounded-b-lg ${
-														bLen === opt.value
-															? "bg-blue-500 text-white"
-															: isDark
-																? "hover:bg-morning-dark-hover"
-																: "hover:bg-morning-light-hover/20"
-													}`}
-												>
-													{opt.label}
-												</button>
-											))}
-										</motion.div>
-									</AnimatePresence>,
-									document.body,
-								)}
-						</div>
-
 						<button
 							onClick={handleRefresh}
 							disabled={isLoading}
@@ -430,7 +386,7 @@ const BriefingWidget = () => {
 					{t("briefing.today_briefing")}
 				</p>
 
-				<div className="space-y-2">
+				<div ref={detailPreviewContainerRef} className="space-y-2 flex-1 min-h-0 pr-1">
 					{isLoading && !hasBriefings ? (
 						<div className="space-y-2">
 							<SkeletonLine width="90%" />
@@ -438,11 +394,12 @@ const BriefingWidget = () => {
 							<SkeletonLine width="85%" />
 						</div>
 					) : (
-						summaryLines.map((line, idx) => (
-							<p key={idx} className={`text-xs leading-relaxed ${muted}`}>
-								{line}
-							</p>
-						))
+						<p
+							ref={detailPreviewRef}
+							className={`text-xs leading-relaxed ${muted} h-full overflow-hidden break-words`}
+						>
+							{dashboardDetailPreview}
+						</p>
 					)}
 				</div>
 
@@ -450,15 +407,6 @@ const BriefingWidget = () => {
 					{t("briefing.click_for_detail")}
 				</p>
 			</div>
-
-			{showLengthSettings &&
-				createPortal(
-					<div
-						className="fixed inset-0 z-[9998]"
-						onClick={() => setShowLengthSettings(false)}
-					/>,
-					document.body,
-				)}
 
 			{createPortal(
 				<AnimatePresence>

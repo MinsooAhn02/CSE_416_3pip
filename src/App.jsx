@@ -18,7 +18,6 @@ import DashboardLayout from "./components/layout/DashboardLayout";
 import FixedButtons from "./components/layout/FixedButtons";
 import OnboardingModal from "./components/modals/OnboardingModal";
 import SettingsModal from "./components/modals/SettingsModal";
-import BriefSettingsModal from "./components/modals/BriefSettingsModal";
 import FirstLoginBriefingModal from "./components/modals/FirstLoginBriefingModal";
 import WidgetSettingsModal from "./components/modals/WidgetSettingsModal";
 
@@ -232,13 +231,14 @@ const App = () => {
 			<TopNav />
 
 			{/* v8: 1:3:3 Dashboard Layout Architecture with Widget Scroll Box (REQ-WS-001) */}
+			{/* add gap */}
+			<div className="h-3" />
 			<DashboardLayout />
 
 			{/* Modals & Fixed Components */}
 			<FixedButtons />
 			<OnboardingModal />
 			<SettingsModal />
-			<BriefSettingsModal />
 			<FirstLoginBriefingModal />
 			<WidgetSettingsModal />
 

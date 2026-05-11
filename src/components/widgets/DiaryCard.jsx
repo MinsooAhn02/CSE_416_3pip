@@ -91,7 +91,7 @@ const DiaryCard = () => {
 
 	return (
 		<div
-			className={`rounded-2xl border p-5 ${cardShadowCls} transition-colors duration-300 ${cardCls}`}
+			className={`rounded-2xl border p-5 ${cardShadowCls} transition-colors duration-300 ${cardCls} h-full min-h-0 flex flex-col overflow-hidden`}
 		>
 			{/* 헤더 */}
 			<div className="flex items-center gap-2 mb-4">
@@ -115,7 +115,7 @@ const DiaryCard = () => {
 
 			{/* 답변 입력 */}
 			<textarea
-				className={`w-full h-20 border rounded-xl p-3 text-sm resize-none outline-none focus:ring-2 focus:ring-blue-500/30 transition-all ${inputCls} ${
+				className={`w-full flex-1 min-h-[5.5rem] border rounded-xl p-3 text-sm resize-none overflow-hidden outline-none focus:ring-2 focus:ring-blue-500/30 transition-all ${inputCls} ${
 					saved ? "opacity-50" : ""
 				}`}
 				value={answerText}

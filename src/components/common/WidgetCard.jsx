@@ -14,6 +14,8 @@ const WidgetCard = ({
 	onRefresh,
 	refreshing,
 	refreshIcon: RefreshIcon,
+	apiStatus,
+	apiError,
 }) => {
 	const { i18n } = useTranslation();
 	const { isDark, cardCls, cardShadowCls, muted, hoverCls } = useTheme();
@@ -24,22 +26,25 @@ const WidgetCard = ({
 
 	return (
 		<div
-			className={`backdrop-blur-md border rounded-2xl ${noPad ? "" : "p-5"} ${cardShadowCls} overflow-hidden transition-all ${cardCls} h-full`}
+			className={`border rounded-[14px] ${noPad ? "" : "p-4"} ${cardShadowCls} overflow-hidden transition-all ${cardCls} h-full`}
 		>
 			<div
-				className={`flex items-center justify-between ${noPad ? "p-5 pb-0" : "mb-3"}`}
+				className={`flex items-center justify-between ${noPad ? "px-4 pt-4 pb-0" : "mb-3"}`}
 			>
 				<div className="flex items-center gap-2">
 					<DragHandle />
 					{Icon && (
 						<Icon
-							size={18}
-							className={isDark ? "text-blue-300" : "text-blue-600"}
+							size={15}
+							className={
+								isDark ? "text-morning-dark-accent" : "text-morning-light-accent"
+							}
 						/>
 					)}
-					<h3 className="font-semibold text-sm">{title}</h3>
+					<h3 className="font-semibold text-[13px]">{title}</h3>
 				</div>
-				<div className="flex items-center gap-1.5">
+
+				<div className="flex items-center gap-1">
 					{headerMeta && (
 						<span className={`text-[10px] ${muted}`}>{headerMeta}</span>
 					)}
@@ -50,7 +55,7 @@ const WidgetCard = ({
 							title={refreshTitle}
 						>
 							<RefreshIcon
-								size={14}
+								size={13}
 								className={refreshing ? "animate-spin" : ""}
 							/>
 						</button>
@@ -61,13 +66,13 @@ const WidgetCard = ({
 							className={`${muted} hover:opacity-100 transition-opacity p-1 rounded-lg ${hoverCls}`}
 							title={closeWidgetTitle}
 						>
-							<X size={14} />
+							<X size={13} />
 						</button>
 					)}
 				</div>
 			</div>
 
-			<div className={noPad ? "p-5 pt-3" : ""}>{children}</div>
+			<div className={noPad ? "px-4 pt-3 pb-4" : ""}>{children}</div>
 		</div>
 	);
 };

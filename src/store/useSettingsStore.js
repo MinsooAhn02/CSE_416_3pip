@@ -99,9 +99,7 @@ export const useSettingsStore = create((set, get) => ({
 	]),
 	showSettings: false,
 	settingsTab: "widgets",
-	showBriefSettings: false,
 	tone: load("mb_tone", "friendly"),
-	bLen: load("mb_blen", "medium"),
 	voiceOn: load("mb_voice", false),
 	pinLockMode: load("mb_pin_lock_mode", DEFAULT_PIN_LOCK_MODE),
 	diaryLanguage: load("mb_diary_language", DEFAULT_DIARY_LANGUAGE),
@@ -154,10 +152,6 @@ export const useSettingsStore = create((set, get) => ({
 		if (data.tone) {
 			patch.tone = data.tone;
 			save("mb_tone", data.tone);
-		}
-		if (data.briefing_length) {
-			patch.bLen = data.briefing_length;
-			save("mb_blen", data.briefing_length);
 		}
 		if (data.voice_on != null) {
 			patch.voiceOn = data.voice_on;
@@ -227,17 +221,10 @@ export const useSettingsStore = create((set, get) => ({
 			settingsTab:
 				t === "routine" ? "widgets" : t === "privacy" ? "diary" : t,
 		}),
-	setShowBriefSettings: (v) => set({ showBriefSettings: v }),
 	setTone: (t) => {
 		set({ tone: t });
 		save("mb_tone", t);
 		syncSettings({ tone: t });
-		notifySaved();
-	},
-	setBLen: (l) => {
-		set({ bLen: l });
-		save("mb_blen", l);
-		syncSettings({ briefing_length: l });
 		notifySaved();
 	},
 	setVoiceOn: (v) => {
