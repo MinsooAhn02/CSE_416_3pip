@@ -39,7 +39,7 @@ const LoginScreen = () => {
 				<div className="text-center">
 					<h1 className="text-5xl font-bold tracking-tight mb-2">
 						Morning
-						<span className="text-blue-400">Brief</span>.AI
+						<span className="text-blue-400">Briefing</span>.AI
 					</h1>
 					<p className="text-white/60 text-lg">{copy.subtitle}</p>
 				</div>
