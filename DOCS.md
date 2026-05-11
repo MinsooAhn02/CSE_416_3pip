@@ -506,9 +506,23 @@ useSettingsStore.subscribe((state) => {
 
 #### StocksWidget
 
-- 데이터: `stocks [{name, value, change, up}]`
-- 심볼별 현재가 + 등락폭 표시
-- 심볼 변경 시 `fetchStocks` 재호출
+- 데이터: `stocks [{symbol, name, value, change, up}]` (`symbol` 필드는 drag 재정렬 시 순서 저장에 사용)
+- 위젯 본체 최대 표시 `WIDGET_LIMIT = 6`, 초과 시 "전체 보기" 버튼 → 모달 진입
+- 심볼 선택/추가/삭제:
+  - 기본 4종(KOSPI, NASDAQ, S&P 500, USD/KRW) 토글
+  - 커스텀 티커 직접 입력 → Edge Function으로 유효성 검증 후 추가 (`validateStockSymbol`)
+  - 순서는 `useSettingsStore.stockSymbols` 배열로 영구 저장
+- Drag-and-drop 재정렬 (모달):
+  - `@hello-pangea/dnd` 사용, compact 3열 카드 레이아웃 (`flex flex-wrap`, `calc(33.333% - 5.5px)`)
+  - Framer Motion `style={{ x: "-50%", y: "-50%" }}` 이 CSS transform containing block을 만들어 `position: fixed` 드래그 좌표를 망가뜨림 → `createPortal(card, document.body)`로 탈출
+  - 드래그 중 카드가 backdrop(`z-9999`) 뒤에 숨는 문제 → `zIndex: 10001` 강제 override
+- Edge Function (`supabase/functions/stocks/index.ts`) fetch 전략:
+  1. **TwelveData** (primary): `KS11/XKOS`, `IXIC`, `SPX`, `USD/KRW` 심볼 사용
+  2. TwelveData 오류 **또는 `price <= 0`** → **Stooq CSV fallback**
+     - 고정 심볼 매핑: `KS11→^ks11`, `IXIC→^ndq`, `SPX→^spx`
+     - 커스텀 심볼: `sym.us` 시도 후 price=0이면 bare `sym` 재시도 (순차 loop, 첫 번째 양수 값 반환)
+  3. USD/KRW: TwelveData 실패 시 `open.er-api.com` fallback
+  - ⚠️ Edge Function 로컬 수정 후 반드시 Supabase Dashboard에서 수동 배포 필요
 
 #### HealthWidget
 
@@ -896,7 +910,22 @@ https://www.googleapis.com/auth/fitness.activity.read
 
 ---
 
-## 18) 최근 반영 사항 (2026-05-09)
+## 18) 최근 반영 사항
+
+### 2026-05-11 — Stocks 위젯 DnD 재정렬 + 지수 fetch 수정
+
+- **Stocks 모달 drag-and-drop 재정렬**: `@hello-pangea/dnd` 추가, compact 3열 카드 레이아웃, 순서 변경 시 `useSettingsStore.stockSymbols` 갱신
+- **드래그 중 카드 사라짐 수정**: Framer Motion transform context 탈출을 위해 `createPortal(card, document.body)` 적용 + backdrop(z-9999) 위에 노출되도록 `zIndex: 10001` override
+- **커스텀 심볼 추가/삭제**: 직접 입력 → Edge Function 유효성 검증(`validateStockSymbol`) → 추가. X 버튼으로 개별 삭제
+- **Stocks 지수 0 표시 3중 수정** (`supabase/functions/stocks/index.ts`):
+  1. `symbolMap`: ETF 대리 심볼(EWY/QQQ/SPY) → 실 지수 심볼(KS11/IXIC/SPX) 교체
+  2. TwelveData `price <= 0` 시 Stooq fallback 발동 조건 추가 (기존엔 에러 코드 있을 때만 발동)
+  3. Stooq 심볼 맵 복원: `KS11→^ks11`, `IXIC→^ndq`, `SPX→^spx`
+- **Stooq fallback 개선**: 커스텀 심볼에 대해 `sym.us` 시도 후 0이면 bare `sym` 재시도 (단일 URL → candidates 순차 loop)
+- **i18n 키 추가**: `widgets.stocks.drag_to_reorder`, `invalid_ticker`, `remove_symbol`, `common.view_more`
+- ⚠️ **배포 대기**: `stocks` Edge Function 로컬 수정 완료, Supabase Dashboard에서 수동 배포 후 KOSPI/NASDAQ/SP500 정상값 확인 필요
+
+### 2026-05-09 (2차) — 관심사 전체 적용 + 자동일기 일관성
 
 ### 2026-05-09 (2차) — 관심사 전체 적용 + 자동일기 일관성
 

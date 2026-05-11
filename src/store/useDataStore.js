@@ -226,7 +226,19 @@ const getUserId = () => {
 	return useAuthStore.getState()?.user?.id ?? null;
 };
 
-const toCacheRowId = (userId, cacheKey) => `u:${userId}:${cacheKey}`;
+const shortHash = (str) => {
+	let h = 5381;
+	for (let i = 0; i < str.length; i++) {
+		h = (((h << 5) + h) ^ str.charCodeAt(i)) >>> 0;
+	}
+	return h.toString(36);
+};
+
+const toCacheRowId = (userId, cacheKey) => {
+	const raw = `u:${userId}:${cacheKey}`;
+	if (raw.length <= 64) return raw;
+	return `h:${userId.slice(0, 8)}:${shortHash(raw)}`;
+};
 
 /**
  * DB 캐시 읽기 - 1시간 접속시간 기반.
@@ -334,7 +346,7 @@ const normalizeStockSymbols = (symbols) => {
 		),
 	);
 	if (unique.length === 0) return defaultStockSymbols;
-	return unique.slice(0, 4);
+	return unique;
 };
 
 const normalizeReadableText = (value) =>
@@ -628,12 +640,19 @@ const normalizeGroqWeather = (payload) => {
 /* ── 주식 정규화 ── */
 const normalizeStockItem = (item) => {
 	if (!item) return null;
-	if ("name" in item && "value" in item) return item;
+	if ("name" in item && "value" in item) {
+		// Cached item — backfill symbol if missing (old cache format)
+		if (!("symbol" in item)) {
+			return { ...item, symbol: item.name === "S&P 500" ? "SP500" : item.name };
+		}
+		return item;
+	}
 
 	const numericChange = Number(item.change ?? 0);
 	const numericPrice = Number(item.price ?? 0);
 
 	return {
+		symbol: item.symbol,
 		name: item.symbol === "SP500" ? "S&P 500" : item.symbol,
 		value: numberFormatter.format(numericPrice),
 		change:
@@ -990,6 +1009,16 @@ export const useDataStore = create((set, get) => ({
 			get().setApiStatus("stocks", "error");
 		} finally {
 			set((s) => ({ loading: { ...s.loading, stocks: false } }));
+		}
+	},
+
+	validateStockSymbol: async (symbol) => {
+		try {
+			const edge = await invokeEdgeDetailed("stocks", { symbols: [symbol] });
+			if (!edge?.ok || !Array.isArray(edge.data) || edge.data.length === 0) return false;
+			return Number(edge.data[0]?.price ?? 0) > 0;
+		} catch {
+			return false;
 		}
 	},
 

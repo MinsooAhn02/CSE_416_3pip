@@ -18,6 +18,7 @@
     "more": "More",
     "show_more": "{{count}} more",
     "show_more_plain": "Show more",
+    "view_more": "View all ({{count}} more)",
     "just_now": "Just now",
     "minutes_ago": "{{count}}m ago",
     "before_refresh": "Before refresh",
@@ -183,10 +184,13 @@
       "change": "Change",
       "volume": "Volume",
       "symbol_settings": "Symbol Settings",
-      "select_symbols": "Select symbols (max 4)",
+      "select_symbols": "Select symbols to display",
       "custom_input": "Custom input (e.g., AAPL)",
       "loading": "Loading stocks data...",
-      "no_data": "No stocks data available."
+      "no_data": "No stocks data available.",
+      "invalid_ticker": "\"{{symbol}}\" is not a valid ticker. Try AAPL, TSLA, NVDA...",
+      "remove_symbol": "Remove symbol",
+      "drag_to_reorder": "Drag to reorder"
     },
     "trends": {
       "title": "Live Trends",

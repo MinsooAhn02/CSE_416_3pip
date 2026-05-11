@@ -18,6 +18,7 @@
     "more": "더 보기",
     "show_more": "{{count}}건 더 보기",
     "show_more_plain": "더보기",
+    "view_more": "전체 보기 ({{count}}개 더)",
     "just_now": "방금 갱신",
     "minutes_ago": "{{count}}분 전",
     "before_refresh": "갱신 전",
@@ -183,10 +184,13 @@
       "change": "변동",
       "volume": "거래량",
       "symbol_settings": "심볼 설정",
-      "select_symbols": "표시 심볼 선택 (최대 4개)",
+      "select_symbols": "표시할 심볼 선택",
       "custom_input": "직접 입력 (예: AAPL)",
       "loading": "주식/환율 데이터를 불러오는 중...",
-      "no_data": "표시할 주식/환율 데이터가 없습니다."
+      "no_data": "표시할 주식/환율 데이터가 없습니다.",
+      "invalid_ticker": "\"{{symbol}}\"은 유효하지 않은 티커입니다. AAPL, TSLA, NVDA 등을 시도해 보세요.",
+      "remove_symbol": "심볼 삭제",
+      "drag_to_reorder": "드래그하여 순서 변경"
     },
     "trends": {
       "title": "실시간 트렌드",

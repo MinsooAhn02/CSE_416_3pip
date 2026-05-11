@@ -28,21 +28,33 @@ function isTwelveError(payload: any) {
 
 async function fetchStooqPrice(alphaSymbol: string): Promise<number | null> {
 	const map: Record<string, string> = {
-		EWY: "ewy.us",
-		QQQ: "qqq.us",
-		SPY: "spy.us",
+		KS11: "^ks11",   // KOSPI Composite
+		IXIC: "^ndq",    // NASDAQ Composite
+		SPX:  "^spx",    // S&P 500
+		EWY:  "ewy.us",
+		QQQ:  "qqq.us",
+		SPY:  "spy.us",
 	};
-	const stooqSymbol = map[alphaSymbol] ?? `${alphaSymbol.toLowerCase()}.us`;
-	const url = `https://stooq.com/q/l/?s=${encodeURIComponent(stooqSymbol)}&f=sd2t2ohlcv&h&e=csv`;
-	const res = await fetch(url);
-	if (!res.ok) return null;
-	const csv = await res.text();
-	const lines = csv.trim().split("\n");
-	if (lines.length < 2) return null;
-	const row = lines[1].split(",");
-	const close = parseFloat(row[6]);
-	if (!Number.isFinite(close) || close <= 0) return null;
-	return close;
+	const sym = alphaSymbol.toLowerCase();
+	const candidates = map[alphaSymbol]
+		? [map[alphaSymbol]]
+		: [`${sym}.us`, sym];          // try US exchange first, then bare symbol
+	for (const stooqSymbol of candidates) {
+		const url = `https://stooq.com/q/l/?s=${encodeURIComponent(stooqSymbol)}&f=sd2t2ohlcv&h&e=csv`;
+		try {
+			const res = await fetch(url);
+			if (!res.ok) continue;
+			const csv = await res.text();
+			const lines = csv.trim().split("\n");
+			if (lines.length < 2) continue;
+			const row = lines[1].split(",");
+			const close = parseFloat(row[6]);
+			if (Number.isFinite(close) && close > 0) return close;
+		} catch {
+			continue;
+		}
+	}
+	return null;
 }
 
 async function fetchUsdKrwFallback(): Promise<number | null> {
@@ -81,9 +93,9 @@ serve(async (req) => {
 
 		// Internal symbol mapping -> TwelveData symbols
 		const symbolMap: Record<string, string> = {
-			KOSPI: "EWY", // KOSPI proxy ETF
-			NASDAQ: "QQQ",
-			SP500: "SPY",
+			KOSPI:  "KS11",     // KOSPI Composite Index
+			NASDAQ: "IXIC",     // NASDAQ Composite
+			SP500:  "SPX",      // S&P 500 Index
 			USDKRW: "USD/KRW",
 		};
 
@@ -109,6 +121,11 @@ serve(async (req) => {
 						const price = Number(data?.close ?? 0);
 						const change = Number(data?.change ?? 0);
 						const percent = normalizePercent(data?.percent_change, change);
+						// TwelveData returned 0 — try er-api fallback
+						if (!Number.isFinite(price) || price <= 0) {
+							const fallback = await fetchUsdKrwFallback().catch(() => null);
+							if (fallback) return { symbol: sym, price: fallback, change: 0, changePercent: "0%" };
+						}
 						return {
 							symbol: sym,
 							price: Number.isFinite(price) ? price : 0,
@@ -117,8 +134,9 @@ serve(async (req) => {
 						};
 					}
 
-					// For stocks/ETFs
-					const url = `https://api.twelvedata.com/quote?symbol=${encodeURIComponent(tdSymbol)}&apikey=${encodeURIComponent(apiKey)}`;
+					// For stocks/ETFs (KS11 needs the exchange qualifier for TwelveData)
+					const exchange = tdSymbol === "KS11" ? "&exchange=XKOS" : "";
+					const url = `https://api.twelvedata.com/quote?symbol=${encodeURIComponent(tdSymbol)}${exchange}&apikey=${encodeURIComponent(apiKey)}`;
 					const data = await fetchJsonWithTimeout(url, 7000);
 					if (isTwelveError(data)) {
 						const fallbackPrice = await fetchStooqPrice(tdSymbol).catch(
@@ -135,6 +153,14 @@ serve(async (req) => {
 					const price = Number(data?.close ?? 0);
 					const change = Number(data?.change ?? 0);
 					const percent = normalizePercent(data?.percent_change, change);
+
+					// TwelveData returned 0 for this symbol — try Stooq fallback
+					if (!Number.isFinite(price) || price <= 0) {
+						const fallbackPrice = await fetchStooqPrice(tdSymbol).catch(() => null);
+						if (fallbackPrice) {
+							return { symbol: sym, price: fallbackPrice, change: 0, changePercent: "0%" };
+						}
+					}
 
 					return {
 						symbol: sym,
