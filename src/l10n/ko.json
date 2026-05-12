@@ -18,6 +18,7 @@
     "more": "더 보기",
     "show_more": "{{count}}건 더 보기",
     "show_more_plain": "더보기",
+    "show_less": "접기",
     "view_more": "전체 보기 ({{count}}개 더)",
     "just_now": "방금 갱신",
     "minutes_ago": "{{count}}분 전",

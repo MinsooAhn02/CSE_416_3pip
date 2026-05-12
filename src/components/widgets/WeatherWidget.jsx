@@ -15,7 +15,9 @@ const WeatherWidget = () => {
 	const loading = useDataStore((s) => s.loading.weather);
 	const error = useDataStore((s) => s.errors.weather);
 	const apiStatus = useDataStore((s) => s.apiStatus.weather ?? null);
-	const usingDefaultLocation = useDataStore((s) => s.usingDefaultWeatherLocation);
+	const usingDefaultLocation = useDataStore(
+		(s) => s.usingDefaultWeatherLocation,
+	);
 	const manualWeatherCity = useDataStore((s) => s.manualWeatherCity);
 	const fetchWeather = useDataStore((s) => s.fetchWeather);
 	const setManualWeatherCity = useDataStore((s) => s.setManualWeatherCity);
@@ -92,7 +94,9 @@ const WeatherWidget = () => {
 									{displayTemp}
 									{unitLabel}
 								</p>
-								<p className={`text-xs ${isDark ? "text-gray-400" : "text-slate-500"}`}>
+								<p
+									className={`text-xs ${isDark ? "text-gray-400" : "text-slate-500"}`}
+								>
 									{weather.city} · {weather.condition}
 								</p>
 								{(usingDefaultLocation || manualWeatherCity) && (
@@ -102,7 +106,8 @@ const WeatherWidget = () => {
 												onClick={() => setShowCityInput(true)}
 												className={`text-[10px] flex items-center gap-1 ${isDark ? "text-blue-400 hover:text-blue-300" : "text-blue-500 hover:text-blue-600"}`}
 											>
-												<MapPin size={9} /> {manualWeatherCity.displayName} · Change
+												<MapPin size={9} /> {manualWeatherCity.displayName} ·
+												Change
 											</button>
 										) : (
 											<button
@@ -115,7 +120,10 @@ const WeatherWidget = () => {
 									</div>
 								)}
 								{showCityInput && (
-									<form onSubmit={handleCitySubmit} className="mt-1.5 flex items-center gap-1">
+									<form
+										onSubmit={handleCitySubmit}
+										className="mt-1.5 flex items-center gap-1"
+									>
 										<input
 											autoFocus
 											type="text"
@@ -178,24 +186,38 @@ const WeatherWidget = () => {
 						<div className={`p-2 rounded-lg text-center ${secondaryBgCls}`}>
 							<Droplets size={14} className="mx-auto mb-1 text-blue-400" />
 							<p className="text-xs font-medium">{weather.humidity}%</p>
-							<p className={`text-[10px] ${isDark ? "text-gray-400" : "text-slate-400"}`}>{t("widgets.weather.humidity")}</p>
+							<p
+								className={`text-[10px] ${isDark ? "text-gray-400" : "text-slate-400"}`}
+							>
+								{t("widgets.weather.humidity")}
+							</p>
 						</div>
 						<div className={`p-2 rounded-lg text-center ${secondaryBgCls}`}>
 							<Cloud size={14} className="mx-auto mb-1 text-gray-400" />
 							<p className="text-xs font-medium">{weather.precipitation}%</p>
-							<p className={`text-[10px] ${isDark ? "text-gray-400" : "text-slate-400"}`}>{t("widgets.weather.precipitation")}</p>
+							<p
+								className={`text-[10px] ${isDark ? "text-gray-400" : "text-slate-400"}`}
+							>
+								{t("widgets.weather.precipitation")}
+							</p>
 						</div>
 						<div className={`p-2 rounded-lg text-center ${secondaryBgCls}`}>
 							<Wind size={14} className="mx-auto mb-1 text-green-400" />
 							<p className="text-xs font-medium">{weather.airQuality}</p>
-							<p className={`text-[10px] ${isDark ? "text-gray-400" : "text-slate-400"}`}>{t("widgets.weather.air_quality")}</p>
+							<p
+								className={`text-[10px] ${isDark ? "text-gray-400" : "text-slate-400"}`}
+							>
+								{t("widgets.weather.air_quality")}
+							</p>
 						</div>
 					</div>
 				</div>
 			) : error ? (
 				<p className="text-[11px] text-red-400">{error}</p>
 			) : (
-				<p className="text-[11px] text-red-400">{t("widgets.weather.no_data")}</p>
+				<p className="text-[11px] text-red-400">
+					{t("widgets.weather.no_data")}
+				</p>
 			)}
 		</WidgetCard>
 	);

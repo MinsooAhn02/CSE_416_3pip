@@ -7,11 +7,11 @@ import { useWidgetStore } from "../../store/useWidgetStore";
 import WidgetCard from "../common/WidgetCard";
 
 const MAX_ITEMS = {
-	small:  7,
-	medium: 5,
-	large:  4,
+	small:  2,
+	medium: 3,
+	large:  3,
 };
-const MAX_EXPANDED = 12;
+const MAX_EXPANDED = 6;
 
 const TrendsWidget = () => {
 	const { isDark, secondaryBgCls, borderCls, muted } = useTheme();
@@ -72,6 +72,14 @@ const TrendsWidget = () => {
 						className={`${fontCls} ${muted} hover:opacity-100 transition-opacity`}
 					>
 						{t("common.show_more_plain")}
+					</button>
+				)}
+				{expanded && (
+					<button
+						onClick={() => setExpanded(false)}
+						className={`${fontCls} ${muted} hover:opacity-100 transition-opacity`}
+					>
+						{t("common.show_less")}
 					</button>
 				)}
 			</div>

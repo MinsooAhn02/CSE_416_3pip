@@ -51,14 +51,14 @@ const LogoutButton = ({ logout, setShowSettings }) => {
 				logoutLoading: "로그아웃 중...",
 				confirmTitle: "로그아웃",
 				confirmMessage: "정말 로그아웃 하시겠습니까?",
-		  }
+			}
 		: {
 				error: "Logout failed. Please try again.",
 				logout: "Log out",
 				logoutLoading: "Signing out...",
 				confirmTitle: "Log out",
 				confirmMessage: "Are you sure you want to log out?",
-		  };
+			};
 
 	const handleConfirmedLogout = async () => {
 		setShowConfirm(false);
@@ -203,8 +203,7 @@ const SettingsModal = () => {
 						},
 						priority: {
 							title: "데이터 우선순위",
-							desc:
-								"드래그하여 순서를 변경하세요. 높은 순위의 데이터가 AI 브리핑에서 먼저 언급됩니다.",
+							desc: "드래그하여 순서를 변경하세요. 높은 순위의 데이터가 AI 브리핑에서 먼저 언급됩니다.",
 							reset: "🔄 기본 순서로 초기화",
 						},
 						briefing: {
@@ -219,8 +218,7 @@ const SettingsModal = () => {
 						},
 						interests: {
 							title: "관심 키워드",
-							desc:
-								"AI가 Q&A와 일기에서 자동 수집한 키워드입니다. 직접 추가하거나 삭제할 수 있습니다.",
+							desc: "AI가 Q&A와 일기에서 자동 수집한 키워드입니다. 직접 추가하거나 삭제할 수 있습니다.",
 							placeholder: "키워드 입력 후 Enter",
 							fixedTitle: "Fixed interests",
 							fixedBadge: "Fixed",
@@ -230,11 +228,12 @@ const SettingsModal = () => {
 							empty:
 								"아직 수집된 관심 키워드가 없습니다.\nQ&A에 답변하거나 일기를 작성하면 다음 날 자동으로 추출됩니다.",
 							resetTitle: "관심사 초기화",
-							resetMessage: "모든 관심 키워드와 누적 점수를 초기화하시겠습니까?",
+							resetMessage:
+								"모든 관심 키워드와 누적 점수를 초기화하시겠습니까?",
 							resetButton: "관심사 전체 초기화",
 						},
 						selected: "선택됨",
-				  }
+					}
 				: {
 						title: "⚙️ Settings",
 						tabs: {
@@ -289,8 +288,7 @@ const SettingsModal = () => {
 						},
 						priority: {
 							title: "Data priority",
-							desc:
-								"Drag to reorder. Higher-ranked data is mentioned first in AI briefings.",
+							desc: "Drag to reorder. Higher-ranked data is mentioned first in AI briefings.",
 							reset: "🔄 Reset to default order",
 						},
 						briefing: {
@@ -305,8 +303,7 @@ const SettingsModal = () => {
 						},
 						interests: {
 							title: "Interest keywords",
-							desc:
-								"Keywords automatically extracted from Q&A and diary entries. You can also add or remove them manually.",
+							desc: "Keywords automatically extracted from Q&A and diary entries. You can also add or remove them manually.",
 							placeholder: "Type a keyword and press Enter",
 							fixedTitle: "Fixed interests",
 							fixedBadge: "Fixed",
@@ -316,11 +313,12 @@ const SettingsModal = () => {
 							empty:
 								"No interest keywords have been collected yet.\nAnswer daily questions or write a diary entry and more will be extracted the next day.",
 							resetTitle: "Reset interests",
-							resetMessage: "Reset all interest keywords and accumulated scores?",
+							resetMessage:
+								"Reset all interest keywords and accumulated scores?",
 							resetButton: "Reset all interests",
 						},
 						selected: "Selected",
-				  },
+					},
 		[isKo],
 	);
 
@@ -421,7 +419,9 @@ const SettingsModal = () => {
 											: "border-gray-200 bg-gray-50"
 									}`}
 								>
-									<p className="text-sm font-medium">{settingsCopy.widgets.fontSize}</p>
+									<p className="text-sm font-medium">
+										{settingsCopy.widgets.fontSize}
+									</p>
 									<p className={`text-xs mt-1 ${muted}`}>
 										{settingsCopy.widgets.fontSizeDesc}
 									</p>
@@ -435,7 +435,7 @@ const SettingsModal = () => {
 														? "bg-blue-500 text-white border-blue-500"
 														: isDark
 															? "border-white/15 bg-white/5 hover:bg-white/10"
-													: "border-gray-200 bg-white hover:bg-gray-100"
+															: "border-gray-200 bg-white hover:bg-gray-100"
 												}`}
 											>
 												{settingsCopy.fontSizes[key]}
@@ -483,7 +483,9 @@ const SettingsModal = () => {
 													isDark ? "text-yellow-300" : "text-yellow-600"
 												}
 											/>
-											<span className="text-sm font-medium">{getWidgetLabel(w.id)}</span>
+											<span className="text-sm font-medium">
+												{getWidgetLabel(w.id)}
+											</span>
 											<span
 												className={`text-[10px] px-1.5 py-0.5 rounded ${isDark ? "bg-yellow-500/20 text-yellow-300" : "bg-yellow-100 text-yellow-700"}`}
 											>
@@ -543,7 +545,10 @@ const SettingsModal = () => {
 												openConfirm(
 													settingsCopy.smart.deleteTitle,
 													settingsCopy.smart.deleteMessage(kw),
-													() => { removeSmartWidget(kw); closeConfirm(); },
+													() => {
+														removeSmartWidget(kw);
+														closeConfirm();
+													},
 												)
 											}
 											className="text-red-400 hover:text-red-300 text-xs"
@@ -617,7 +622,10 @@ const SettingsModal = () => {
 													openConfirm(
 														"루틴 삭제",
 														`'${todo.text}' 루틴을 삭제하시겠습니까?`,
-														() => { deleteTodo(todo.id); closeConfirm(); },
+														() => {
+															deleteTodo(todo.id);
+															closeConfirm();
+														},
 													)
 												}
 												className="text-red-400 hover:text-red-300 text-xs"
@@ -634,157 +642,109 @@ const SettingsModal = () => {
 								<div>
 									<p className="text-sm font-medium mb-2">Diary settings</p>
 									<p className={`text-xs mb-4 ${muted}`}>
-										Manage diary protection and choose which language newly generated diaries should use.
+										Manage diary protection and choose which language newly
+										generated diaries should use.
 									</p>
 								</div>
 
 								<>
-										<div
-											className={`p-4 rounded-xl border ${isDark ? "bg-white/5 border-white/10" : "bg-gray-50 border-gray-200"}`}
-										>
-											<div className="flex items-start justify-between gap-4 flex-wrap">
-												<div className="flex items-start gap-3 flex-1 min-w-0">
-													<div
-														className={`p-2 rounded-lg ${isDark ? "bg-blue-500/15" : "bg-blue-100"}`}
-													>
-														<Lock size={18} className="text-blue-500" />
-													</div>
-													<div className="flex-1 min-w-0 space-y-1">
-														<div className="flex items-center justify-between gap-3">
-															<p className="text-sm font-medium">
-																{pinSet ? "PIN is set" : "PIN is not set"}
-															</p>
-															<div className="flex flex-col items-end gap-1">
-																<Toggle
-																	on={pinSet}
-																	onToggle={() =>
-																		openPinFlow(pinSet ? "disable" : "setup")
-																	}
-																/>
-																<p className={`text-[11px] ${muted}`}>
-																	{pinSet ? "PIN on" : "PIN off"}
-																</p>
-															</div>
-														</div>
-														<p className={`text-xs mt-1 ${muted}`}>
-															{pinSet
-																? "You can change your PIN, disable it, or adjust the lock timing below."
-																: "Once you set a PIN, PIN change and lock timing controls will appear here."}
+									<div
+										className={`p-4 rounded-xl border ${isDark ? "bg-white/5 border-white/10" : "bg-gray-50 border-gray-200"}`}
+									>
+										<div className="flex items-start justify-between gap-4 flex-wrap">
+											<div className="flex items-start gap-3 flex-1 min-w-0">
+												<div
+													className={`p-2 rounded-lg ${isDark ? "bg-blue-500/15" : "bg-blue-100"}`}
+												>
+													<Lock size={18} className="text-blue-500" />
+												</div>
+												<div className="flex-1 min-w-0 space-y-1">
+													<div className="flex items-center justify-between gap-3">
+														<p className="text-sm font-medium">
+															{pinSet ? "PIN is set" : "PIN is not set"}
 														</p>
+														<div className="flex flex-col items-end gap-1">
+															<Toggle
+																on={pinSet}
+																onToggle={() =>
+																	openPinFlow(pinSet ? "disable" : "setup")
+																}
+															/>
+															<p className={`text-[11px] ${muted}`}>
+																{pinSet ? "PIN on" : "PIN off"}
+															</p>
+														</div>
 													</div>
-												</div>
-
-												<div className="flex flex-col items-end gap-2">
-													{pinSet && (
-														<button
-															onClick={() => openPinFlow("change")}
-															className={`px-3 py-2 rounded-lg text-sm font-medium border transition-colors ${
-																isDark
-																	? "border-white/15 bg-white/5 hover:bg-white/10"
-																	: "border-gray-200 bg-white hover:bg-gray-50"
-															}`}
-														>
-															Change PIN
-														</button>
-													)}
-												</div>
-											</div>
-										</div>
-
-										<div
-											className={`p-4 rounded-xl border ${isDark ? "bg-white/5 border-white/10" : "bg-gray-50 border-gray-200"}`}
-										>
-											<div className="space-y-3">
-												<div>
-													<p className="text-sm font-medium">Generation language</p>
 													<p className={`text-xs mt-1 ${muted}`}>
-														Choose the language used when AI creates a new diary entry.
+														{pinSet
+															? "You can change your PIN, disable it, or adjust the lock timing below."
+															: "Once you set a PIN, PIN change and lock timing controls will appear here."}
 													</p>
 												</div>
+											</div>
 
-												<div className="grid gap-2">
-													{[
-														{
-															id: "app",
-															label: isKo ? "앱 언어 따라가기" : "Follow app language",
-															description:
-																isKo
-																	? "일기를 생성할 때마다 현재 앱 언어를 사용합니다."
-																	: "Use the current UI language each time a diary is generated.",
-														},
-														{
-															id: "ko",
-															label: isKo ? "한국어" : "Korean",
-															description:
-																isKo
-																	? "일기 제목과 요약을 항상 한국어로 생성합니다."
-																	: "Always generate diary titles and summaries in Korean.",
-														},
-														{
-															id: "en",
-															label: "English",
-															description:
-																isKo
-																	? "일기 제목과 요약을 항상 영어로 생성합니다."
-																	: "Always generate diary titles and summaries in English.",
-														},
-													].map((option) => {
-														const selected = diaryLanguage === option.id;
-														return (
-															<button
-																key={option.id}
-																onClick={() => setDiaryLanguage(option.id)}
-																className={`w-full rounded-xl border px-4 py-3 text-left transition-all ${
-																	selected
-																		? isDark
-																			? "border-blue-400 bg-blue-500/15"
-																			: "border-blue-500 bg-blue-50"
-																		: isDark
-																			? "border-white/10 bg-white/5 hover:bg-white/10"
-																			: "border-gray-200 bg-white hover:bg-gray-50"
-																}`}
-															>
-																<div className="flex items-center justify-between gap-3">
-																	<p className="text-sm font-medium">{option.label}</p>
-																	{selected && (
-																		<span
-																			className={`text-[11px] font-semibold ${
-																				isDark ? "text-blue-300" : "text-blue-600"
-																			}`}
-																		>
-																			{settingsCopy.selected}
-																		</span>
-																	)}
-																</div>
-																<p className={`text-xs mt-1 ${muted}`}>
-																	{option.description}
-																</p>
-															</button>
-														);
-													})}
-												</div>
+											<div className="flex flex-col items-end gap-2">
+												{pinSet && (
+													<button
+														onClick={() => openPinFlow("change")}
+														className={`px-3 py-2 rounded-lg text-sm font-medium border transition-colors ${
+															isDark
+																? "border-white/15 bg-white/5 hover:bg-white/10"
+																: "border-gray-200 bg-white hover:bg-gray-50"
+														}`}
+													>
+														Change PIN
+													</button>
+												)}
 											</div>
 										</div>
+									</div>
 
-										{pinSet && (
 									<div
 										className={`p-4 rounded-xl border ${isDark ? "bg-white/5 border-white/10" : "bg-gray-50 border-gray-200"}`}
 									>
 										<div className="space-y-3">
 											<div>
-												<p className="text-sm font-medium">Lock timing</p>
+												<p className="text-sm font-medium">
+													Generation language
+												</p>
 												<p className={`text-xs mt-1 ${muted}`}>
-													Choose how long diary stays unlocked after a successful PIN check.
+													Choose the language used when AI creates a new diary
+													entry.
 												</p>
 											</div>
 
 											<div className="grid gap-2">
-												{pinLockOptions.map((option) => {
-													const selected = pinLockMode === option.id;
+												{[
+													{
+														id: "app",
+														label: isKo
+															? "앱 언어 따라가기"
+															: "Follow app language",
+														description: isKo
+															? "일기를 생성할 때마다 현재 앱 언어를 사용합니다."
+															: "Use the current UI language each time a diary is generated.",
+													},
+													{
+														id: "ko",
+														label: isKo ? "한국어" : "Korean",
+														description: isKo
+															? "일기 제목과 요약을 항상 한국어로 생성합니다."
+															: "Always generate diary titles and summaries in Korean.",
+													},
+													{
+														id: "en",
+														label: "English",
+														description: isKo
+															? "일기 제목과 요약을 항상 영어로 생성합니다."
+															: "Always generate diary titles and summaries in English.",
+													},
+												].map((option) => {
+													const selected = diaryLanguage === option.id;
 													return (
 														<button
 															key={option.id}
-															onClick={() => handlePinLockModeChange(option.id)}
+															onClick={() => setDiaryLanguage(option.id)}
 															className={`w-full rounded-xl border px-4 py-3 text-left transition-all ${
 																selected
 																	? isDark
@@ -796,14 +756,16 @@ const SettingsModal = () => {
 															}`}
 														>
 															<div className="flex items-center justify-between gap-3">
-																<p className="text-sm font-medium">{option.label}</p>
+																<p className="text-sm font-medium">
+																	{option.label}
+																</p>
 																{selected && (
 																	<span
 																		className={`text-[11px] font-semibold ${
 																			isDark ? "text-blue-300" : "text-blue-600"
 																		}`}
 																	>
-																		Selected
+																		{settingsCopy.selected}
 																	</span>
 																)}
 															</div>
@@ -814,17 +776,75 @@ const SettingsModal = () => {
 													);
 												})}
 											</div>
+										</div>
+									</div>
 
-											<p className={`text-xs ${muted}`}>
-												{pinLockMode === "off"
-													? "PIN exists, but diary protection is currently off. Choose a lock time to turn it back on."
-													: pinLockMode === "immediate"
-														? "Diary locks again as soon as you close it."
-														: "After you unlock diary once, it stays open for the selected amount of time."}
-											</p>
+									{pinSet && (
+										<div
+											className={`p-4 rounded-xl border ${isDark ? "bg-white/5 border-white/10" : "bg-gray-50 border-gray-200"}`}
+										>
+											<div className="space-y-3">
+												<div>
+													<p className="text-sm font-medium">Lock timing</p>
+													<p className={`text-xs mt-1 ${muted}`}>
+														Choose how long diary stays unlocked after a
+														successful PIN check.
+													</p>
+												</div>
+
+												<div className="grid gap-2">
+													{pinLockOptions.map((option) => {
+														const selected = pinLockMode === option.id;
+														return (
+															<button
+																key={option.id}
+																onClick={() =>
+																	handlePinLockModeChange(option.id)
+																}
+																className={`w-full rounded-xl border px-4 py-3 text-left transition-all ${
+																	selected
+																		? isDark
+																			? "border-blue-400 bg-blue-500/15"
+																			: "border-blue-500 bg-blue-50"
+																		: isDark
+																			? "border-white/10 bg-white/5 hover:bg-white/10"
+																			: "border-gray-200 bg-white hover:bg-gray-50"
+																}`}
+															>
+																<div className="flex items-center justify-between gap-3">
+																	<p className="text-sm font-medium">
+																		{option.label}
+																	</p>
+																	{selected && (
+																		<span
+																			className={`text-[11px] font-semibold ${
+																				isDark
+																					? "text-blue-300"
+																					: "text-blue-600"
+																			}`}
+																		>
+																			Selected
+																		</span>
+																	)}
+																</div>
+																<p className={`text-xs mt-1 ${muted}`}>
+																	{option.description}
+																</p>
+															</button>
+														);
+													})}
+												</div>
+
+												<p className={`text-xs ${muted}`}>
+													{pinLockMode === "off"
+														? "PIN exists, but diary protection is currently off. Choose a lock time to turn it back on."
+														: pinLockMode === "immediate"
+															? "Diary locks again as soon as you close it."
+															: "After you unlock diary once, it stays open for the selected amount of time."}
+												</p>
 											</div>
 										</div>
-										)}
+									)}
 								</>
 							</div>
 						)}
@@ -849,7 +869,9 @@ const SettingsModal = () => {
 											</div>
 											<div>
 												<p className="text-sm font-medium">
-													{pinSet ? "PIN이 설정되어 있어요" : "PIN이 아직 설정되지 않았어요"}
+													{pinSet
+														? "PIN이 설정되어 있어요"
+														: "PIN이 아직 설정되지 않았어요"}
 												</p>
 												<p className={`text-xs mt-1 ${muted}`}>
 													{pinSet
@@ -900,7 +922,9 @@ const SettingsModal = () => {
 														}`}
 													>
 														<div className="flex items-center justify-between gap-3">
-															<p className="text-sm font-medium">{option.label}</p>
+															<p className="text-sm font-medium">
+																{option.label}
+															</p>
 															{selected && (
 																<span
 																	className={`text-[11px] font-semibold ${
@@ -946,10 +970,12 @@ const SettingsModal = () => {
 									)}
 									<div>
 										<p className="font-bold">
-											{useAuthStore.getState().user?.displayName || "MorningBrief.AI User"}
+											{useAuthStore.getState().user?.displayName ||
+												"MorningBrief.AI User"}
 										</p>
 										<p className={`text-xs ${muted}`}>
-											{useAuthStore.getState().user?.email || settingsCopy.profile.noLogin}
+											{useAuthStore.getState().user?.email ||
+												settingsCopy.profile.noLogin}
 										</p>
 									</div>
 								</div>
@@ -964,13 +990,19 @@ const SettingsModal = () => {
 								>
 									{settingsCopy.profile.restartOnboarding}
 								</button>
-								<LogoutButton logout={logout} setShowSettings={setShowSettings} isDark={isDark} />
+								<LogoutButton
+									logout={logout}
+									setShowSettings={setShowSettings}
+									isDark={isDark}
+								/>
 							</div>
 						)}
 						{settingsTab === "priority" && (
 							<div className="space-y-4">
 								<div>
-									<p className="text-sm font-medium mb-2">{settingsCopy.priority.title}</p>
+									<p className="text-sm font-medium mb-2">
+										{settingsCopy.priority.title}
+									</p>
 									<p className={`text-xs mb-4 ${muted}`}>
 										{settingsCopy.priority.desc}
 									</p>
@@ -1004,9 +1036,13 @@ const SettingsModal = () => {
 																		: "bg-gray-50 hover:bg-gray-100"
 																}`}
 															>
-																<div className={`flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold ${
-																	isDark ? "bg-blue-600/30 text-blue-300" : "bg-blue-100 text-blue-600"
-																}`}>
+																<div
+																	className={`flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold ${
+																		isDark
+																			? "bg-blue-600/30 text-blue-300"
+																			: "bg-blue-100 text-blue-600"
+																	}`}
+																>
 																	{index + 1}
 																</div>
 																<GripVertical
@@ -1040,7 +1076,9 @@ const SettingsModal = () => {
 						{settingsTab === "briefing" && (
 							<div className="space-y-6">
 								<div>
-									<p className="text-sm font-medium mb-2">{settingsCopy.briefing.title}</p>
+									<p className="text-sm font-medium mb-2">
+										{settingsCopy.briefing.title}
+									</p>
 									<p className={`text-xs mb-4 ${muted}`}>
 										{settingsCopy.briefing.desc}
 									</p>
@@ -1051,20 +1089,28 @@ const SettingsModal = () => {
 									}`}
 								>
 									<div className="flex-1">
-										<p className="text-sm font-medium">{settingsCopy.briefing.firstVisit}</p>
+										<p className="text-sm font-medium">
+											{settingsCopy.briefing.firstVisit}
+										</p>
 										<p className={`text-xs mt-1 ${muted}`}>
 											{settingsCopy.briefing.firstVisitDesc}
 										</p>
 									</div>
 									<Toggle
 										on={showFirstLoginBriefing}
-										onToggle={() => setShowFirstLoginBriefing(!showFirstLoginBriefing)}
+										onToggle={() =>
+											setShowFirstLoginBriefing(!showFirstLoginBriefing)
+										}
 									/>
 								</div>
-								<div className={`p-4 rounded-xl ${isDark ? "bg-white/5" : "bg-gray-50"}`}>
+								<div
+									className={`p-4 rounded-xl ${isDark ? "bg-white/5" : "bg-gray-50"}`}
+								>
 									<div className="flex items-center gap-2 mb-2">
 										<Sparkles size={16} className="text-blue-500" />
-										<p className="text-sm font-medium">{settingsCopy.briefing.factualTitle}</p>
+										<p className="text-sm font-medium">
+											{settingsCopy.briefing.factualTitle}
+										</p>
 									</div>
 									<p className={`text-xs ${muted}`}>
 										{settingsCopy.briefing.factualDesc}
@@ -1075,7 +1121,9 @@ const SettingsModal = () => {
 						{settingsTab === "interests" && (
 							<div className="space-y-4">
 								<div>
-									<p className="text-sm font-medium mb-1">{settingsCopy.interests.title}</p>
+									<p className="text-sm font-medium mb-1">
+										{settingsCopy.interests.title}
+									</p>
 									<p className={`text-xs ${muted}`}>
 										{settingsCopy.interests.desc}
 									</p>
@@ -1114,7 +1162,9 @@ const SettingsModal = () => {
 									<div className="space-y-2">
 										<div className="flex items-center gap-2">
 											<Heart size={16} className="text-rose-400" />
-											<p className="text-sm font-medium">{settingsCopy.interests.fixedTitle}</p>
+											<p className="text-sm font-medium">
+												{settingsCopy.interests.fixedTitle}
+											</p>
 										</div>
 										<div className="space-y-2">
 											{fixedInterests.map((item) => (
@@ -1138,7 +1188,9 @@ const SettingsModal = () => {
 															{getFixedInterestLabel(item.id)}
 														</span>
 													</div>
-													<span className={`text-[10px] flex-shrink-0 ${muted}`}>
+													<span
+														className={`text-[10px] flex-shrink-0 ${muted}`}
+													>
 														{settingsCopy.interests.fixedSource}
 													</span>
 												</div>
@@ -1151,16 +1203,21 @@ const SettingsModal = () => {
 										{settingsCopy.interests.noDynamic}
 									</p>
 								)}
-								{keywordInterests.length === 0 && fixedInterests.length === 0 ? (
-									<div className={`p-4 rounded-xl text-center ${isDark ? "bg-white/5" : "bg-gray-50"}`}>
+								{keywordInterests.length === 0 &&
+								fixedInterests.length === 0 ? (
+									<div
+										className={`p-4 rounded-xl text-center ${isDark ? "bg-white/5" : "bg-gray-50"}`}
+									>
 										<Heart size={20} className={`mx-auto mb-2 ${muted}`} />
 										<p className={`text-xs ${muted}`}>
-											{settingsCopy.interests.empty.split("\n").map((line, index) => (
-												<span key={index}>
-													{index > 0 && <br />}
-													{line}
-												</span>
-											))}
+											{settingsCopy.interests.empty
+												.split("\n")
+												.map((line, index) => (
+													<span key={index}>
+														{index > 0 && <br />}
+														{line}
+													</span>
+												))}
 										</p>
 									</div>
 								) : (
@@ -1182,9 +1239,15 @@ const SettingsModal = () => {
 													>
 														{item.category}
 													</span>
-													<span className="text-sm truncate">{item.keyword}</span>
-													<span className={`text-[10px] flex-shrink-0 ${muted}`}>
-														{typeof item.score === "number" ? item.score.toFixed(1) : ""}
+													<span className="text-sm truncate">
+														{item.keyword}
+													</span>
+													<span
+														className={`text-[10px] flex-shrink-0 ${muted}`}
+													>
+														{typeof item.score === "number"
+															? item.score.toFixed(1)
+															: ""}
 													</span>
 												</div>
 												<button
@@ -1210,7 +1273,7 @@ const SettingsModal = () => {
 												() => {
 													resetKeywordInterests();
 													closeConfirm();
-												}
+												},
 											)
 										}
 										className={`w-full p-2.5 rounded-xl text-sm text-left ${
@@ -1236,13 +1299,13 @@ const SettingsModal = () => {
 					onCancel={closeConfirm}
 				/>
 			)}
-				{showPinModal && (
-					<PINModal
-						mode={pinModalMode}
-						onSuccess={() => setShowPinModal(false)}
-						onCancel={() => setShowPinModal(false)}
-					/>
-				)}
+			{showPinModal && (
+				<PINModal
+					mode={pinModalMode}
+					onSuccess={() => setShowPinModal(false)}
+					onCancel={() => setShowPinModal(false)}
+				/>
+			)}
 		</div>
 	);
 };

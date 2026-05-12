@@ -310,7 +310,7 @@ useSettingsStore.subscribe((state) => {
 | `layouts` | `{[breakpoint]: array}` | localStorage + DB |
 | `editMode` | boolean | 메모리 |
 | `smartKeywords` | string[] | localStorage + DB |
-| `smartWidgetData` | `{[keyword]: data}` | localStorage |
+| `smartWidgetData` | `{[keyword_lang]: data}` (예: `"카메라_ko"`, `"camera_en"`) | localStorage |
 | `widgetSettings` | `{[widgetId]: {viewType, interestsEnabled}}` | localStorage |
 | `globalFontSize` | "small" \| "medium" \| "large" | localStorage |
 | `activeWidgetSettings` | string \| null | 메모리 (현재 설정 열린 위젯 ID) |
@@ -320,8 +320,9 @@ useSettingsStore.subscribe((state) => {
 - `hydrateFromDB()`: vis, layouts, smart_keywords DB → 로컬 동기화
 - `toggleVis/closeWidget/setVis`: 위젯 표시 제어
 - `handleLayoutChange/saveDraggedLayout/resetLayout`: 그리드 레이아웃 관리
-- `loadSmartWidget(kw, force)`: aiService로 스마트 위젯 콘텐츠 생성
-- `addSmartWidget/removeSmartWidget/refreshSmartWidget`: 스마트 위젯 CRUD
+- `loadSmartWidget(kw, force)`: aiService로 스마트 위젯 콘텐츠 생성. 캐시 키는 `${kw}_${lang}` (언어별 독립 저장)
+- `addSmartWidget/removeSmartWidget/refreshSmartWidget`: 스마트 위젯 CRUD. 삭제 시 `kw`, `kw_ko`, `kw_en` 세 키 모두 정리
+- 언어 변경 시: 모듈 레벨 `i18n.on("languageChanged")` → 모든 smartKeywords에 `loadSmartWidget(kw, false)` 호출 (캐시 우선)
 - `setWidgetSetting(widgetId, key, value)`: 위젯별 설정 변경
 - `setGlobalFontSize(size)`: 전체 글자 크기 변경
 - `openWidgetSettings(widgetId)/closeWidgetSettings()`: 설정 모달 제어
@@ -426,7 +427,7 @@ useSettingsStore.subscribe((state) => {
 
 | 트리거 | 대상 | 방식 |
 |--------|------|------|
-| 언어 변경 | 뉴스 + 트렌드 | `i18n.on("languageChanged")` (모듈 레벨) |
+| 언어 변경 | 뉴스 + 트렌드 + Smart Widget | `i18n.on("languageChanged")` (모듈 레벨, useDataStore + useWidgetStore 각각) — force=false, 언어별 캐시 우선 |
 | 관심사 변경 | 뉴스만 | `useSettingsStore.subscribe()` fingerprint 비교 |
 | 탭 복귀 | 전체 | App.jsx visibility 이벤트 (1시간 stale 체크) |
 | 5분 폴링 | 전체 | App.jsx setInterval |
@@ -439,20 +440,27 @@ useSettingsStore.subscribe((state) => {
 ### 7.1 레이아웃 구조 (DashboardLayout)
 
 ```
-┌─────────────────────────────────────────────────────┐
-│ 왼쪽 (1/5)      │ 중간 (3/5)       │ 오른쪽 (1/5)    │
-│ BriefingWidget  │ WeatherWidget    │ SmartWidgets    │
-│ DiaryCard       │ StocksWidget     │ (keyword별)     │
-│                 │ TrendsWidget     │                 │
-│                 │ HealthWidget     │                 │
-│                 │ NewsWidget       │                 │
-│                 │ CalendarWidget   │                 │
-└─────────────────────────────────────────────────────┘
+┌──────────────┬──────────────────────────────┬──────────┐
+│  Col A (30%) │        Col B (50%)           │ Col C    │
+│              │                              │  (20%)   │
+│ BriefingWidget│  CalendarWidget             │ Weather  │
+│ DiaryCard    │  (달력 + Events + Tasks)     │ Stocks   │
+│              │                              │ Trends   │
+│              │                              │ Health   │
+│              │                              │ News     │
+│              │                              │ Smart*   │
+└──────────────┴──────────────────────────────┴──────────┘
 ```
 
-- 중간 컬럼: 슬라이더 deck 방식 (버튼 + 트랙패드 가로 스와이프, 브라우저 히스토리 오작동 방지)
-- 오른쪽: 스마트 위젯 (`smart_{keyword}` ID 형식)
-- 전체: `@hello-pangea/dnd` 드래그앤드롭, breakpoint(lg/md/sm) 반응형
+비율: **Brief+Diary(30%) : Calendar(50%) : 추가 위젯 패널(20%)**
+
+- Col A: `flex: 3`, `height: calc(100vh - 6rem)` (Brief 3/5 + Diary 2/5 수직 분할)
+- Col B: `flex: 5`, Calendar sticky (PIN 모달 활성 시 sticky 해제)
+- Col C: `width: 20%` 고정, `overflow-hidden` + CSS transition으로 접기/펼치기
+  - 패널 닫기 시 → Col A/B가 `flex 3:5` 비율로 자동 확장 (각각 37.5%, 62.5%)
+  - 전환 애니메이션: `width/max-width/opacity` 0.38s cubic-bezier
+- Col C 내부: `custom-scrollbar`, `overflow-y-auto`, `max-height: DASHBOARD_VIEWPORT_H`
+- Col C 패널 토글: TopNav 햄버거 → `toggle-widget-panel` 커스텀 이벤트 → DashboardLayout handler
 
 ### 7.2 WidgetCard 공통 기능
 
@@ -490,14 +498,16 @@ useSettingsStore.subscribe((state) => {
 
   | fontKey | 기본 |
   |---------|------|
-  | small   | 7    |
-  | medium  | 5    |
-  | large   | 4    |
+  | small   | 2    |
+  | medium  | 3    |
+  | large   | 3    |
 
-- 더보기 클릭 시 인라인 확장, 최대 12개
+- 더보기 클릭 시 인라인 확장, 최대 6개
+- 확장 후 "접기" 버튼으로 다시 축소 가능
 - 클릭 → 해당 기사 URL 직접 이동
 - pill 형태: `line-clamp-2` (truncate 없음, 최대 2줄 줄바꿈)
 - 관심사 반영 없음 — 세계/국내 실시간 트렌드 전용
+- 새로고침 시 expanded 상태 자동 초기화
 
 #### WeatherWidget
 
@@ -933,6 +943,119 @@ https://www.googleapis.com/auth/fitness.activity.read
 ---
 
 ## 18) 최근 반영 사항
+
+### 2026-05-13 — 위젯 API 최적화 & 언어/UI 개선 (2차)
+
+#### 반영 완료
+
+**1. 언어 전환 시 불필요한 Tavily 재호출 제거**
+
+- **근본 원인**: `App.jsx`에 `i18n.language`를 dependency로 가진 `useEffect`가 있어 언어 전환 시마다 `fetchNews(userId, true)` + `fetchTrends(userId, true)` (force=true)를 직접 호출 → 언어별 DB 캐시가 존재해도 무시하고 API 재호출
+- **수정**: `App.jsx`의 해당 useEffect 전체 삭제. `useDataStore.js` 모듈 레벨 `i18n.on("languageChanged")` 리스너만 남기고, 이 리스너에서 `force` 없이 호출 (`fetchNews(userId)`, `fetchTrends(userId)`) → DB 캐시 있으면 재사용
+- **효과**: 4시간 이내 재방문 시 언어 전환해도 Tavily API 호출 없음
+
+**2. 트렌드 인메모리 캐시 (`_trendsMemCache`)**
+
+- **추가 위치**: `useDataStore.js` 모듈 레벨 `const _trendsMemCache = {}`
+- **동작**: `fetchTrends` 1순위 체크 → 메모리 캐시 hit 시 `set()`만 호출, loading 상태 없이 즉시 표시
+- **캐시 갱신 시점**: DB 캐시 hit 후 / API 성공 후 → `_trendsMemCache[lang]` 저장
+- **효과**: 언어 전환 시 이미 로드한 언어 데이터는 로딩 없이 즉시 복원
+
+**3. Smart Widget 언어 대응**
+
+파일: `src/services/aiService.js`, `src/store/useWidgetStore.js`, `src/components/widgets/SmartWidgetContent.jsx`
+
+- **캐시 키 언어화**: `loadSmartWidget`에서 캐시 키를 `kw` → `` `${kw}_${lang}` ``로 변경. `SmartWidgetContent`도 `const cacheKey = \`${keyword}_${lang}\``로 읽기
+- **Tavily 쿼리 언어화**: 한국어 → `` `${keyword} 최신 정보 동향 뉴스` ``, 영어 → `` `${keyword} latest news trends updates` ``
+- **결과 언어 필터링**: `filterSmartResults(items, isKo)` 추가 — Hangul(`/[가-힣]/`) / Latin(`/[a-zA-Z]/`) 정규식으로 기사 제목의 언어를 감지해 필터링. 언어 일치 결과가 2개 미만이면 전체 결과를 fallback으로 사용
+- **include_domains 제거**: Smart Widget Tavily 호출에서 도메인 제한 제거 → 넓게 검색 후 post-filter 방식으로 전환 (도메인 제한 시 키워드 따라 결과 부족 문제 해소)
+- **언어 전환 시 자동 재로드**: `useWidgetStore.js` 모듈 레벨 `i18n.on("languageChanged")` → `loadSmartWidget(kw, false)` 호출 (캐시 있으면 재사용, 없으면 새 fetch)
+
+**4. Smart Widget → "Personalized Search" UI 리디자인**
+
+파일: `src/components/widgets/SmartWidgetContent.jsx`, `src/services/aiService.js`
+
+- **헤더 badge 제거**: 키워드 옆 "관심 검색" / "Personal Search" badge span 완전 삭제
+- **섹션 구조 변경**: `type === "summary"` (Groq 분석) + `type === "news"` (관련 뉴스) 두 섹션만 렌더
+- **summary 섹션**: 제목 `"Personalized Search"`, bullet 형태 (`• 내용`) 3-4개
+- **news 섹션**: 관련 뉴스 2-3개, 클릭 시 새 탭으로 URL 이동
+- **Groq 요약 품질 개선**: Tavily `r.content` 스니펫(본문 발췌)을 `[제목]\n본문` 형식으로 Groq에 전달 → "제목만 나열" 대신 실제 내용 기반 요약 생성. 프롬프트: "뉴스 내용을 읽고 핵심 정보를 요약, 단순 제목 나열 금지"
+- **Groq fallback 다단계**: Groq JSON 파싱 성공 → 실패 시 Tavily answer 문장 분리 → 뉴스 제목 리스트 순서로 fallback
+
+**5. Live Trend 표시 개수 축소**
+
+파일: `src/components/widgets/TrendsWidget.jsx`
+
+- `MAX_ITEMS: { small: 2, medium: 3, large: 3 }`, `MAX_EXPANDED: 6`
+- 더보기 클릭 후 "접기" 버튼 추가 (`t("common.show_less")`)
+- `common.show_less` i18n 키 추가 (ko: "접기", en: "Show less")
+
+**6. Daily Question 언어별 캐시**
+
+파일: `src/components/widgets/DiaryCard.jsx`
+
+- `questionCacheRef = useRef({})` 컴포넌트 내부에 추가 (`{ ko: "질문", en: "question" }` 형태)
+- 언어 변경 시 캐시에 해당 언어 질문이 있으면 API 호출 없이 즉시 복원
+- `fetchNextQuestion` 성공 후 `questionCacheRef.current[lang] = q`로 저장
+
+**7. 대시보드 레이아웃 30 / 50 / 20 비율**
+
+파일: `src/components/layout/DashboardLayout.jsx`
+
+- Col A (브리핑+일기): `flex: 3` (30%)
+- Col B (달력): `flex: 5` (50%)
+- Col C (추가 위젯 패널): `width: "20%"`, `shrink-0`, transition으로 접기
+- 패널 닫기 시 Col A/B가 3:5 비율로 자동 확장 (37.5% / 62.5%)
+
+**8. 주식/환율 언어 전환 재호출 없음 확인**
+
+- `i18n.on("languageChanged")` 핸들러에 `fetchStocks` 없음 → 언어 전환 시 주식 API 재호출 안 됨
+- 탭 복귀 / 5분 폴링은 `useExistingCache: true` → 1시간 TTL 내에는 재호출 없음
+
+---
+
+#### 미해결 언어 문제 (상세)
+
+**문제 1. Live Trend 영어 데이터 잔존**
+
+- **현상**: 한국어 모드임에도 Live Trend에 영어 기사 제목이 표시됨
+- **근본 원인**: DB 캐시 테이블(`api_cache`)에 `trends_full_ko` 키로 저장된 이전 영어 데이터가 4시간 TTL 동안 그대로 사용됨. 코드는 한국어 쿼리 + `KO_NEWS_DOMAINS` 필터를 올바르게 구현했지만, 낡은 캐시가 새 fetch를 막음
+- **임시 해결**: TrendsWidget 우측 상단 새로고침(↻) 아이콘 클릭 → `force=true`로 DB 캐시 우회 후 한국어 쿼리 재호출
+- **근본 해결 필요 사항**:
+  1. `api_cache`에서 `trends_full_ko` 행을 직접 삭제하거나 `fetched_at`을 오래된 시간으로 수동 갱신
+  2. 또는 TTL을 4시간에서 단축하거나, 언어 전환 시 해당 언어 DB 캐시만 선택적으로 무효화하는 로직 추가
+- **코드 상태**: `fetchTrends` 내부 한국어 쿼리 및 `include_domains: KO_NEWS_DOMAINS` 설정은 **올바름** — 새 fetch 시 정상 한국어 결과 수신 확인
+
+**문제 2. Smart Widget 언어 필터 한계**
+
+- **현상**: 일부 키워드(예: "카레")는 한국어 모드에서도 영어 뉴스를 보여줌
+- **근본 원인**: Tavily가 해당 키워드에 대해 한국어 제목 기사를 2개 미만으로 반환할 경우 `filterSmartResults`가 전체 결과로 fallback → 영어 기사가 섞여 들어옴
+- **현재 구현**: `filterSmartResults(items, isKo)` — Hangul 감지로 언어 필터 후 2개 이하면 전체 결과 사용 (결과 수 보장 목적)
+- **미완성 개선점**:
+  1. fallback 기준을 2개 → 1개로 낮춰 한국어 결과 1개라도 있으면 한국어만 표시
+  2. 한국어 도메인(`news.naver.com` 등)으로 Tavily 쿼리를 재시도하는 2단계 fetch 구현
+  3. Groq 프롬프트에서 "한국어 기사가 없으면 일반 지식으로 한국어로 답변" 지시 강화
+
+**문제 3. Smart Widget Groq 응답이 영어로 나올 때**
+
+- **현상**: Groq가 한국어 프롬프트를 받아도 간헐적으로 영어 bullets를 반환함
+- **원인**: Tavily context(기사 본문)가 영어이면 Groq가 context 언어를 따르는 경향
+- **현재 대응**: 프롬프트에 "한국어로 작성" 명시 + `langInstruction` 사용
+- **미완성**: Groq 응답 언어 검증 로직 없음. 응답 bullets에 한글이 없으면 재호출하는 validation 미구현
+
+**문제 4. 뉴스 한국어 출처 검증 미완료**
+
+- **현상**: 한국어 모드에서 뉴스가 `include_domains: KO_NEWS_DOMAINS`로 호출되지만, 실제 표시 기사의 출처가 한국 언론사인지 E2E 검증 안 됨
+- **구현된 것**: `fetchNews`에서 `include_domains: ["news.naver.com", "yna.co.kr", "chosun.com", "joins.com", "hani.co.kr", "news1.kr"]` 전달, `filterLocalizedArticles()` + `scoreArticleForLanguage()` 후처리 필터
+- **검증 필요**: 실제 네트워크 탭에서 Tavily 응답 `results[].url`이 KO_NEWS_DOMAINS 내인지 확인 필요. Tavily가 `include_domains` 파라미터를 항상 엄격히 적용하는지 보장 불명확
+
+**문제 5. `_trendsMemCache` 초기화 시점**
+
+- **현상**: 앱 새로고침(F5) 시 `_trendsMemCache`는 빈 상태 → 첫 언어 전환마다 DB 캐시 또는 API 재호출 발생 (로딩 없는 즉시 전환은 두 번째 방문부터만 동작)
+- **의도된 동작**: 모듈 레벨 변수이므로 탭을 닫지 않는 한 세션 내에서는 유지됨
+- **미완성**: 앱 초기화 시 DB 캐시에서 양 언어 데이터를 미리 읽어 `_trendsMemCache`를 warm-up하는 로직 없음
+
+---
 
 ### 2026-05-13 — 보안 취약점 수정
 

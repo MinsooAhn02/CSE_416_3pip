@@ -13,7 +13,10 @@ import {
 } from "../../store/useGoogleCalendarStore";
 import { useTodoStore } from "../../store/useTodoStore";
 import { formatLocalDate } from "../../utils/date";
-import { doesTaskOccurOnDate, isTaskCompletedOnDate } from "../../utils/taskRecurrence";
+import {
+	doesTaskOccurOnDate,
+	isTaskCompletedOnDate,
+} from "../../utils/taskRecurrence";
 import DatePanelContainer from "../layout/DatePanelContainer";
 
 const sameDay = (a, b) =>
@@ -33,7 +36,9 @@ const CalendarWidget = () => {
 
 	/* ── 외부 스토어 연결 ── */
 	const setSelectedDate = useGoogleCalendarStore((s) => s.setSelectedDate);
-	const selectedTaskListFilter = useGoogleCalendarStore((s) => s.selectedTaskListFilter);
+	const selectedTaskListFilter = useGoogleCalendarStore(
+		(s) => s.selectedTaskListFilter,
+	);
 	const { events = [], tasks = [] } = useGoogleCalendarStore();
 	const filteredTasks = useMemo(
 		() => filterTasksByTaskList(tasks, selectedTaskListFilter),
@@ -47,7 +52,9 @@ const CalendarWidget = () => {
 	const hasTasksOnDate = (dateStr) => {
 		return (
 			filteredTasks?.some(
-				(task) => doesTaskOccurOnDate(task, dateStr) && !isTaskCompletedOnDate(task, dateStr),
+				(task) =>
+					doesTaskOccurOnDate(task, dateStr) &&
+					!isTaskCompletedOnDate(task, dateStr),
 			) || false
 		);
 	};
@@ -122,7 +129,8 @@ const CalendarWidget = () => {
 	const isCurrentMonth =
 		viewYear === now.getFullYear() && viewMonth === now.getMonth();
 	const isTodayButtonDisabled =
-		isCurrentMonth && (!selectedDateForPanels || selectedDateForPanels === todayStr);
+		isCurrentMonth &&
+		(!selectedDateForPanels || selectedDateForPanels === todayStr);
 
 	const monthLabel = currentDate.toLocaleDateString(
 		i18n.language === "ko" ? "ko-KR" : "en-US",

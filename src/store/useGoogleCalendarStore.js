@@ -407,7 +407,16 @@ export const useGoogleCalendarStore = create((set, get) => ({
 				return localEvents;
 			}
 			const token = await getProviderToken();
-			if (!token) throw new Error(GOOGLE_SYNC_AUTH_ERROR);
+			if (!token) {
+				const cachedEvents = readLocalEvents()
+					.map(normalizeEvent)
+					.filter((event) => eventMatchesMonth(event, monthKey));
+				if (skipLoading) {
+					set({ events: cachedEvents, loadedMonthKey: monthKey });
+					return cachedEvents;
+				}
+				throw new Error(GOOGLE_SYNC_AUTH_ERROR);
+			}
 
 			const data = await invokeGoogleFunction("events", {
 				token,
@@ -454,7 +463,14 @@ export const useGoogleCalendarStore = create((set, get) => ({
 				return localTasks;
 			}
 			const token = await getProviderToken();
-			if (!token) throw new Error(GOOGLE_SYNC_AUTH_ERROR);
+			if (!token) {
+				const cachedTasks = readLocalTasks().map(normalizeTask);
+				if (skipLoading) {
+					set({ tasks: cachedTasks, tasksLoaded: true });
+					return cachedTasks;
+				}
+				throw new Error(GOOGLE_SYNC_AUTH_ERROR);
+			}
 
 			const [listsData, data] = await Promise.all([
 				get().taskListsLoaded && hasRealTaskLists(get().taskLists)

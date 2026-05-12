@@ -263,7 +263,9 @@ const GooglePlacesLocationField = ({
 									{suggestion.secondaryText && (
 										<div
 											className={`text-xs ${
-												isDark ? "text-morning-dark-muted" : "text-morning-light-muted"
+												isDark
+													? "text-morning-dark-muted"
+													: "text-morning-light-muted"
 											}`}
 										>
 											{suggestion.secondaryText}
@@ -285,8 +287,8 @@ const GooglePlacesLocationField = ({
 					<p
 						className={`text-[11px] ${isDark ? "text-amber-300" : "text-amber-700"}`}
 					>
-						Google Places autocomplete could not load, but you can still type the
-						location manually.
+						Google Places autocomplete could not load, but you can still type
+						the location manually.
 					</p>
 				)}
 				{widgetStatus === "fallback" && (

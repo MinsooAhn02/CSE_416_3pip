@@ -61,7 +61,9 @@ const ConfirmDialog = ({
 					<div className="space-y-1">
 						<h3 className="font-bold text-base">{resolvedTitle}</h3>
 						{message && (
-							<p className={`text-sm ${isDark ? "text-gray-300" : "text-gray-600"}`}>
+							<p
+								className={`text-sm ${isDark ? "text-gray-300" : "text-gray-600"}`}
+							>
 								{message}
 							</p>
 						)}

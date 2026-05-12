@@ -106,10 +106,12 @@ const PINModal = ({ onSuccess, onCancel, mode = "verify" }) => {
 			if (mode === "disable") {
 				return {
 					title: "Disable PIN",
-					description: "Enter your current 4-digit PIN to turn diary protection off.",
+					description:
+						"Enter your current 4-digit PIN to turn diary protection off.",
 					primaryLabel: "Disable PIN",
 					inputLabel: "Current PIN",
-					footer: "Your current PIN is required before diary protection can be disabled.",
+					footer:
+						"Your current PIN is required before diary protection can be disabled.",
 				};
 			}
 

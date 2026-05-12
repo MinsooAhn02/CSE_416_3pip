@@ -16,9 +16,24 @@ const NewsDetailModal = ({
 	const { isDark, cardCls, borderCls, hoverCls, muted } = useTheme();
 	const { t } = useTranslation();
 	const globalFontSize = useWidgetStore((s) => s.globalFontSize);
-	const fontCls      = globalFontSize === "small" ? "text-[10px]" : globalFontSize === "large" ? "text-sm"   : "text-xs";
-	const titleFontCls = globalFontSize === "small" ? "text-xs"    : globalFontSize === "large" ? "text-base" : "text-sm";
-	const metaCls      = globalFontSize === "small" ? "text-[9px]" : globalFontSize === "large" ? "text-xs"   : "text-[11px]";
+	const fontCls =
+		globalFontSize === "small"
+			? "text-[10px]"
+			: globalFontSize === "large"
+				? "text-sm"
+				: "text-xs";
+	const titleFontCls =
+		globalFontSize === "small"
+			? "text-xs"
+			: globalFontSize === "large"
+				? "text-base"
+				: "text-sm";
+	const metaCls =
+		globalFontSize === "small"
+			? "text-[9px]"
+			: globalFontSize === "large"
+				? "text-xs"
+				: "text-[11px]";
 
 	if (typeof document === "undefined") return null;
 
@@ -29,7 +44,11 @@ const NewsDetailModal = ({
 	const portalTarget = hostElement || document.body;
 
 	const hostname = (url) => {
-		try { return new URL(url).hostname.replace("www.", ""); } catch { return ""; }
+		try {
+			return new URL(url).hostname.replace("www.", "");
+		} catch {
+			return "";
+		}
 	};
 
 	// ── 텍스트 뷰 아이템 ────────────────────────────────────────
@@ -42,16 +61,22 @@ const NewsDetailModal = ({
 			className={`flex flex-col px-4 py-3 border-b last:border-b-0 transition-colors ${borderCls} ${hoverCls}`}
 			onClick={(e) => !r.url && e.preventDefault()}
 		>
-			<p className={`${titleFontCls} font-semibold leading-snug ${isDark ? "text-slate-100" : "text-slate-800"}`}>
+			<p
+				className={`${titleFontCls} font-semibold leading-snug ${isDark ? "text-slate-100" : "text-slate-800"}`}
+			>
 				{r.title || t("widgets.news.no_results")}
 			</p>
 			{r.content && (
-				<p className={`${fontCls} line-clamp-3 leading-relaxed mt-1.5 ${muted}`}>
+				<p
+					className={`${fontCls} line-clamp-3 leading-relaxed mt-1.5 ${muted}`}
+				>
 					{cleanContent(r.content)}
 				</p>
 			)}
 			{r.url && (
-				<span className={`${metaCls} flex items-center gap-0.5 mt-1.5 ${isDark ? "text-blue-400/60" : "text-blue-500/60"}`}>
+				<span
+					className={`${metaCls} flex items-center gap-0.5 mt-1.5 ${isDark ? "text-blue-400/60" : "text-blue-500/60"}`}
+				>
 					<ExternalLink size={9} />
 					{hostname(r.url)}
 				</span>
@@ -74,24 +99,34 @@ const NewsDetailModal = ({
 					src={r.image}
 					alt=""
 					className="w-14 h-10 object-cover rounded-lg shrink-0"
-					onError={(e) => { e.currentTarget.style.display = "none"; }}
+					onError={(e) => {
+						e.currentTarget.style.display = "none";
+					}}
 				/>
 			) : (
-				<div className={`w-14 h-10 rounded-lg shrink-0 flex items-center justify-center ${isDark ? "bg-white/5" : "bg-gray-100"}`}>
+				<div
+					className={`w-14 h-10 rounded-lg shrink-0 flex items-center justify-center ${isDark ? "bg-white/5" : "bg-gray-100"}`}
+				>
 					<Newspaper size={12} className="opacity-25" />
 				</div>
 			)}
 			<div className="flex-1 min-w-0">
-				<p className={`${titleFontCls} font-semibold line-clamp-2 leading-snug ${isDark ? "text-blue-300" : "text-blue-700"}`}>
+				<p
+					className={`${titleFontCls} font-semibold line-clamp-2 leading-snug ${isDark ? "text-blue-300" : "text-blue-700"}`}
+				>
 					{r.title || t("widgets.news.no_results")}
 				</p>
 				{r.content && (
-					<p className={`${fontCls} line-clamp-2 mt-1.5 leading-relaxed ${muted}`}>
+					<p
+						className={`${fontCls} line-clamp-2 mt-1.5 leading-relaxed ${muted}`}
+					>
 						{cleanContent(r.content)}
 					</p>
 				)}
 				{r.url && (
-					<span className={`${metaCls} mt-1.5 flex items-center gap-0.5 ${isDark ? "text-blue-400/60" : "text-blue-500/60"}`}>
+					<span
+						className={`${metaCls} mt-1.5 flex items-center gap-0.5 ${isDark ? "text-blue-400/60" : "text-blue-500/60"}`}
+					>
 						<ExternalLink size={9} />
 						{hostname(r.url)}
 					</span>
@@ -117,10 +152,14 @@ const NewsDetailModal = ({
 							src={r.image}
 							alt=""
 							className="w-full h-full object-cover hover:scale-105 transition-transform duration-200"
-							onError={(e) => { e.currentTarget.style.display = "none"; }}
+							onError={(e) => {
+								e.currentTarget.style.display = "none";
+							}}
 						/>
 					) : (
-						<div className={`w-full h-full flex items-center justify-center ${isDark ? "bg-white/5" : "bg-gray-100"}`}>
+						<div
+							className={`w-full h-full flex items-center justify-center ${isDark ? "bg-white/5" : "bg-gray-100"}`}
+						>
 							<Newspaper size={12} className="opacity-25" />
 						</div>
 					)}
@@ -164,15 +203,22 @@ const NewsDetailModal = ({
 				onClick={(e) => e.stopPropagation()}
 			>
 				{/* 헤더 */}
-				<div className={`flex items-center justify-between px-4 py-3 border-b ${borderCls}`}>
+				<div
+					className={`flex items-center justify-between px-4 py-3 border-b ${borderCls}`}
+				>
 					<div className="flex items-center gap-2">
 						<Newspaper size={15} className="text-blue-500" />
-						<h3 className="font-semibold text-sm">{t("widgets.news.detail_title")}</h3>
+						<h3 className="font-semibold text-sm">
+							{t("widgets.news.detail_title")}
+						</h3>
 						{items.length > 0 && (
 							<span className={`${metaCls} ${muted}`}>{items.length}건</span>
 						)}
 					</div>
-					<button onClick={onClose} className={`p-1 rounded-lg transition-colors ${hoverCls}`}>
+					<button
+						onClick={onClose}
+						className={`p-1 rounded-lg transition-colors ${hoverCls}`}
+					>
 						<X size={15} />
 					</button>
 				</div>
@@ -180,7 +226,9 @@ const NewsDetailModal = ({
 				{/* 아이템 목록 */}
 				<div className="flex-1 overflow-y-auto">
 					{items.length === 0 ? (
-						<p className={`${fontCls} p-4 ${muted}`}>{t("widgets.news.no_results")}</p>
+						<p className={`${fontCls} p-4 ${muted}`}>
+							{t("widgets.news.no_results")}
+						</p>
 					) : viewType === "grid" ? (
 						renderGridItems(items)
 					) : viewType === "text" ? (

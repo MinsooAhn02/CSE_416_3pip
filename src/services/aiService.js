@@ -1096,54 +1096,33 @@ export async function generateBriefing({ tone, length, context }) {
  * 2단계: Tavily → 키워드 관련 최신 뉴스/정보 검색
  * 3단계: 두 결과를 SmartWidgetContent 포맷으로 조합
  */
+const _HANGUL = /[가-힣]/;
+const _LATIN  = /[a-zA-Z]/;
+
+const filterSmartResults = (items, isKo) => {
+	const langFiltered = items.filter((r) => {
+		const t = r.title ?? "";
+		return isKo ? _HANGUL.test(t) : (!_HANGUL.test(t) && _LATIN.test(t));
+	});
+	return langFiltered.length >= 2 ? langFiltered : items;
+};
+
 export async function generateSmartWidgetData(keyword, context = {}) {
-	// ─── Step 1: Groq 분석 ───────────────────────────────────────────
-	const groqData = await invokeFunction("groq", {
-		system: [
-			"당신은 키워드 분석 전문가입니다.",
-			"반드시 JSON만 반환하고 다른 텍스트는 포함하지 마세요.",
-		].join("\n"),
-		prompt: [
-			`'${keyword}'에 대해 다음 JSON 형식으로 정확히 응답하세요:`,
-			`{ "emoji": "관련 이모지 1개", "bullets": ["핵심 포인트1", "핵심 포인트2", "핵심 포인트3"] }`,
-			"- emoji: 키워드를 가장 잘 나타내는 이모지 1개",
-			"- bullets: 현재 시점에서 '${keyword}'에 대해 알아야 할 핵심 포인트 3개 (각 1~2문장)",
-			"- 한국어로 작성",
-			context?.persona?.memo
-				? `- 사용자의 최근 Memo 성향도 참고: ${context.persona.memo}`
-				: "",
-		].join("\n"),
-		temperature: 0.5,
-	});
+	const { lang } = getLangConfig();
+	const isKo = lang === "ko";
 
-	let emoji = "🔍";
-	let bullets = [];
+	// ─── Step 1: Tavily 검색 (언어별 쿼리, 도메인 제한 없이 넓게 검색) ──
+	const tavilyQuery = isKo
+		? `${keyword} 최신 정보 동향 뉴스`
+		: `${keyword} latest news trends updates`;
 
-	if (groqData?.text) {
-		try {
-			const text = groqData.text.trim();
-			const match = text.match(/\{[\s\S]*\}/);
-			const parsed = JSON.parse(match ? match[0] : text);
-			if (parsed?.emoji) emoji = parsed.emoji;
-			if (Array.isArray(parsed?.bullets)) bullets = parsed.bullets.slice(0, 3);
-		} catch {
-			// 파싱 실패 시 텍스트에서 추출 시도
-			const lines = groqData.text
-				.split("\n")
-				.map((l) => l.replace(/^[-•*\d.]\s*/, "").trim())
-				.filter((l) => l.length > 10)
-				.slice(0, 3);
-			bullets = lines;
-		}
-	}
+	const tavilyData = await invokeFunction("tavily", { query: tavilyQuery });
 
-	// ─── Step 2: Tavily 검색 ─────────────────────────────────────────
-	const tavilyData = await invokeFunction("tavily", {
-		query: `${keyword} 최신 정보 동향 뉴스`,
-	});
+	const rawResults = tavilyData?.results ?? [];
+	const langFiltered = filterSmartResults(rawResults, isKo);
 
-	const newsItems = (tavilyData?.results ?? [])
-		.slice(0, 5)
+	const newsItems = langFiltered
+		.slice(0, 3)
 		.map((r) => {
 			let source = r.url ?? "";
 			try {
@@ -1153,10 +1132,71 @@ export async function generateSmartWidgetData(keyword, context = {}) {
 				title: r.title ?? r.url ?? "",
 				url: r.url ?? "",
 				source,
-				time: "최근",
+				time: isKo ? "최근" : "recent",
 			};
 		})
 		.filter((r) => r.title);
+
+	// ─── Step 2: Groq — emoji + 3-4 bullet 요약 (뉴스 내용 기반, 언어 맞춤) ─────────
+	const contextLines = [
+		tavilyData?.answer ? `개요: ${tavilyData.answer}` : "",
+		...langFiltered.slice(0, 3).map((r) => {
+			const snippet = r.content?.trim();
+			return snippet ? `[${r.title}]\n${snippet}` : `[${r.title}]`;
+		}),
+	].filter(Boolean);
+	const tavilyContext = contextLines.join("\n\n");
+
+	const groqPromptBase = isKo
+		? `'${keyword}'에 대해 아래 뉴스 본문을 읽고 핵심 내용을 한국어 bullet 3-4개로 요약하세요. 각 bullet은 뉴스 내용에서 파악한 실질적인 정보를 담아야 합니다. 단순히 제목을 나열하지 말고, 내용을 읽고 요약하세요. 참고 내용이 없으면 일반적인 지식으로 답하세요.`
+		: `Read the news content below about '${keyword}' and summarize the key insights in 3-4 English bullet points. Each bullet must contain substantive information synthesized from the content — do not just restate headlines. Use general knowledge if no content is provided.`;
+
+	const groqData = await invokeFunction("groq", {
+		system: isKo
+			? "당신은 뉴스 분석 전문가입니다. 반드시 JSON만 반환하고 다른 텍스트는 포함하지 마세요."
+			: "You are a news analyst. Return only valid JSON. No other text.",
+		prompt: [
+			groqPromptBase,
+			`{ "emoji": "...", "bullets": ["...", "...", "..."] }`,
+			"- emoji: single emoji best representing the keyword",
+			isKo
+				? "- bullets: 각 bullet은 뉴스 내용을 바탕으로 1-2문장, 핵심 정보만, 한국어로"
+				: "- bullets: each bullet is 1-2 sentences synthesizing content, in English",
+			tavilyContext ? `\n뉴스 참고:\n${tavilyContext}` : "",
+		].join("\n"),
+		temperature: 0.5,
+	});
+
+	let emoji = "🔍";
+	let bullets = [];
+
+	if (groqData?.text) {
+		try {
+			const match = groqData.text.trim().match(/\{[\s\S]*\}/);
+			const parsed = JSON.parse(match ? match[0] : groqData.text.trim());
+			if (parsed?.emoji) emoji = parsed.emoji;
+			if (Array.isArray(parsed?.bullets)) {
+				bullets = parsed.bullets
+					.map((b) => String(b).trim())
+					.filter((b) => b.length > 3)
+					.slice(0, 4);
+			}
+		} catch {
+			// 파싱 실패 시 Tavily answer 문장 분리로 fallback
+			if (tavilyData?.answer) {
+				bullets = tavilyData.answer
+					.split(/(?<=[.!?。])\s+/)
+					.map((s) => s.trim())
+					.filter((s) => s.length > 5)
+					.slice(0, 4);
+			}
+		}
+	}
+
+	// Groq 완전 실패 시 뉴스 제목으로 최후 fallback
+	if (bullets.length === 0 && newsItems.length > 0) {
+		bullets = newsItems.map((n) => n.title).slice(0, 3);
+	}
 
 	// ─── Step 3: SmartWidgetContent 포맷으로 조합 ───────────────────
 	const sections = [];
@@ -1164,23 +1204,15 @@ export async function generateSmartWidgetData(keyword, context = {}) {
 	if (bullets.length > 0) {
 		sections.push({
 			type: "summary",
-			title: "핵심 포인트",
+			title: "Personalized Search",
 			bullets,
-		});
-	}
-
-	if (tavilyData?.answer) {
-		sections.push({
-			type: "summary",
-			title: "AI 요약",
-			bullets: [tavilyData.answer],
 		});
 	}
 
 	if (newsItems.length > 0) {
 		sections.push({
 			type: "news",
-			title: "관련 정보",
+			title: isKo ? "관련 정보" : "Related Info",
 			items: newsItems,
 		});
 	}
@@ -1188,7 +1220,9 @@ export async function generateSmartWidgetData(keyword, context = {}) {
 	if (sections.length === 0) return null;
 
 	const now = new Date();
-	const lastUpdated = `${now.getHours().toString().padStart(2, "0")}:${now.getMinutes().toString().padStart(2, "0")} 업데이트`;
+	const lastUpdated = isKo
+		? `${now.getHours().toString().padStart(2, "0")}:${now.getMinutes().toString().padStart(2, "0")} 업데이트`
+		: `Updated ${now.getHours().toString().padStart(2, "0")}:${now.getMinutes().toString().padStart(2, "0")}`;
 
 	return { emoji, lastUpdated, sections };
 }

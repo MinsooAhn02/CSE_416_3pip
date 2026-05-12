@@ -150,23 +150,6 @@ export const useTodoStore = create((set, get) => ({
 	setNewTodoText: (value) => set({ newTodoText: value }),
 	setShowAddTodo: (value) => set({ showAddTodo: value }),
 
-	addAiTodos: async (aiTodos = []) => {
-		if (!aiTodos.length) return;
-
-		const existingTexts = new Set(
-			(get().todos || []).map((todo) => todo.text.toLowerCase()),
-		);
-
-		for (const item of aiTodos) {
-			const text = String(item?.text || item || "").trim();
-			if (!text || existingTexts.has(text.toLowerCase())) continue;
-			await get().addTodo({
-				text,
-				date: item?.date || todayStamp(),
-			});
-			existingTexts.add(text.toLowerCase());
-		}
-	},
 }));
 
 if (

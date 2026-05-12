@@ -42,10 +42,11 @@ const OnboardingModal = () => {
 				},
 				fitDesc: "운동량, 수면 패턴 등 건강 데이터",
 				calDesc: "일정 이벤트와 Task 연동",
-		  }
+			}
 		: {
 				welcomeTitle: "Welcome!",
-				welcomeDesc: "Choose a few interests and we'll recommend widgets for you.",
+				welcomeDesc:
+					"Choose a few interests and we'll recommend widgets for you.",
 				next: "Next →",
 				dataTitle: "Connect Data",
 				dataDesc: "Link external services to unlock smarter briefings.",
@@ -63,7 +64,7 @@ const OnboardingModal = () => {
 				},
 				fitDesc: "Health data such as activity, sleep patterns, and more",
 				calDesc: "Calendar events and Google Tasks integration",
-		  };
+			};
 
 	if (!showOnboarding) return null;
 
@@ -85,9 +86,7 @@ const OnboardingModal = () => {
 						<div className="text-center">
 							<p className="text-3xl mb-2">👋</p>
 							<h2 className="text-2xl font-bold mb-1">{copy.welcomeTitle}</h2>
-							<p className="text-white/60 text-sm">
-								{copy.welcomeDesc}
-							</p>
+							<p className="text-white/60 text-sm">{copy.welcomeDesc}</p>
 						</div>
 						<div className="grid grid-cols-2 gap-3">
 							{CATEGORIES.map((c) => (
@@ -120,9 +119,7 @@ const OnboardingModal = () => {
 						<div className="text-center">
 							<p className="text-3xl mb-2">🔗</p>
 							<h2 className="text-2xl font-bold mb-1">{copy.dataTitle}</h2>
-							<p className="text-white/60 text-sm">
-								{copy.dataDesc}
-							</p>
+							<p className="text-white/60 text-sm">{copy.dataDesc}</p>
 						</div>
 						<div className="space-y-3">
 							{[
@@ -164,17 +161,17 @@ const OnboardingModal = () => {
 						</div>
 						<div className="flex gap-3">
 							<button
-							onClick={() => setObStep(0)}
-							className="flex-1 bg-white/10 hover:bg-white/20 py-3 rounded-xl font-bold transition-colors"
-						>
-							{copy.back}
-						</button>
+								onClick={() => setObStep(0)}
+								className="flex-1 bg-white/10 hover:bg-white/20 py-3 rounded-xl font-bold transition-colors"
+							>
+								{copy.back}
+							</button>
 							<button
-							onClick={handleFinish}
-							className="flex-1 bg-blue-600 hover:bg-blue-500 py-3 rounded-xl font-bold transition-colors"
-						>
-							{copy.finish}
-						</button>
+								onClick={handleFinish}
+								className="flex-1 bg-blue-600 hover:bg-blue-500 py-3 rounded-xl font-bold transition-colors"
+							>
+								{copy.finish}
+							</button>
 						</div>
 					</div>
 				)}

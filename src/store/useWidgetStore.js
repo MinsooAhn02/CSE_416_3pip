@@ -5,8 +5,11 @@ import { supabase } from "../lib/supabase";
 import { generateSmartWidgetData } from "../services/aiService";
 import { useAuthStore } from "./useAuthStore";
 import { DEFAULT_VIS, DEFAULT_LAYOUTS, WIDGET_LIST } from "../constants";
-import i18n from "../l10n/i18n";
+import i18n, { getCurrentLanguage } from "../l10n/i18n";
 import { buildPersonaContext } from "../utils/personaContext";
+
+const resolveSmartLang = () =>
+	String(getCurrentLanguage() || "ko").startsWith("ko") ? "ko" : "en";
 
 const LAYOUT_VERSION = 14;
 const BUILTIN_IDS = new Set(WIDGET_LIST.map((w) => w.id));
@@ -145,7 +148,9 @@ export const useWidgetStore = create((set, get) => ({
 		}
 	},
 	loadSmartWidget: async (kw, force = false) => {
-		const existing = get().smartWidgetData?.[kw];
+		const lang = resolveSmartLang();
+		const cacheKey = `${kw}_${lang}`;
+		const existing = get().smartWidgetData?.[cacheKey];
 		if (existing && !force) return existing;
 
 		set((s) => ({
@@ -162,7 +167,7 @@ export const useWidgetStore = create((set, get) => ({
 			});
 			if (!data) throw new Error("No smart widget data returned");
 
-			const nextData = { ...get().smartWidgetData, [kw]: data };
+			const nextData = { ...get().smartWidgetData, [cacheKey]: data };
 			save("mb_smart_data", nextData);
 			set((s) => ({
 				smartWidgetData: nextData,
@@ -306,6 +311,8 @@ export const useWidgetStore = create((set, get) => ({
 			const nextData = { ...s.smartWidgetData };
 			const nextErrors = { ...s.smartWidgetErrors };
 			delete nextData[kw];
+			delete nextData[`${kw}_ko`];
+			delete nextData[`${kw}_en`];
 			delete nextErrors[kw];
 			save("mb_smart", nextKeywords);
 			save("mb_smart_data", nextData);
@@ -325,6 +332,12 @@ export const useWidgetStore = create((set, get) => ({
 		});
 	},
 	refreshSmartWidget: async (kw) => get().loadSmartWidget(kw, true),
+	reloadAllSmartWidgets: () => {
+		const { smartKeywords, loadSmartWidget } = useWidgetStore.getState();
+		for (const kw of smartKeywords) {
+			loadSmartWidget(kw, false);
+		}
+	},
 	setCurrentBreakpoint: (bp) => set({ currentBreakpoint: bp }),
 	updateWidgetHeight: (widgetKey, newH) => {
 		const { layouts, currentBreakpoint: bp } = get();
@@ -340,3 +353,11 @@ export const useWidgetStore = create((set, get) => ({
 		save("mb_layouts", next);
 	},
 }));
+
+// 언어 변경 시 Smart Widget 자동 재로드 (news/trends 패턴과 동일)
+i18n.on("languageChanged", () => {
+	const { smartKeywords, loadSmartWidget } = useWidgetStore.getState();
+	for (const kw of smartKeywords) {
+		loadSmartWidget(kw, false);
+	}
+});

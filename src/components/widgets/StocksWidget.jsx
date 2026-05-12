@@ -21,10 +21,14 @@ const STOCK_OPTIONS = [
 const StockCard = ({ s, isDark, secondaryBgCls }) => (
 	<div className={`p-3 rounded-xl ${secondaryBgCls}`}>
 		<div className="flex justify-between items-center mb-1">
-			<span className={`text-[10px] ${isDark ? "text-gray-400" : "text-slate-500"}`}>
+			<span
+				className={`text-[10px] ${isDark ? "text-gray-400" : "text-slate-500"}`}
+			>
 				{s.name}
 			</span>
-			<span className={`text-[10px] ${s.up ? "text-red-400" : "text-blue-400"}`}>
+			<span
+				className={`text-[10px] ${s.up ? "text-red-400" : "text-blue-400"}`}
+			>
 				{s.up ? "▲" : "▼"} {s.change}
 			</span>
 		</div>
@@ -77,7 +81,8 @@ const StocksWidget = () => {
 	// Prevent body scroll when modal is open
 	useEffect(() => {
 		if (showModal) {
-			const scrollbarWidth = window.innerWidth - document.documentElement.clientWidth;
+			const scrollbarWidth =
+				window.innerWidth - document.documentElement.clientWidth;
 			document.body.style.overflow = "hidden";
 			document.body.style.paddingRight = `${scrollbarWidth}px`;
 		}
@@ -88,7 +93,8 @@ const StocksWidget = () => {
 	}, [showModal]);
 
 	const onDragEnd = (result) => {
-		if (!result.destination || result.source.index === result.destination.index) return;
+		if (!result.destination || result.source.index === result.destination.index)
+			return;
 		const src = result.source.index;
 		const dst = result.destination.index;
 		const newStocks = Array.from(orderedStocks);
@@ -272,7 +278,9 @@ const StocksWidget = () => {
 				) : error ? (
 					<p className="text-[11px] text-red-400">{error}</p>
 				) : (
-					<p className="text-[11px] text-red-400">{t("widgets.stocks.no_data")}</p>
+					<p className="text-[11px] text-red-400">
+						{t("widgets.stocks.no_data")}
+					</p>
 				)}
 			</WidgetCard>
 
@@ -291,10 +299,10 @@ const StocksWidget = () => {
 							<motion.div
 								className={`fixed top-1/2 left-1/2 z-[10000] w-full max-w-2xl max-h-[80vh]
 									rounded-2xl border shadow-2xl flex flex-col overflow-hidden ${
-									isDark
-										? "bg-morning-dark-card border-morning-dark-hover text-morning-dark-text"
-										: "bg-morning-light-card border-morning-light-hover/30 text-morning-light-text"
-								}`}
+										isDark
+											? "bg-morning-dark-card border-morning-dark-hover text-morning-dark-text"
+											: "bg-morning-light-card border-morning-light-hover/30 text-morning-light-text"
+									}`}
 								style={{ x: "-50%", y: "-50%" }}
 								initial={{ opacity: 0, scale: 0.5 }}
 								animate={{ opacity: 1, scale: 1 }}
@@ -354,7 +362,9 @@ const StocksWidget = () => {
 																		style={{
 																			width: "calc(33.333% - 5.5px)",
 																			...dragProvided.draggableProps.style,
-																			...(snapshot.isDragging ? { zIndex: 10001 } : {}),
+																			...(snapshot.isDragging
+																				? { zIndex: 10001 }
+																				: {}),
 																		}}
 																		className={`relative p-3 rounded-xl cursor-grab active:cursor-grabbing select-none ${secondaryBgCls} ${snapshot.isDragging ? "shadow-xl ring-1 ring-blue-400/50 opacity-90" : ""}`}
 																	>
@@ -363,14 +373,20 @@ const StocksWidget = () => {
 																			className="absolute top-2 right-2 opacity-20 pointer-events-none"
 																		/>
 																		<div className="flex justify-between items-center mb-1 pr-3">
-																			<span className={`text-[10px] ${isDark ? "text-gray-400" : "text-slate-500"}`}>
+																			<span
+																				className={`text-[10px] ${isDark ? "text-gray-400" : "text-slate-500"}`}
+																			>
 																				{s.name}
 																			</span>
-																			<span className={`text-[10px] ${s.up ? "text-red-400" : "text-blue-400"}`}>
+																			<span
+																				className={`text-[10px] ${s.up ? "text-red-400" : "text-blue-400"}`}
+																			>
 																				{s.up ? "▲" : "▼"} {s.change}
 																			</span>
 																		</div>
-																		<p className="text-lg font-bold">{s.value}</p>
+																		<p className="text-lg font-bold">
+																			{s.value}
+																		</p>
 																	</div>
 																);
 																// Portal the dragging item to document.body to escape
@@ -392,7 +408,7 @@ const StocksWidget = () => {
 						</>
 					)}
 				</AnimatePresence>,
-				document.body
+				document.body,
 			)}
 		</>
 	);

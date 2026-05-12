@@ -1,5 +1,15 @@
 import { useState, useEffect, useMemo } from "react";
-import { X, Search, Lock, BookOpen, ChevronRight, ChevronLeft, Edit2, RotateCcw, Save } from "lucide-react";
+import {
+	X,
+	Search,
+	Lock,
+	BookOpen,
+	ChevronRight,
+	ChevronLeft,
+	Edit2,
+	RotateCcw,
+	Save,
+} from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useTheme } from "../../hooks/useTheme";
 import { useDiaryStore } from "../../store/useDiaryStore";
@@ -16,7 +26,8 @@ import PINModal from "./PINModal";
  * @param {{ onClose: () => void }} props
  */
 const DiaryListModal = ({ onClose }) => {
-	const { isDark, cardCls, inputCls, hoverCls, secondaryBgCls, borderCls } = useTheme();
+	const { isDark, cardCls, inputCls, hoverCls, secondaryBgCls, borderCls } =
+		useTheme();
 	const {
 		entries,
 		getDiaryDates,
@@ -36,7 +47,7 @@ const DiaryListModal = ({ onClose }) => {
 	const [searchQuery, setSearchQuery] = useState("");
 	const [selectedEntry, setSelectedEntry] = useState(null);
 	const [sortBy, setSortBy] = useState("recent"); // 'recent' or 'oldest'
-	
+
 	/* PHASE 11: Detail modal & edit view state */
 	const [detailDateStr, setDetailDateStr] = useState(null);
 	const [isEditMode, setIsEditMode] = useState(false);
@@ -140,7 +151,9 @@ const DiaryListModal = ({ onClose }) => {
 	/* Format preview text (first 100 chars) */
 	const formatPreview = (text, maxLength = 100) => {
 		if (!text) return "";
-		return text.length > maxLength ? text.substring(0, maxLength) + "..." : text;
+		return text.length > maxLength
+			? text.substring(0, maxLength) + "..."
+			: text;
 	};
 
 	/* PHASE 11: Open detail view for a diary entry */
@@ -167,7 +180,10 @@ const DiaryListModal = ({ onClose }) => {
 			if (editDiary !== (entries[detailDateStr]?.diary || "")) {
 				await saveDiary(detailDateStr, editDiary);
 			}
-			if (editMemo !== (entries[detailDateStr]?.notes || entries[detailDateStr]?.memo || "")) {
+			if (
+				editMemo !==
+				(entries[detailDateStr]?.notes || entries[detailDateStr]?.memo || "")
+			) {
 				await saveMemo(detailDateStr, editMemo);
 			}
 			setIsEditMode(false);
@@ -223,15 +239,21 @@ const DiaryListModal = ({ onClose }) => {
 						transition={{ duration: 0.2 }}
 					>
 						{/* Header */}
-						<div className={`flex items-center justify-between p-4 border-b ${borderCls}`}>
+						<div
+							className={`flex items-center justify-between p-4 border-b ${borderCls}`}
+						>
 							<div className="flex items-center gap-3">
-								<div className={`p-2 rounded-lg ${isDark ? "bg-blue-500/20" : "bg-blue-100"}`}>
+								<div
+									className={`p-2 rounded-lg ${isDark ? "bg-blue-500/20" : "bg-blue-100"}`}
+								>
 									<BookOpen size={18} className="text-blue-500" />
 								</div>
 								<div>
 									<h2 className="font-bold text-lg">Diary List</h2>
 									{diaryDates.length > 0 && (
-										<p className={`text-xs ${isDark ? "text-gray-400" : "text-gray-600"}`}>
+										<p
+											className={`text-xs ${isDark ? "text-gray-400" : "text-gray-600"}`}
+										>
 											{diaryDates.length} entries found
 										</p>
 									)}
@@ -239,9 +261,7 @@ const DiaryListModal = ({ onClose }) => {
 							</div>
 							<button
 								onClick={onClose}
-								className={`p-1 rounded-full transition-colors ${
-									hoverCls
-								}`}
+								className={`p-1 rounded-full transition-colors ${hoverCls}`}
 							>
 								<X size={18} />
 							</button>
@@ -251,10 +271,15 @@ const DiaryListModal = ({ onClose }) => {
 						{isAuthenticated && (
 							<>
 								{/* Search & Sort Controls */}
-								<div className={`p-4 border-b space-y-3 ${`${borderCls} ${secondaryBgCls}`}`}>
+								<div
+									className={`p-4 border-b space-y-3 ${`${borderCls} ${secondaryBgCls}`}`}
+								>
 									{/* Search */}
 									<div className="relative">
-										<Search size={16} className="absolute left-3 top-1/2 transform -translate-y-1/2 opacity-50" />
+										<Search
+											size={16}
+											className="absolute left-3 top-1/2 transform -translate-y-1/2 opacity-50"
+										/>
 										<input
 											type="text"
 											placeholder="Search by date or content..."
@@ -266,7 +291,9 @@ const DiaryListModal = ({ onClose }) => {
 
 									{/* Sort */}
 									<div className="flex items-center gap-2">
-										<label className={`text-xs font-medium ${isDark ? "opacity-70" : "text-gray-600"}`}>
+										<label
+											className={`text-xs font-medium ${isDark ? "opacity-70" : "text-gray-600"}`}
+										>
 											Sort:
 										</label>
 										<div className="flex gap-2">
@@ -295,7 +322,9 @@ const DiaryListModal = ({ onClose }) => {
 										<div className="divide-y divide-current divide-opacity-10">
 											{filteredAndSorted.map((dateStr) => {
 												const entry = entries[dateStr];
-												const preview = formatPreview(entry?.diary || entry?.notes || entry?.memo || "");
+												const preview = formatPreview(
+													entry?.diary || entry?.notes || entry?.memo || "",
+												);
 
 												return (
 													<button
@@ -308,12 +337,19 @@ const DiaryListModal = ({ onClose }) => {
 														{/* Entry Header */}
 														<div className="flex items-start justify-between gap-3">
 															<div className="flex-1 min-w-0">
-																<h4 className="font-semibold text-sm">{formatDate(dateStr)}</h4>
-																<p className={`text-xs mt-1 line-clamp-2 ${isDark ? "text-gray-400" : "text-gray-600"}`}>
+																<h4 className="font-semibold text-sm">
+																	{formatDate(dateStr)}
+																</h4>
+																<p
+																	className={`text-xs mt-1 line-clamp-2 ${isDark ? "text-gray-400" : "text-gray-600"}`}
+																>
 																	{preview || "(No content)"}
 																</p>
 															</div>
-															<ChevronRight size={16} className="flex-shrink-0" />
+															<ChevronRight
+																size={16}
+																className="flex-shrink-0"
+															/>
 														</div>
 													</button>
 												);
@@ -323,7 +359,9 @@ const DiaryListModal = ({ onClose }) => {
 										<div className="flex flex-col items-center justify-center py-12 opacity-50">
 											<BookOpen size={32} className="mb-2" />
 											<p className="text-sm">
-												{diaryDates.length === 0 ? "No diary entries yet" : "No entries match your search"}
+												{diaryDates.length === 0
+													? "No diary entries yet"
+													: "No entries match your search"}
 											</p>
 										</div>
 									)}
@@ -336,7 +374,7 @@ const DiaryListModal = ({ onClose }) => {
 
 			{/* Modal Content - Detail/Edit View */}
 			<AnimatePresence mode="wait">
-			{detailDateStr ? (
+				{detailDateStr ? (
 					<motion.div
 						key="detail-view"
 						className={`relative z-10 w-full max-w-2xl max-h-[80vh] rounded-2xl border shadow-2xl flex flex-col overflow-hidden ${cardCls}`}
@@ -347,20 +385,24 @@ const DiaryListModal = ({ onClose }) => {
 						transition={{ duration: 0.2 }}
 					>
 						{/* Detail Header */}
-						<div className={`flex items-center justify-between p-4 border-b ${borderCls}`}>
+						<div
+							className={`flex items-center justify-between p-4 border-b ${borderCls}`}
+						>
 							<div className="flex items-center gap-3">
 								<button
 									onClick={handleBackToList}
-									className={`p-1 rounded-full transition-colors ${
-										hoverCls
-									}`}
+									className={`p-1 rounded-full transition-colors ${hoverCls}`}
 									title="Back to list"
 								>
 									<ChevronLeft size={18} />
 								</button>
 								<div>
-									<h2 className="font-bold text-lg">{formatDate(detailDateStr)}</h2>
-									<p className={`text-xs ${isDark ? "text-gray-400" : "text-gray-600"}`}>
+									<h2 className="font-bold text-lg">
+										{formatDate(detailDateStr)}
+									</h2>
+									<p
+										className={`text-xs ${isDark ? "text-gray-400" : "text-gray-600"}`}
+									>
 										{isEditMode ? "Editing..." : "Detail View"}
 									</p>
 								</div>
@@ -372,11 +414,18 @@ const DiaryListModal = ({ onClose }) => {
 											onClick={handleSaveEdits}
 											disabled={isSaving}
 											className={`p-1 rounded-full transition-colors ${
-												isSaving ? "opacity-50 cursor-not-allowed" : isDark ? "hover:bg-green-500/20" : "hover:bg-green-100"
+												isSaving
+													? "opacity-50 cursor-not-allowed"
+													: isDark
+														? "hover:bg-green-500/20"
+														: "hover:bg-green-100"
 											}`}
 											title="Save"
 										>
-											<Save size={18} className={isSaving ? "" : "text-green-500"} />
+											<Save
+												size={18}
+												className={isSaving ? "" : "text-green-500"}
+											/>
 										</button>
 										<button
 											onClick={() => {
@@ -403,7 +452,9 @@ const DiaryListModal = ({ onClose }) => {
 												onClick={handleRevertDiary}
 												disabled={isSaving}
 												className={`p-1 rounded-full transition-colors ${
-													isDark ? "hover:bg-amber-500/20" : "hover:bg-amber-100"
+													isDark
+														? "hover:bg-amber-500/20"
+														: "hover:bg-amber-100"
 												} ${isSaving ? "opacity-50 cursor-not-allowed" : ""}`}
 												title="Revert to original AI diary"
 											>
@@ -420,11 +471,14 @@ const DiaryListModal = ({ onClose }) => {
 											<Edit2 size={18} className="text-blue-500" />
 										</button>
 										<button
-									onClick={onClose}
-									className={`p-1 rounded-full transition-colors ${
-										hoverCls
-									}`}
-									title="Close entire modal"									>											<X size={18} />
+											onClick={onClose}
+											className={`p-1 rounded-full transition-colors ${
+												hoverCls
+											}`}
+											title="Close entire modal"
+										>
+											{" "}
+											<X size={18} />
 										</button>
 									</>
 								)}
@@ -437,7 +491,9 @@ const DiaryListModal = ({ onClose }) => {
 								/* Edit Mode */
 								<>
 									<div className="space-y-2">
-										<label className={`text-xs font-semibold ${isDark ? "text-blue-400" : "text-blue-600"}`}>
+										<label
+											className={`text-xs font-semibold ${isDark ? "text-blue-400" : "text-blue-600"}`}
+										>
 											Diary
 										</label>
 										<textarea
@@ -448,7 +504,9 @@ const DiaryListModal = ({ onClose }) => {
 										/>
 									</div>
 									<div className="space-y-2">
-										<label className={`text-xs font-semibold ${isDark ? "text-green-400" : "text-green-600"}`}>
+										<label
+											className={`text-xs font-semibold ${isDark ? "text-green-400" : "text-green-600"}`}
+										>
 											Memo
 										</label>
 										<textarea
@@ -464,26 +522,36 @@ const DiaryListModal = ({ onClose }) => {
 								<>
 									{editDiary && (
 										<div className="space-y-2">
-											<div className={`text-xs font-semibold ${isDark ? "text-blue-300" : "text-blue-600"}`}>
+											<div
+												className={`text-xs font-semibold ${isDark ? "text-blue-300" : "text-blue-600"}`}
+											>
 												Diary
 											</div>
-											<p className={`text-sm leading-relaxed whitespace-pre-wrap ${isDark ? "text-gray-300" : "text-gray-700"}`}>
+											<p
+												className={`text-sm leading-relaxed whitespace-pre-wrap ${isDark ? "text-gray-300" : "text-gray-700"}`}
+											>
 												{editDiary}
 											</p>
 										</div>
 									)}
 									{editMemo && (
 										<div className="space-y-2">
-											<div className={`text-xs font-semibold ${isDark ? "text-green-300" : "text-green-600"}`}>
+											<div
+												className={`text-xs font-semibold ${isDark ? "text-green-300" : "text-green-600"}`}
+											>
 												Memo
 											</div>
-											<p className={`text-sm leading-relaxed whitespace-pre-wrap ${isDark ? "text-gray-300" : "text-gray-700"}`}>
+											<p
+												className={`text-sm leading-relaxed whitespace-pre-wrap ${isDark ? "text-gray-300" : "text-gray-700"}`}
+											>
 												{editMemo}
 											</p>
 										</div>
 									)}
 									{!editDiary && !editMemo && (
-										<div className={`text-sm text-center ${isDark ? "text-gray-400" : "text-gray-600"}`}>
+										<div
+											className={`text-sm text-center ${isDark ? "text-gray-400" : "text-gray-600"}`}
+										>
 											No content for this date
 										</div>
 									)}

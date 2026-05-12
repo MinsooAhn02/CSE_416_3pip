@@ -26,8 +26,6 @@ const STANDARD_WIDGET_COMPONENTS = {
 
 const SmartWidget = ({ keyword }) => <SmartWidgetContent keyword={keyword} />;
 
-/* Width of the collapsible right panel in px */
-const PANEL_W = 292;
 const DASHBOARD_VIEWPORT_H = "calc(100vh - 6rem)";
 
 const DashboardLayout = () => {
@@ -88,54 +86,42 @@ const DashboardLayout = () => {
 			className="mx-auto w-full max-w-[90vw] px-4 pb-6 mt-1"
 			data-widget-overlay-host="true"
 		>
-			{/* ── Main 3-column layout ── */}
-			<div
-				className="flex items-start"
-				style={{
-					gap: panelOpen ? 15 : 0,
-					transition: "gap 0.38s cubic-bezier(0.4,0,0.2,1)",
-				}}
-			>
-				{/* ── Col A + B: Briefing+Diary | Calendar ── */}
+			{/* ── Main 3-column layout: 30% Brief | 20% Calendar | 50% Widgets ── */}
+			<div className="flex items-start gap-4">
+				{/* Col A: AI Briefing + Diary — flex 3 (≈30% when panel open, expands when closed) */}
 				<div
-					className="flex-1 min-w-0 grid items-start gap-5"
-					style={{ gridTemplateColumns: "1.3fr 1.5fr" }}
+					className="flex flex-col gap-5 min-h-0"
+					style={{ flex: 3, minWidth: 0, height: DASHBOARD_VIEWPORT_H }}
 				>
-					{/* Col A: AI Briefing + Diary */}
-					<div
-						className="flex flex-col gap-5 min-h-0"
-						style={{ height: DASHBOARD_VIEWPORT_H }}
-					>
-						<div className="basis-3/5 min-h-0">
-							<BriefingWidget />
-						</div>
-						<div className="basis-2/5 min-h-0">
-							<DiaryCard />
-						</div>
+					<div className="basis-3/5 min-h-0">
+						<BriefingWidget />
 					</div>
-
-					{/* Col B: Calendar (sticky) */}
-					<div className={`${pinModalVisible ? "" : "sticky top-[3.75rem]"}`}>
-						<CalendarWidget />
+					<div className="basis-2/5 min-h-0">
+						<DiaryCard />
 					</div>
 				</div>
 
-				{/* ── Col C: Collapsible widget panel ── */}
+				{/* Col B: Calendar — flex 5 (≈50% when panel open, expands when closed) */}
 				<div
-					className="shrink-0 overflow-hidden"
+					className={`min-w-0 ${pinModalVisible ? "" : "sticky top-[3.75rem]"}`}
+					style={{ flex: 5 }}
+				>
+					<CalendarWidget />
+				</div>
+
+				{/* Col C: Collapsible widget panel — 20%, collapses to 0 */}
+				<div
+					className="overflow-hidden shrink-0"
 					style={{
-						width: panelOpen ? PANEL_W : 0,
-						transition: "width 0.38s cubic-bezier(0.4,0,0.2,1)",
+						width: panelOpen ? "20%" : 0,
+						maxWidth: panelOpen ? "20%" : 0,
 						opacity: panelOpen ? 1 : 0,
-						transitionProperty: "width, opacity",
+						transition: "width 0.38s cubic-bezier(0.4,0,0.2,1), max-width 0.38s cubic-bezier(0.4,0,0.2,1), opacity 0.38s cubic-bezier(0.4,0,0.2,1)",
 					}}
 				>
 					<div
 						className="custom-scrollbar overflow-y-auto flex flex-col gap-3.5 pb-6 pr-0.5"
-						style={{
-							width: PANEL_W,
-							maxHeight: DASHBOARD_VIEWPORT_H,
-						}}
+						style={{ maxHeight: DASHBOARD_VIEWPORT_H }}
 					>
 						{expandedWidgetOrder.map((id) => renderWidget(id))}
 					</div>

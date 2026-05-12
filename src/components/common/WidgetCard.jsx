@@ -37,7 +37,9 @@ const WidgetCard = ({
 						<Icon
 							size={15}
 							className={
-								isDark ? "text-morning-dark-accent" : "text-morning-light-accent"
+								isDark
+									? "text-morning-dark-accent"
+									: "text-morning-light-accent"
 							}
 						/>
 					)}

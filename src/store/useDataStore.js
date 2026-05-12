@@ -13,9 +13,12 @@ const DEBUG_FLOW = import.meta.env.VITE_DEBUG_FLOW === "1";
 const EDGE_TIMEOUT_MS = 25000;
 
 /* ────────────────────────────────────────────
-   1-hour Access-Time-based Caching
+   4-hour Access-Time-based Caching
    ──────────────────────────────────────────── */
-const CACHE_THRESHOLD_MS = 60 * 60 * 1000; // 1시간
+const CACHE_THRESHOLD_MS = 4 * 60 * 60 * 1000; // 4시간
+
+// 언어별 in-memory 캐시 — 언어 전환 시 로딩 없이 즉시 표시
+const _trendsMemCache = {}; // { ko: { trends, trendsResults, trendsAnswer }, en: {...} }
 
 const ACCESS_TIME_KEY = "mb_last_access_time";
 
@@ -1041,12 +1044,20 @@ export const useDataStore = create((set, get) => ({
 		// 트렌드는 관심사 무관 — 세상에서 실제로 뜨는 것을 보여줌
 		const cacheKey = `trends_full_${lang}`;
 
-		// 언어 변경 시 강제 재호출
-		if (!force && get().fetchedLanguage?.trends && get().fetchedLanguage.trends !== lang) {
-			force = true;
+		// ✅ 1순위: 메모리 캐시 — 언어 전환 시 즉시 표시 (로딩 없음)
+		if (!force && _trendsMemCache[lang]) {
+			const mem = _trendsMemCache[lang];
+			set({
+				trends: mem.trends,
+				trendsAnswer: mem.trendsAnswer,
+				trendsResults: mem.trendsResults,
+				fetchedLanguage: { ...get().fetchedLanguage, trends: lang },
+			});
+			get().setApiStatus("trends", "ok");
+			return;
 		}
 
-		// ✅ 캐시 우선 확인
+		// ✅ 2순위: DB 캐시 확인 (cacheKey에 언어가 포함되어 있으므로 언어별로 독립 캐시됨)
 		if (!force) {
 			const dbCached = await readApiCache(cacheKey, userId, false);
 			const localizedResults = filterLocalizedArticles(
@@ -1066,6 +1077,11 @@ export const useDataStore = create((set, get) => ({
 					? buildTrendTitlesFromResults(displayResults, 8)
 					: dbCached?.data?.trends ?? [];
 			if (displayResults.length > 0 || displayTrends.length > 0) {
+				_trendsMemCache[lang] = {
+					trends: displayTrends,
+					trendsAnswer: dbCached.data.answer ?? null,
+					trendsResults: displayResults,
+				};
 				set({
 					trends: displayTrends,
 					trendsAnswer: dbCached.data.answer ?? null,
@@ -1119,6 +1135,11 @@ export const useDataStore = create((set, get) => ({
 					trends: displayTrends,
 					answer: edge.data.answer ?? null,
 					results: displayResults,
+				};
+				_trendsMemCache[lang] = {
+					trends: full.trends,
+					trendsAnswer: full.answer,
+					trendsResults: full.results,
 				};
 				set({
 					trends: full.trends,
@@ -1195,12 +1216,7 @@ export const useDataStore = create((set, get) => ({
 
 		const cacheKey = `news_${locationLabel}_${lang}_${interestFingerprint}`;
 
-		// 언어 변경 시 강제 재호출
-		if (!force && get().fetchedLanguage?.news && get().fetchedLanguage.news !== lang) {
-			force = true;
-		}
-
-		// ✅ 캐시 우선 확인
+		// ✅ 캐시 우선 확인 (cacheKey에 언어가 포함되어 있으므로 언어별로 독립 캐시됨)
 		if (!force) {
 			const dbCached = await readApiCache(cacheKey, userId, false);
 			const localizedResults = filterLocalizedArticles(
@@ -1664,10 +1680,10 @@ i18n.on("languageChanged", () => {
 	const store = useDataStore.getState();
 	const userId = useAuthStore.getState().user?.id;
 	if (store.apiStatus?.news === "ok" || store.apiStatus?.news === "error") {
-		store.fetchNews(userId, true);
+		store.fetchNews(userId);
 	}
 	if (store.apiStatus?.trends === "ok" || store.apiStatus?.trends === "error") {
-		store.fetchTrends(userId, true);
+		store.fetchTrends(userId);
 	}
 });
 

@@ -18,6 +18,7 @@
     "more": "More",
     "show_more": "{{count}} more",
     "show_more_plain": "Show more",
+    "show_less": "Show less",
     "view_more": "View all ({{count}} more)",
     "just_now": "Just now",
     "minutes_ago": "{{count}}m ago",

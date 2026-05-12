@@ -46,9 +46,7 @@ const HealthWidget = () => {
 							{healthData.stepsGoal.toLocaleString()}
 						</span>
 					</div>
-					<div
-						className={`w-full h-1.5 rounded-full ${secondaryBgCls}`}
-					>
+					<div className={`w-full h-1.5 rounded-full ${secondaryBgCls}`}>
 						<div
 							className="h-full bg-green-500 rounded-full"
 							style={{
@@ -62,9 +60,7 @@ const HealthWidget = () => {
 							{healthData.sleep}h / {healthData.sleepGoal}h
 						</span>
 					</div>
-					<div
-						className={`w-full h-1.5 rounded-full ${secondaryBgCls}`}
-					>
+					<div className={`w-full h-1.5 rounded-full ${secondaryBgCls}`}>
 						<div
 							className="h-full bg-indigo-500 rounded-full"
 							style={{
@@ -73,25 +69,21 @@ const HealthWidget = () => {
 						/>
 					</div>
 					<div className="grid grid-cols-2 gap-2 mt-2">
-						<div
-							className={`text-center p-2 rounded-lg ${secondaryBgCls}`}
-						>
+						<div className={`text-center p-2 rounded-lg ${secondaryBgCls}`}>
 							<p className="text-lg font-bold">❤️ {healthData.heartRate}</p>
 							<p className={`text-[10px] ${muted}`}>BPM</p>
 						</div>
-						<div
-							className={`text-center p-2 rounded-lg ${secondaryBgCls}`}
-						>
+						<div className={`text-center p-2 rounded-lg ${secondaryBgCls}`}>
 							<p className="text-lg font-bold">🔥 {healthData.calories}</p>
 							<p className={`text-[10px] ${muted}`}>kcal</p>
 						</div>
-						<div
-							className={`text-center p-2 rounded-lg ${secondaryBgCls}`}
-						>
+						<div className={`text-center p-2 rounded-lg ${secondaryBgCls}`}>
 							<p className="text-lg font-bold">
 								💧 {healthData.water}/{healthData.waterGoal}
 							</p>
-							<p className={`text-[10px] ${muted}`}>{t("widgets.health.cups")}</p>
+							<p className={`text-[10px] ${muted}`}>
+								{t("widgets.health.cups")}
+							</p>
 						</div>
 					</div>
 					{!isRealData && (

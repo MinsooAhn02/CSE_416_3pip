@@ -1,19 +1,13 @@
 {
-	"model": "claude-sonnet-4-6",
-	"autoMemoryEnabled": false,
-	"autoDreamEnabled": false,
-	"spinnerTipsEnabled": false,
+	"env": {
+		"CLAUDE_NO_COST_WARNINGS": "1"
+	},
 	"permissions": {
 		"allow": [],
 		"deny": []
 	},
-	"env": {
-		"CLAUDE_NO_COST_WARNINGS": "1"
-	},
-	"mcpServers": {
-		"qmd": {
-			"command": "qmd",
-			"args": ["mcp"]
-		}
-	}
+	"model": "claude-sonnet-4-6",
+	"spinnerTipsEnabled": false,
+	"autoMemoryEnabled": false,
+	"autoDreamEnabled": false
 }

@@ -27,8 +27,9 @@ const DiaryCard = () => {
 	const [saved, setSaved] = useState(false);
 	const [saveError, setSaveError] = useState(false);
 
-	// 이번 세션에 물어본 질문 목록 (중복 방지)
+	// 이번 세션에 물어본 질문 목록 + 언어별 캐시 (중복 방지 + 언어 전환 시 재호출 방지)
 	const askedRef = useRef([]);
+	const questionCacheRef = useRef({}); // { ko: "...", en: "..." }
 	const questionLanguage = i18n.language?.toLowerCase().startsWith("ko")
 		? "ko"
 		: "en";
@@ -49,6 +50,7 @@ const DiaryCard = () => {
 			});
 			if (q) {
 				askedRef.current = [...askedRef.current, q];
+				questionCacheRef.current[questionLanguage] = q;
 				setQuestion(q);
 			}
 		} catch {
@@ -59,7 +61,12 @@ const DiaryCard = () => {
 	};
 
 	useEffect(() => {
-		askedRef.current = [];
+		const cached = questionCacheRef.current[questionLanguage];
+		if (cached) {
+			setQuestion(cached);
+			setIsLoadingQ(false);
+			return;
+		}
 		fetchNextQuestion();
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [questionLanguage]);

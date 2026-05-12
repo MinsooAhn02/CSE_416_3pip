@@ -10,7 +10,6 @@ import { useDiaryStore } from "./store/useDiaryStore";
 import { useTheme } from "./hooks/useTheme";
 import { useMidnightTrigger } from "./hooks/useMidnightTrigger";
 import { supabase } from "./lib/supabase";
-import { generateAiTodo } from "./services/aiService";
 
 import LoginScreen from "./components/layout/LoginScreen";
 import TopNav from "./components/layout/TopNav";
@@ -30,11 +29,10 @@ const App = () => {
 	const { isDark } = useTheme();
 	const { i18n } = useTranslation();
 	const fetchAll = useDataStore((s) => s.fetchAll);
-	const fetchNews = useDataStore((s) => s.fetchNews);
-	const fetchTrends = useDataStore((s) => s.fetchTrends);
+
 	const bgImage = useSettingsStore((s) => s.bgImage);
 	const initPhaseRef = useRef("none");
-	const prevLangRef = useRef(i18n.language);
+
 	const [authBootstrapDone, setAuthBootstrapDone] = useState(!supabase);
 
 	// Use the new midnight trigger hook (REQ-CS-005, REQ-AJ-001)
@@ -108,7 +106,7 @@ const App = () => {
 			}
 			// 캐시 우선: 1시간 이내 캐시 있으면 API 호출 없이 즉시 표시
 			await fetchAll({ useExistingCache: true });
-			generateAiTodoOnLoad();
+	
 		};
 
 		const runFallbackInit = async () => {
@@ -134,15 +132,7 @@ const App = () => {
 		return () => clearTimeout(timerId);
 	}, [authBootstrapDone, isLoggedIn, user?.id, fetchAll]);
 
-	// 언어 변경 시 뉴스/트렌드 강제 재호출
-	useEffect(() => {
-		if (prevLangRef.current === i18n.language) return;
-		prevLangRef.current = i18n.language;
-		if (!isLoggedIn) return;
-		const userId = useAuthStore.getState().user?.id;
-		fetchNews(userId, true);
-		fetchTrends(userId, true);
-	}, [i18n.language, isLoggedIn, fetchNews, fetchTrends]);
+	// 언어 변경은 useDataStore.js의 i18n.on("languageChanged") 리스너가 처리함
 
 	// 탭이 다시 포커스될 때 캐시 만료(1시간) 확인 → 자동 갱신
 	useEffect(() => {
@@ -175,24 +165,6 @@ const App = () => {
 		return () => clearInterval(timerId);
 	}, [isLoggedIn, user?.id, fetchAll]);
 
-	/**
-	 * AI Todo 자동 생성 — 앱 로드 시 1회 실행
-	 */
-	const generateAiTodoOnLoad = async () => {
-		const events = useDataStore.getState().calEvents || [];
-		const existingTodos = useTodoStore.getState().todos || [];
-		if (events.length === 0) return;
-
-		try {
-			const aiTodos = await generateAiTodo(events, existingTodos);
-			if (aiTodos.length > 0) {
-				await useTodoStore.getState().addAiTodos(aiTodos);
-				console.log("[App] AI Todo 자동 생성 완료:", aiTodos.length, "개");
-			}
-		} catch (e) {
-			console.warn("AI Todo generation failed:", e?.message);
-		}
-	};
 
 	if (!authBootstrapDone) {
 		return (
