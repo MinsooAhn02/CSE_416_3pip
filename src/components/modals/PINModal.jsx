@@ -175,12 +175,12 @@ const PINModal = ({ onSuccess, onCancel, mode = "verify" }) => {
 		return true;
 	};
 
-	const finishSetup = () => {
-		setPIN(pin);
+	const finishSetup = async () => {
+		await setPIN(pin);
 		if (pinLockMode === "off") {
 			setPinLockMode(DEFAULT_PIN_LOCK_MODE);
 		}
-		verifyPIN(pin);
+		await verifyPIN(pin);
 		onSuccess();
 	};
 
@@ -192,7 +192,7 @@ const PINModal = ({ onSuccess, onCancel, mode = "verify" }) => {
 
 			setIsLoading(true);
 			try {
-				finishSetup();
+				await finishSetup();
 			} catch (err) {
 				setError(err?.message || "Failed to save PIN");
 			} finally {
@@ -208,7 +208,7 @@ const PINModal = ({ onSuccess, onCancel, mode = "verify" }) => {
 
 		setIsLoading(true);
 		try {
-			const isCorrect = verifyPIN(pin);
+			const isCorrect = await verifyPIN(pin);
 			if (!isCorrect) {
 				setError("Incorrect PIN");
 				setPin("");

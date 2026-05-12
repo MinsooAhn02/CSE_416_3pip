@@ -318,6 +318,9 @@ const parseEdgeResponse = async (response) => {
 const invokeGoogleFunction = async (name, body) => {
 	if (!supabase || !SUPABASE_URL || !SUPABASE_ANON_KEY) return null;
 
+	const { data: { session } } = await supabase.auth.getSession();
+	const bearerToken = session?.access_token ?? SUPABASE_ANON_KEY;
+
 	const controller = new AbortController();
 	const timerId = window.setTimeout(() => controller.abort(), EDGE_TIMEOUT_MS);
 	try {
@@ -326,7 +329,7 @@ const invokeGoogleFunction = async (name, body) => {
 			headers: {
 				"Content-Type": "application/json",
 				apikey: SUPABASE_ANON_KEY,
-				Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+				Authorization: `Bearer ${bearerToken}`,
 			},
 			body: JSON.stringify(body),
 			signal: controller.signal,

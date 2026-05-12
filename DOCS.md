@@ -1,6 +1,6 @@
 # MorningBriefing.AI - 통합 프로젝트 문서
 
-> 최종 정리일: 2026-05-11 (3차)
+> 최종 정리일: 2026-05-13 (4차)
 > 관리 정책: 문서는 DOCS.md 단일 파일로 유지
 
 ---
@@ -194,14 +194,14 @@ Fallback: user.id 지연 시 1200ms 타임아웃 후 fetchAll() 단독 실행
 | `perms` | { fit, cal } | DB (`user_settings.onboarding_perms`) hydrate |
 | `persona` | string | DB (`user_settings.persona`) |
 | `user` | { id, email, displayName, avatarUrl } | null | 메모리 |
-| `providerToken` | string | null | 메모리 |
+| `providerToken` | string \| null | 메모리 전용 (localStorage 저장 제거됨 — XSS 토큰 탈취 방지) |
 
 **주요 액션:**
 
 - `login()`: Supabase Google OAuth 호출
 - `logout()`: 로컬 상태 즉시 초기화 → Supabase signOut
 - `handleAuthChange(session)`: 세션 처리, `loadUserSettings()` 호출
-- `ensureProviderToken()`: Google access token 획득/캐시
+- `ensureProviderToken()`: Google access token 획득 — 메모리 캐시 우선, 없으면 `supabase.auth.getSession()` → `refreshSession()` 순으로 복원. localStorage 저장 없음
 - `loadUserSettings()`: `user_settings` DB 로드, `fixed_interests`/`onboarding_perms` hydrate, `runPersonalizationBatch()` 백그라운드 실행
 - `finishOB()`: 온보딩 완료, `persona`/`fixed_interests`/`onboarding_perms` DB 저장
 
@@ -344,7 +344,7 @@ useSettingsStore.subscribe((state) => {
 
 **주요 액션:**
 
-- `setPIN/verifyPIN/clearPinAuth/resetPIN`: PIN 관리
+- `setPIN/verifyPIN/clearPinAuth/resetPIN`: PIN 관리 — `setPIN`/`verifyPIN`은 async. 저장 시 Web Crypto API SHA-256 해시로 변환. `verifyPIN` 호출 시 구형 평문 PIN이 남아있으면 자동 마이그레이션
 - `getDiary/saveDiary/saveMemo`: 로컬 + `diaries` 테이블 upsert
 - `addAnswer(dateStr, question, answer)`: `user_qa` 테이블 insert
 - `hydrateFromDB()`: `diaries` + `user_qa` DB → 로컬 동기화
@@ -582,16 +582,21 @@ useSettingsStore.subscribe((state) => {
 
 ## 9) Edge Functions
 
-| 함수 | 엔드포인트 | 입력 | 출력 |
-|------|-----------|------|------|
-| `weather` | `/functions/v1/weather` | `{lat, lon}` | `{temp, city, condition, humidity, precipitation, airQuality}` |
-| `stocks` | `/functions/v1/stocks` | `{symbols: string[]}` | `[{symbol, price, change, changePercent}]` |
-| `tavily` | `/functions/v1/tavily` | `{query, mode, max_results, location, include_domains}` | 뉴스: `{answer, results, location}` / 트렌드: `{trends, answer, results}` |
-| `calendar` | `/functions/v1/calendar` | `{token, todayOnly}` | `[{id, title, start, end, allDay, location, description}]` |
-| `fitness` | `/functions/v1/fitness` | `{token}` | `{steps, sleep, calories, heartRate}` |
-| `groq` | `/functions/v1/groq` | `{system, prompt}` | `{text}` |
-| `smart-widget` | `/functions/v1/smart-widget` | `{keyword, persona, token, ...context}` | 개인화 콘텐츠 구조체 |
-| `kakao-places` | `/functions/v1/kakao-places` | `{query, lat, lon}` | 장소 검색 결과 (현재 미사용) |
+🔒 = Supabase JWT 인증 필수 (Authorization: Bearer {user_access_token})
+
+| 함수 | 엔드포인트 | 인증 | 입력 | 출력 |
+|------|-----------|------|------|------|
+| `weather` | `/functions/v1/weather` | — | `{lat, lon}` | `{temp, city, condition, humidity, precipitation, airQuality}` |
+| `stocks` | `/functions/v1/stocks` | — | `{symbols: string[]}` | `[{symbol, price, change, changePercent}]` |
+| `tavily` | `/functions/v1/tavily` | — | `{query, mode, max_results, location, include_domains}` | 뉴스: `{answer, results, location}` / 트렌드: `{trends, answer, results}` |
+| `groq` | `/functions/v1/groq` | — | `{system, prompt}` | `{text}` |
+| `events` 🔒 | `/functions/v1/events` | JWT | `{token, action?, ...}` | Google Calendar 이벤트 CRUD. action: list(기본)/create/update/delete/read |
+| `tasks` 🔒 | `/functions/v1/tasks` | JWT | `{token, action?, taskListId?}` | Google Tasks CRUD. action: list(기본)/create/update/delete/move/clearCompleted |
+| `fitness` 🔒 | `/functions/v1/fitness` | JWT | `{token}` | `{steps, sleep, calories, heartRate}` |
+| `smart-widget` 🔒 | `/functions/v1/smart-widget` | JWT | `{keyword, persona, token?, ...context}` | 개인화 콘텐츠 구조체 |
+| `kakao-places` | `/functions/v1/kakao-places` | — | `{query, lat, lon}` | 장소 검색 결과 (현재 미사용) |
+
+**JWT 인증 방식:** 클라이언트는 `supabase.auth.getSession()` → `session.access_token`을 Authorization 헤더로 전송. 서버는 `supabase.auth.getUser(jwt)`로 검증 후 미인증 시 401 반환. `invokeGoogleFunction` (useGoogleCalendarStore), `invokeEdgeDetailed` (useDataStore) 모두 user JWT 우선 전송.
 
 **Tavily Edge Function 내부 처리:**
 
@@ -859,6 +864,9 @@ https://www.googleapis.com/auth/fitness.activity.read
 1. 서드파티 API 키는 Supabase Secrets에서만 관리
 2. 클라이언트 코드 하드코딩 금지
 3. RLS로 사용자 데이터 격리
+4. Google OAuth token은 메모리(Zustand)에만 보관 — localStorage 저장 금지
+5. 사용자 개인 데이터에 접근하는 Edge Function(events/tasks/fitness/smart-widget)은 Supabase JWT 필수 검증
+6. Diary PIN은 SHA-256 해시 후 저장 — 평문 저장 금지
 
 ---
 
@@ -925,6 +933,12 @@ https://www.googleapis.com/auth/fitness.activity.read
 ---
 
 ## 18) 최근 반영 사항
+
+### 2026-05-13 — 보안 취약점 수정
+
+- **Edge Function JWT 인증 추가** (`events`, `tasks`, `fitness`, `smart-widget`): 기존에는 누구나 호출 가능했던 Google API 연동 함수에 Supabase JWT 검증 추가. `supabase.auth.getUser(jwt)`로 미인증 요청은 401 반환. 클라이언트 3곳(`invokeEdgeDetailed`, `invokeGoogleFunction`, `diaryGenerationService`)도 anon key 대신 user `access_token`을 Bearer로 전송하도록 변경.
+- **Google OAuth token localStorage 제거** (`useAuthStore.js`): `mb_provider_token` localStorage 키 완전 삭제. token은 Zustand 메모리에만 보관, 재로드 시 `supabase.auth.getSession()` / `refreshSession()`으로 복원. XSS 발생 시에도 Google token 탈취 불가.
+- **Diary PIN SHA-256 해싱** (`useDiaryStore.js`, `PINModal.jsx`): 평문 4자리 PIN → Web Crypto API `crypto.subtle.digest('SHA-256', ...)` 해시로 저장. `setPIN`/`verifyPIN` async 전환. 기존에 평문으로 저장된 PIN은 `verifyPIN` 첫 호출 시 자동 감지 후 해시로 마이그레이션.
 
 ### 2026-05-11 — 대시보드 레이아웃·설정 정리·브리핑 카드 개선
 

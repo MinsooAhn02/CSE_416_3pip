@@ -46,13 +46,19 @@ const invokeEdgeDetailed = async (fnName, body = {}) => {
 	const controller = new AbortController();
 	const timer = setTimeout(() => controller.abort(), EDGE_TIMEOUT_MS);
 
+	let bearerToken = SUPABASE_ANON_KEY;
+	if (supabase) {
+		const { data: { session } } = await supabase.auth.getSession();
+		if (session?.access_token) bearerToken = session.access_token;
+	}
+
 	try {
 		const res = await fetch(url, {
 			method: "POST",
 			headers: {
 				"Content-Type": "application/json",
 				apikey: SUPABASE_ANON_KEY,
-				Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+				Authorization: `Bearer ${bearerToken}`,
 			},
 			body: JSON.stringify(body),
 			signal: controller.signal,

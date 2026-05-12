@@ -5,8 +5,6 @@ import { runPersonalizationBatch } from "../services/personalizationService";
 import { normalizeFixedInterestIds } from "../utils/interests";
 import { useSettingsStore } from "./useSettingsStore";
 
-const PROVIDER_TOKEN_KEY = "mb_provider_token";
-
 export const useAuthStore = create((set, get) => ({
 	isLoggedIn: load("mb_login", false),
 	onboarded: false,
@@ -16,7 +14,7 @@ export const useAuthStore = create((set, get) => ({
 	perms: { fit: false, cal: false },
 	persona: null,
 	user: null,
-	providerToken: load(PROVIDER_TOKEN_KEY, null),
+	providerToken: null,
 
 	login: async () => {
 		if (!supabase) {
@@ -54,7 +52,6 @@ export const useAuthStore = create((set, get) => ({
 
 	reconnectGoogle: async () => {
 		set({ providerToken: null });
-		save(PROVIDER_TOKEN_KEY, null);
 		const didStart = await get().login();
 		if (didStart === false) {
 			throw new Error("Failed to reconnect Google");
@@ -76,7 +73,6 @@ export const useAuthStore = create((set, get) => ({
 		});
 		useSettingsStore.setState({ fixedInterestIds: [], keywordInterests: [] });
 		save("mb_login", false);
-		save(PROVIDER_TOKEN_KEY, null);
 
 		if (supabase) {
 			try {
@@ -93,8 +89,7 @@ export const useAuthStore = create((set, get) => ({
 	handleAuthChange: async (session) => {
 		if (session) {
 			const u = session.user;
-			const nextProviderToken =
-				session.provider_token || get().providerToken || load(PROVIDER_TOKEN_KEY, null);
+			const nextProviderToken = session.provider_token || get().providerToken;
 			const user = {
 				id: u.id,
 				email: u.email,
@@ -107,7 +102,6 @@ export const useAuthStore = create((set, get) => ({
 				providerToken: nextProviderToken,
 			});
 			save("mb_login", true);
-			save(PROVIDER_TOKEN_KEY, nextProviderToken);
 			await get().loadUserSettings();
 			return;
 		}
@@ -125,18 +119,11 @@ export const useAuthStore = create((set, get) => ({
 		});
 		useSettingsStore.setState({ fixedInterestIds: [], keywordInterests: [] });
 		save("mb_login", false);
-		save(PROVIDER_TOKEN_KEY, null);
 	},
 
 	ensureProviderToken: async () => {
 		const existing = get().providerToken;
 		if (existing) return existing;
-
-		const stored = load(PROVIDER_TOKEN_KEY, null);
-		if (stored) {
-			set({ providerToken: stored });
-			return stored;
-		}
 
 		if (!supabase) return null;
 
@@ -147,7 +134,6 @@ export const useAuthStore = create((set, get) => ({
 			const token = session?.provider_token ?? null;
 			if (token) {
 				set({ providerToken: token });
-				save(PROVIDER_TOKEN_KEY, token);
 				return token;
 			}
 
@@ -157,7 +143,6 @@ export const useAuthStore = create((set, get) => ({
 			const refreshedToken = refreshedSession?.provider_token ?? null;
 			if (refreshedToken) {
 				set({ providerToken: refreshedToken });
-				save(PROVIDER_TOKEN_KEY, refreshedToken);
 			}
 			return refreshedToken;
 		} catch {

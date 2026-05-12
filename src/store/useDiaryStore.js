@@ -16,6 +16,13 @@ const PIN_AUTH_EXPIRES_AT_KEY = "mb_diary_pin_auth_expires_at";
 
 const todayStr = () => new Date().toISOString().slice(0, 10);
 
+const hashPin = async (pin) => {
+	const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(pin));
+	return Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, "0")).join("");
+};
+
+const isPlainPin = (value) => typeof value === "string" && /^\d{4}$/.test(value);
+
 const getPinLockMode = () =>
 	useSettingsStore.getState()?.pinLockMode ||
 	load("mb_pin_lock_mode", DEFAULT_PIN_LOCK_MODE);
@@ -116,19 +123,27 @@ export const useDiaryStore = create((set, get) => ({
 
 	setPinModalVisible: (visible) => set({ pinModalVisible: visible }),
 
-	setPIN: (pin) => {
+	setPIN: async (pin) => {
 		if (!/^\d{4}$/.test(pin)) {
 			throw new Error("PIN must be exactly 4 digits");
 		}
-		save(PIN_KEY, pin);
+		const hashed = await hashPin(pin);
+		save(PIN_KEY, hashed);
 		set({ pinSet: true });
 	},
 
-	verifyPIN: (pin) => {
-		const storedPin = load(PIN_KEY, null);
+	verifyPIN: async (pin) => {
+		let storedPin = load(PIN_KEY, null);
 		if (!storedPin) return false;
 
-		const isCorrect = storedPin === pin;
+		// 기존 평문 PIN 마이그레이션: 해시로 재저장
+		if (isPlainPin(storedPin)) {
+			storedPin = await hashPin(storedPin);
+			save(PIN_KEY, storedPin);
+		}
+
+		const inputHash = await hashPin(pin);
+		const isCorrect = storedPin === inputHash;
 		if (isCorrect) {
 			const pinLockMode = getPinLockMode();
 

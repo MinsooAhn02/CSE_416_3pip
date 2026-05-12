@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
 	"Access-Control-Allow-Origin": "*",
@@ -6,9 +7,26 @@ const corsHeaders = {
 		"authorization, x-client-info, apikey, content-type",
 };
 
+const json = (body: unknown, init: ResponseInit = {}) =>
+	new Response(JSON.stringify(body), {
+		...init,
+		headers: { ...corsHeaders, "Content-Type": "application/json", ...(init.headers || {}) },
+	});
+
 serve(async (req) => {
 	if (req.method === "OPTIONS")
 		return new Response("ok", { headers: corsHeaders });
+
+	const authHeader = req.headers.get("Authorization") ?? "";
+	const jwt = authHeader.replace("Bearer ", "");
+	const supabase = createClient(
+		Deno.env.get("SUPABASE_URL")!,
+		Deno.env.get("SUPABASE_ANON_KEY")!,
+	);
+	const { data: { user }, error: authError } = await supabase.auth.getUser(jwt);
+	if (authError || !user) {
+		return json({ error: "Unauthorized" }, { status: 401 });
+	}
 
 	try {
 		const { token } = await req.json();
