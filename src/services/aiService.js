@@ -741,226 +741,562 @@ const buildListSection = (title, items = [], max = 5) => {
 };
 
 /**
- * 상세 브리핑 생성 (summary + detail 동시 반환)
- * @param {{ tone: string, length: string, context: object }} params
- * @returns {Promise<{ summary: string, detail: string } | null>}
+ * 날씨 상태 → 이모지 매핑. 영/한 표현 모두 커버.
  */
-export async function generateDetailedBriefing({ tone, length, context, priorityOrder }) {
-	const { lang, langInstruction, noneLabel } = getLangConfig();
-	const textMap = languageText(lang);
+const getWeatherEmoji = (condition = "") => {
+	const c = String(condition).toLowerCase();
+	if (!c) return "🌡️";
+	if (/(thunder|storm|뇌우|천둥)/.test(c)) return "⛈️";
+	if (/(snow|sleet|blizzard|눈)/.test(c)) return "❄️";
+	if (/(drizzle|shower|rain|비|소나기)/.test(c)) return "🌧️";
+	if (/(fog|mist|haze|안개|연무)/.test(c)) return "🌫️";
+	if (/(clear|sunny|맑)/.test(c)) return "☀️";
+	if (/(overcast|흐림|흐린|온흐림)/.test(c)) return "☁️";
+	if (/(cloud|구름|partly)/.test(c)) return "⛅";
+	return "🌡️";
+};
+
+/**
+ * 시간대 모드: morning (5-12) / afternoon (12-18) / evening (18-5)
+ */
+const getBriefingTimeMode = (date = new Date()) => {
+	const hour = date.getHours();
+	if (hour >= 5 && hour < 12) return "morning";
+	if (hour >= 12 && hour < 18) return "afternoon";
+	return "evening";
+};
+
+/**
+ * 일정 시간 추출 (오후/저녁 모드에서 "남은" 일정 판별용)
+ */
+const eventStartTime = (event) => {
+	const start = event?.start;
+	if (!start) return null;
+	const time = new Date(start).getTime();
+	return Number.isFinite(time) ? time : null;
+};
+
+const formatEventLine = (event, lang) => {
 	const isKo = lang === "ko";
-	const timeProfile = getTimeProfile();
-	const isMorning = timeProfile.mode === "morning";
-	const topSignals = scoreSignals({ context: context ?? {}, timeProfile });
-	const locale = isKo ? "ko-KR" : "en-US";
-	const dateLabel = new Intl.DateTimeFormat(locale, { dateStyle: "full" }).format(
-		new Date(),
-	);
-
-	const formattedCalEvents = formatCalEventsForAI(context?.calEvents, lang);
-
-	const weatherSection = (() => {
-		const weather = context?.weather;
-		if (!weather) {
-			return `${isKo ? "날씨" : "Weather"}: ${textMap.noData}`;
-		}
-		const city = weather.city || (isKo ? "현재 위치" : "Current location");
-		const temp = weather.temp != null ? `${weather.temp}°C` : "?°C";
-		const condition = weather.condition || "";
-		const precipitation = weather.precipitation != null
-			? `${weather.precipitation}%`
-			: null;
-		const extra = precipitation
-			? `, ${isKo ? "강수확률" : "precipitation"} ${precipitation}`
-			: "";
-		return `${isKo ? "날씨" : "Weather"}: ${city} ${temp}${
-			condition ? `, ${condition}` : ""
-		}${extra}`;
-	})();
-
-	const newsSection = (() => {
-		const items = [
-			...(Array.isArray(context?.newsResults)
-				? context.newsResults.map((r) => r?.title).filter(Boolean)
-				: []),
-		];
-		const answer = truncateText(context?.newsAnswer, 260);
-		if (answer) items.unshift(answer);
-		const title = isKo ? "주요 뉴스" : "Key news";
-		return items.length > 0
-			? buildListSection(title, items, 5)
-			: `${title}: ${noneLabel}`;
-	})();
-
-	const trendsSection = (() => {
-		const items = [
-			...(Array.isArray(context?.trendsResults)
-				? context.trendsResults.map((r) => r?.title).filter(Boolean)
-				: []),
-			...(Array.isArray(context?.trends)
-				? context.trends
-					.map((item) => (typeof item === "string" ? item : item?.title))
-					.filter(Boolean)
-				: []),
-		];
-		const answer = truncateText(context?.trendsAnswer, 260);
-		if (answer) items.unshift(answer);
-		const title = isKo ? "트렌드" : "Trends";
-		return items.length > 0
-			? buildListSection(title, items, 5)
-			: `${title}: ${noneLabel}`;
-	})();
-
-	const formattedQA = (context?.todayQA ?? [])
-		.map((qa) => `Q: ${truncateText(qa.question, 120)}\nA: ${truncateText(qa.answer, 220)}`)
-		.slice(0, 3)
-		.join("\n\n");
-
-	const formattedSmart = (context?.smartSummaries ?? [])
-		.filter((s) => s.bullets.length > 0)
-		.map((s) => `[${truncateText(s.keyword, 40)}]: ${s.bullets.map((b) => truncateText(b, 90)).join(" / ")}`)
-		.slice(0, 3)
-		.join("\n");
-
-	const priorityGuidance = priorityOrder?.length > 0
-		? `User priority order: ${priorityOrder.join(" > ")}. Emphasize information in this order.`
+	const start = event?.start ? new Date(event.start) : null;
+	const time = start
+		? start.toLocaleTimeString(isKo ? "ko-KR" : "en-US", {
+			hour: "2-digit",
+			minute: "2-digit",
+			hour12: false,
+		})
 		: "";
+	const title = event?.title || event?.summary || (isKo ? "일정" : "Event");
+	return time ? `${time} ${title}` : title;
+};
 
-	const keywordInterests = Array.isArray(context?.keywordInterests)
-		? context.keywordInterests : [];
-	const topKeywords = keywordInterests.slice(0, 10).map((k) => k.keyword);
-	const interestsGuidance = topKeywords.length > 0
-		? `User's recent interest keywords: ${topKeywords.join(", ")}. Naturally incorporate relevant information into the briefing.`
-		: "";
+/**
+ * Groq 호출: 어제 일기를 1-2문장 과거형 사실 서술로 재작성
+ * Returns trimmed string or "".
+ */
+const rewriteYesterdayDiary = async ({ diaryText, memoText, tone, lang, langInstruction }) => {
+	const source = (diaryText || memoText || "").trim();
+	if (!source) return "";
 
-	const stocksSection = (() => {
-		const s = context?.stocks ?? [];
-		if (s.length === 0) return `${isKo ? "시장 동향" : "Market snapshot"}: ${noneLabel}`;
-		const title = isKo ? "시장 동향" : "Market snapshot";
-		return buildListSection(
-			title,
-			s.slice(0, 4).map((st) => `${st.name}: ${st.value} (${st.change})`),
-			4,
-		);
-	})();
-
-	const todosSection = (() => {
-		const pending = (context?.todos ?? [])
-			.filter((t) => !t.completed)
-			.map((t) => t?.text)
-			.filter(Boolean)
-			.slice(0, 6);
-		const title = isMorning
-			? (isKo ? "점심 전 우선 할 일" : "Pre-lunch priorities")
-			: (isKo ? "오늘 남은 할 일" : "Remaining tasks for the rest of today");
-		if (pending.length === 0) {
-			return isMorning ? textMap.noTasksMorning : textMap.noTasksAfternoon;
-		}
-		return buildListSection(title, pending, 6);
-	})();
-
-	const yesterdayDiarySummary = (() => {
-		const diaryText = toSentenceSummary(context?.yesterdayDiary, 2);
-		const memoText = toSentenceSummary(context?.yesterdayMemo, 1);
-		if (diaryText) {
-			return `${isKo ? "어제 일기 요약" : "Yesterday diary summary"}: ${diaryText}`;
-		}
-		if (memoText) {
-			return `${isKo ? "어제 메모 요약" : "Yesterday memo summary"}: ${memoText}`;
-		}
-		return context?.yesterdayDiaryAutoGenerated
-			? `${isKo ? "어제 일기 요약" : "Yesterday diary summary"}: ${textMap.noDiarySummary}`
-			: textMap.noDiaryStored;
-	})();
-
-	const lengthConfig = {
-		short: { summarySentences: 1, detailLines: 6 },
-		medium: { summarySentences: 3, detailLines: 10 },
-		long: { summarySentences: 5, detailLines: 14 },
-	};
-	const config = lengthConfig[length] || lengthConfig.medium;
-	const modeRule = isMorning
-		? (isKo
-			? "아침 모드: 날짜/날씨/뉴스/트렌드/점심 전 할 일/어제 일기 요약을 반드시 포함"
-			: "Morning mode: must include date, weather, news, trends, pre-lunch tasks, and yesterday diary summary.")
-		: (isKo
-			? "오후 모드: 최신 날씨/최신 뉴스/트렌드/오늘 남은 할 일을 반드시 포함"
-			: "Afternoon mode: must include updated weather, updated news, trends, and remaining tasks for today.");
-
+	const isKo = lang === "ko";
 	const prompt = [
-		"You are a time-aware dashboard briefing AI.",
-		`Tone: ${tone}`,
-		`Time mode: ${timeProfile.mode}`,
-		`Date: ${dateLabel}`,
-		`Mode rule: ${modeRule}`,
-		priorityGuidance ? `Priority guidance: ${priorityGuidance}` : "",
-		interestsGuidance ? `Interest guidance: ${interestsGuidance}` : "",
+		isKo
+			? "다음은 사용자의 어제 일기/메모입니다. 1-2문장으로 과거형 사실만 간결하게 서술하세요. 의견·조언·감상·새로운 정보는 절대 추가하지 마세요."
+			: "Below is yesterday's diary/memo. Rewrite it as 1-2 short past-tense factual sentences. Do not add opinions, advice, reflections, or new information.",
 		"",
-		`Schedule: ${formattedCalEvents}`,
-		weatherSection,
-		newsSection,
-		trendsSection,
-		stocksSection,
-		todosSection,
-		yesterdayDiarySummary,
-		formattedQA ? `Q&A:\n${formattedQA}` : "",
-		formattedSmart ? `Smart summaries:\n${formattedSmart}` : "",
-		"",
-		"Return ONLY valid JSON using this schema:",
-		`{"summary":"exactly ${config.summarySentences} complete sentence(s)","detailLines":["exactly ${config.detailLines} concise lines"]}`,
-		`detailLines must include concrete items from today's data and follow ${timeProfile.mode} mode rule.`,
-		"Do not include greetings or salutations in summary/detailLines.",
-		"Do not include markdown or extra keys.",
-	]
-		.filter(Boolean)
-		.join("\n");
-
-	const data = await invokeFunction("groq", {
-		prompt,
-		system: [
-			"You are a personalized daily briefing writer for a productivity dashboard.",
-			"Respond ONLY with valid JSON. No extra text.",
-			`summary: exactly ${config.summarySentences} complete sentence(s).`,
-			`detailLines: exactly ${config.detailLines} concise lines in array form.`,
-			"Never include greetings, salutations, or sign-offs.",
-			langInstruction,
-		].join("\n"),
-	});
-
-	const fallbackSummary = localBriefingFallback({ topSignals, timeProfile, lang });
-	const fallbackDetail = buildStructuredFallbackDetail({
-		lang,
-		dateLabel,
-		weatherSection,
-		newsSection,
-		trendsSection,
-		todosSection,
-		diarySection: yesterdayDiarySummary,
-	});
-
-	if (!data?.text) {
-		return {
-			summary: fallbackSummary,
-			detail: fallbackDetail,
-		};
-	}
+		source,
+	].join("\n");
 
 	try {
-		const normalized = normalizeBriefingJson(data.text);
-		if (normalized) {
-			return normalized;
-		}
+		const data = await invokeFunction("groq", {
+			prompt,
+			system: [
+				isKo
+					? "사용자의 어제 일기를 과거형 사실로만 요약한다."
+					: "Summarize the user's yesterday diary as past-tense facts only.",
+				isKo
+					? "출력은 1-2개의 짧은 완결 문장. 군더더기 없음."
+					: "Output 1-2 short complete sentences. No filler.",
+				`Tone: ${tone || "neutral"}.`,
+				langInstruction,
+			].join("\n"),
+			temperature: 0.1,
+		});
+		return truncateText(data?.text, 280);
 	} catch {
-		console.warn("AI detailed briefing JSON parse failed");
+		return toSentenceSummary(source, 2);
+	}
+};
+
+/**
+ * Groq 호출: 스마트 위젯 데이터를 1-2문장 자연어 요약
+ */
+const summarizeSmartWidgets = async ({ smartSummaries, tone, lang, langInstruction }) => {
+	const filtered = (smartSummaries ?? []).filter(
+		(s) => Array.isArray(s?.bullets) && s.bullets.length > 0,
+	);
+	if (filtered.length === 0) return "";
+
+	const isKo = lang === "ko";
+	const body = filtered
+		.slice(0, 3)
+		.map(
+			(s) =>
+				`[${truncateText(s.keyword, 40)}] ${s.bullets
+					.map((b) => truncateText(b, 90))
+					.slice(0, 3)
+					.join(" / ")}`,
+		)
+		.join("\n");
+
+	const prompt = [
+		isKo
+			? "다음은 사용자의 관심 키워드별 오늘 최신 정보입니다. 키워드와 핵심 내용을 묶어 1-2문장으로 자연스럽게 요약하세요. 새로운 사실을 만들어내지 말고 주어진 내용만 사용하세요."
+			: "Below is today's latest info for the user's interest keywords. Summarize naturally in 1-2 sentences, grouping keyword and key content. Use only the given content; do not invent facts.",
+		"",
+		body,
+	].join("\n");
+
+	try {
+		const data = await invokeFunction("groq", {
+			prompt,
+			system: [
+				isKo
+					? "오늘 키워드별 최신 정보를 사실 기반으로 1-2문장 요약."
+					: "Summarize today's per-keyword latest info in 1-2 fact-based sentences.",
+				`Tone: ${tone || "neutral"}.`,
+				langInstruction,
+			].join("\n"),
+			temperature: 0.1,
+		});
+		return truncateText(data?.text, 320);
+	} catch {
+		return filtered
+			.slice(0, 2)
+			.map((s) => `${s.keyword}: ${s.bullets[0]}`)
+			.join(" / ");
+	}
+};
+
+/**
+ * 고정 관심사 ID → 사람이 읽는 라벨 매핑 (lang-aware)
+ */
+const FIXED_INTEREST_LABELS_LOCALIZED = {
+	ko: {
+		news: "뉴스",
+		tech: "기술",
+		finance: "금융",
+		health: "건강",
+		food: "음식",
+		entertainment: "엔터테인먼트",
+		fashion: "패션",
+		sports: "스포츠",
+	},
+	en: {
+		news: "News",
+		tech: "Tech",
+		finance: "Finance",
+		health: "Health",
+		food: "Food",
+		entertainment: "Entertainment",
+		fashion: "Fashion",
+		sports: "Sports",
+	},
+};
+
+const SUPPORTED_INTEREST_IDS = ["news", "tech", "finance", "health", "food", "entertainment"];
+
+/**
+ * URL → 호스트명 (출처 라벨용). 실패 시 빈 문자열.
+ */
+const hostFromUrl = (url) => {
+	if (!url || typeof url !== "string") return "";
+	try {
+		const h = new URL(url).hostname.replace(/^www\./, "");
+		return h;
+	} catch {
+		return "";
+	}
+};
+
+/**
+ * Groq 호출: 사용자의 고정 관심사 각각에 대해 한 문장 요약 생성.
+ * 입력 데이터(뉴스/주식/트렌드/스마트요약)에서 가장 관련 높은 사실 하나를 선택해
+ * 1문장 작성. 없으면 빈 문자열.
+ * 반환: { [interestId]: string }
+ */
+const generateInterestSentences = async ({
+	fixedInterestIds,
+	newsResults,
+	stocks,
+	trendsResults,
+	smartSummaries,
+	tone,
+	lang,
+	langInstruction,
+}) => {
+	const targetIds = (Array.isArray(fixedInterestIds) ? fixedInterestIds : [])
+		.map((id) => String(id).toLowerCase())
+		.filter((id) => SUPPORTED_INTEREST_IDS.includes(id));
+	if (targetIds.length === 0) return {};
+
+	const isKo = lang === "ko";
+	const labels = FIXED_INTEREST_LABELS_LOCALIZED[isKo ? "ko" : "en"];
+
+	// 데이터 컨텍스트 구성 — Groq 토큰 절약을 위해 압축
+	const newsLines = (newsResults ?? [])
+		.slice(0, 5)
+		.map((n, i) => {
+			const src = n?.source || hostFromUrl(n?.url);
+			return `${i + 1}. ${truncateText(n?.title, 120)}${src ? ` (${src})` : ""}`;
+		})
+		.join("\n");
+	const stockLines = (stocks ?? [])
+		.slice(0, 5)
+		.map((s) => `${s?.name ?? s?.symbol}: ${s?.value} (${s?.change})`)
+		.join("\n");
+	const trendLines = (trendsResults ?? [])
+		.slice(0, 5)
+		.map((tr, i) => `${i + 1}. ${truncateText(tr?.title, 120)}`)
+		.join("\n");
+	const smartLines = (smartSummaries ?? [])
+		.slice(0, 4)
+		.map(
+			(s) =>
+				`[${truncateText(s?.keyword, 40)}] ${(Array.isArray(s?.bullets) ? s.bullets : [])
+					.slice(0, 2)
+					.map((b) => truncateText(b, 90))
+					.join(" / ")}`,
+		)
+		.join("\n");
+
+	const interestList = targetIds.map((id) => `${id} (${labels[id] ?? id})`).join(", ");
+
+	const prompt = [
+		isKo
+			? "사용자의 고정 관심사 각각에 대해 오늘의 새로운 정보 한 문장을 작성하세요."
+			: "For each of the user's fixed interests, write ONE sentence about today's new info.",
+		isKo
+			? "아래 데이터에서 가장 관련 깊은 사실 하나만 골라 짧고 명확한 한 문장으로 서술. 새로운 사실을 지어내지 말고 데이터에 있는 내용만 사용. 데이터가 부족한 관심사는 빈 문자열 \"\" 반환."
+			: "Pick the single most relevant fact from the data below for each interest and write one short clear sentence. Do not invent facts; use only the given data. Return \"\" for interests with no data.",
+		"",
+		isKo ? `대상 관심사: ${interestList}` : `Target interests: ${interestList}`,
+		"",
+		isKo ? "[뉴스]" : "[News]",
+		newsLines || (isKo ? "(데이터 없음)" : "(no data)"),
+		"",
+		isKo ? "[주식/환율]" : "[Stocks/FX]",
+		stockLines || (isKo ? "(데이터 없음)" : "(no data)"),
+		"",
+		isKo ? "[트렌드]" : "[Trends]",
+		trendLines || (isKo ? "(데이터 없음)" : "(no data)"),
+		"",
+		isKo ? "[스마트 키워드 요약]" : "[Smart keyword summaries]",
+		smartLines || (isKo ? "(데이터 없음)" : "(no data)"),
+		"",
+		isKo
+			? "출력 형식: 순수 JSON 객체만 출력. 예: {\"news\": \"...\", \"tech\": \"\", ...}. 키는 대상 관심사 ID, 값은 한 문장 또는 빈 문자열."
+			: "Output format: pure JSON object only. Example: {\"news\": \"...\", \"tech\": \"\", ...}. Keys are the target interest IDs; values are one sentence or empty string.",
+	].join("\n");
+
+	try {
+		const data = await invokeFunction("groq", {
+			prompt,
+			system: [
+				isKo
+					? "고정 관심사별 1문장 요약을 사실 기반으로 작성한다."
+					: "Write one fact-based sentence per fixed interest.",
+				isKo
+					? "각 문장은 30자~80자, 군더더기 없음. JSON 외 다른 텍스트 금지."
+					: "Each sentence 60-180 chars, no filler. Output JSON only — no other text.",
+				`Tone: ${tone || "neutral"}.`,
+				langInstruction,
+			].join("\n"),
+			temperature: 0.1,
+		});
+		const text = String(data?.text || "").trim();
+		if (!text) return {};
+		// JSON 추출 (모델이 코드펜스/접두 텍스트를 붙일 수 있음)
+		const jsonMatch = text.match(/\{[\s\S]*\}/);
+		if (!jsonMatch) return {};
+		const parsed = JSON.parse(jsonMatch[0]);
+		const result = {};
+		for (const id of targetIds) {
+			const v = parsed?.[id];
+			if (typeof v === "string" && v.trim()) {
+				result[id] = truncateText(v.trim(), 200);
+			}
+		}
+		return result;
+	} catch {
+		return {};
+	}
+};
+
+/**
+ * 상세 브리핑 생성 (deterministic sections + 좁은 범위 AI 보강)
+ *
+ * 반환값 사양:
+ *   summary  - 1줄 요약 (결정론적)
+ *   detail   - 후방호환용 평문 (섹션을 줄바꿈으로 연결)
+ *   sections - [{ id, title, lines }] 형태의 구조화 배열 (BriefingWidget 모달에서 사용)
+ *
+ * 섹션 순서 (todo.md item 26-1 사양):
+ *   1) 날짜  2) 날씨  3) 일정  4) 어제  5) 관심사  6) 오늘 최신 정보
+ *   + (조건부) 시장 동향 — fixedInterestIds 에 "finance" 가 포함된 경우만
+ */
+export async function generateDetailedBriefing({ tone, length, context }) {
+	const { lang, langInstruction } = getLangConfig();
+	const isKo = lang === "ko";
+	const locale = isKo ? "ko-KR" : "en-US";
+	const now = new Date();
+	const timeMode = getBriefingTimeMode(now);
+
+	const dateLabel = new Intl.DateTimeFormat(locale, { dateStyle: "full" }).format(now);
+
+	const sections = [];
+
+	// ── 1) 날짜 + 날씨 (한 줄, 결합) ────────────
+	{
+		const weather = context?.weather;
+		const dateLabelText = `${isKo ? "날짜" : "Date"}: ${dateLabel}`;
+		let weatherLabelText;
+		if (weather) {
+			const city = weather.city || (isKo ? "현재 위치" : "Current location");
+			const temp = weather.temp != null ? `${weather.temp}°C` : "?°C";
+			const condition = weather.condition || "";
+			const emoji = getWeatherEmoji(condition);
+			const precipitation =
+				weather.precipitation != null
+					? `, ${isKo ? "강수확률" : "precipitation"} ${weather.precipitation}%`
+					: "";
+			weatherLabelText = `${isKo ? "날씨" : "Weather"}: ${emoji} ${city} ${temp}${condition ? `, ${condition}` : ""}${precipitation}`;
+		} else {
+			weatherLabelText = `${isKo ? "날씨" : "Weather"}: ${isKo ? "정보 없음" : "No data"}`;
+		}
+		sections.push({
+			id: "header",
+			title: isKo ? "오늘" : "Today",
+			lines: [`${dateLabelText} | ${weatherLabelText}`],
+		});
 	}
 
-	const lines = parseDetailLines(data.text);
-	const fallbackSummaryFromLines = lines.slice(0, config.summarySentences).join(" ");
+	// ── 3) 일정 ────────────────────────────────
+	{
+		const calEvents = Array.isArray(context?.calEvents) ? context.calEvents : [];
+		const tomorrowEvents = Array.isArray(context?.tomorrowEvents)
+			? context.tomorrowEvents
+			: [];
 
-	return {
-		summary: fallbackSummaryFromLines || fallbackSummary,
-		detail: lines.join("\n") || fallbackDetail,
-	};
+		const sortedToday = calEvents
+			.slice()
+			.sort((a, b) => (eventStartTime(a) ?? 0) - (eventStartTime(b) ?? 0));
+
+		if (timeMode === "morning") {
+			const title = isKo ? "오늘 일정" : "Today's schedule";
+			const lines =
+				sortedToday.length > 0
+					? sortedToday.slice(0, 6).map((e) => formatEventLine(e, lang))
+					: [isKo ? "일정 없음" : "No events"];
+			sections.push({ id: "schedule", title, lines });
+		} else {
+			const nowMs = now.getTime();
+			const remaining = sortedToday.filter((e) => {
+				const t = eventStartTime(e);
+				return t == null ? false : t >= nowMs;
+			});
+			const sortedTomorrow = tomorrowEvents
+				.slice()
+				.sort((a, b) => (eventStartTime(a) ?? 0) - (eventStartTime(b) ?? 0));
+
+			const remainingTitle = isKo ? "오늘 남은 일정" : "Remaining today";
+			sections.push({
+				id: "schedule_today_remaining",
+				title: remainingTitle,
+				lines:
+					remaining.length > 0
+						? remaining.slice(0, 5).map((e) => formatEventLine(e, lang))
+						: [isKo ? "남은 일정 없음" : "No remaining events"],
+			});
+
+			const tomorrowTitle = isKo ? "내일 일정" : "Tomorrow";
+			sections.push({
+				id: "schedule_tomorrow",
+				title: tomorrowTitle,
+				lines:
+					sortedTomorrow.length > 0
+						? sortedTomorrow.slice(0, 5).map((e) => formatEventLine(e, lang))
+						: [isKo ? "일정 없음" : "No events"],
+			});
+		}
+	}
+
+	// ── 4·5·6) Groq 병렬 호출 — 어제 일기 / 관심사 1문장 / 스마트 위젯 요약 ──
+	const [diaryRewrite, interestSentences, smartSummary] = await Promise.all([
+		rewriteYesterdayDiary({
+			diaryText: context?.yesterdayDiary,
+			memoText: context?.yesterdayMemo,
+			tone,
+			lang,
+			langInstruction,
+		}),
+		generateInterestSentences({
+			fixedInterestIds: context?.fixedInterestIds,
+			newsResults: context?.newsResults,
+			stocks: context?.stocks,
+			trendsResults: context?.trendsResults,
+			smartSummaries: context?.smartSummaries,
+			tone,
+			lang,
+			langInstruction,
+		}),
+		summarizeSmartWidgets({
+			smartSummaries: context?.smartSummaries,
+			tone,
+			lang,
+			langInstruction,
+		}),
+	]);
+
+	// ── 4) 어제 ────────────────────────────────
+	{
+		const hasYesterdayData =
+			Boolean(context?.yesterdayDiary) || Boolean(context?.yesterdayMemo);
+		const fallback = isKo ? "기록된 일기가 없습니다." : "No diary was recorded.";
+		const line =
+			diaryRewrite ||
+			(hasYesterdayData ? toSentenceSummary(context?.yesterdayDiary || context?.yesterdayMemo, 2) : fallback);
+		sections.push({
+			id: "yesterday",
+			title: isKo ? "어제" : "Yesterday",
+			lines: [line],
+		});
+	}
+
+	// ── 5) 관심사 — 고정 관심사별 1문장, 미지원 항목은 키워드만 ──
+	{
+		const fixedIds = (Array.isArray(context?.fixedInterestIds)
+			? context.fixedInterestIds
+			: []
+		).map((id) => String(id).toLowerCase());
+		const labels = FIXED_INTEREST_LABELS_LOCALIZED[isKo ? "ko" : "en"];
+
+		const sentenceIds = fixedIds.filter((id) => SUPPORTED_INTEREST_IDS.includes(id));
+		const otherFixed = fixedIds.filter((id) => !SUPPORTED_INTEREST_IDS.includes(id));
+
+		const lines = [];
+		for (const id of sentenceIds) {
+			const sentence = interestSentences?.[id];
+			const label = labels[id] ?? id;
+			if (sentence) {
+				lines.push(`${label}: ${sentence}`);
+			} else {
+				lines.push(
+					`${label}: ${isKo ? "오늘 새로운 정보가 없습니다." : "No new info today."}`,
+				);
+			}
+		}
+		if (otherFixed.length > 0) {
+			const otherLabels = otherFixed.map((id) => labels[id] ?? id).join(", ");
+			lines.push(`${isKo ? "기타" : "Other"}: ${otherLabels}`);
+		}
+		if (lines.length === 0) lines.push(isKo ? "관심사 없음" : "None");
+
+		sections.push({
+			id: "interests",
+			title: isKo ? "관심사" : "Interests",
+			lines,
+		});
+	}
+
+	// ── 6) 오늘 최신 정보 — 스마트 키워드 + 주요 뉴스 3개 (sub-blocks) ─
+	{
+		const newsResults = Array.isArray(context?.newsResults) ? context.newsResults : [];
+		const topNewsLines = newsResults
+			.slice(0, 3)
+			.map((n) => {
+				const title = truncateText(n?.title, 140);
+				const src = n?.source || hostFromUrl(n?.url);
+				const sourceLabel = src ? ` — ${truncateText(src, 40)}` : "";
+				return title ? `${title}${sourceLabel}` : "";
+			})
+			.filter(Boolean);
+
+		const smartLine =
+			smartSummary ||
+			(isKo ? "수집된 키워드 정보가 없습니다." : "No keyword info collected yet.");
+		const newsLines =
+			topNewsLines.length > 0
+				? topNewsLines
+				: [isKo ? "수집된 뉴스가 없습니다." : "No news collected yet."];
+
+		sections.push({
+			id: "latest_info",
+			title: isKo ? "오늘 최신 정보" : "Today's latest info",
+			lines: [smartLine, ...newsLines],
+			subBlocks: [
+				{
+					id: "latest_smart",
+					title: isKo ? "관심 키워드" : "Smart keywords",
+					lines: [smartLine],
+				},
+				{
+					id: "latest_news",
+					title: isKo ? "주요 뉴스 Top 3" : "Top 3 news",
+					lines: newsLines,
+				},
+			],
+		});
+	}
+
+	// ── 7) (조건부) 시장 동향 ──────────────────
+	{
+		const fixedInterestIds = Array.isArray(context?.fixedInterestIds)
+			? context.fixedInterestIds
+			: [];
+		const isFinanceUser = fixedInterestIds
+			.map((id) => String(id).toLowerCase())
+			.includes("finance");
+		const stocks = Array.isArray(context?.stocks) ? context.stocks : [];
+		if (isFinanceUser && stocks.length > 0) {
+			sections.push({
+				id: "market",
+				title: isKo ? "시장 동향" : "Market snapshot",
+				lines: stocks
+					.slice(0, 4)
+					.map((st) => `${st.name}: ${st.value} (${st.change})`),
+			});
+		}
+	}
+
+	// ── 출력 빌드 ─────────────────────────────
+	void length; // reserved for future per-length tweaks
+	const summary = (() => {
+		const timeLabel = isKo
+			? timeMode === "morning"
+				? "오전"
+				: timeMode === "afternoon"
+					? "오후"
+					: "저녁"
+			: timeMode.charAt(0).toUpperCase() + timeMode.slice(1);
+		return isKo
+			? `${dateLabel} ${timeLabel} 브리핑입니다.`
+			: `${timeLabel} briefing for ${dateLabel}.`;
+	})();
+
+	const detail = sections
+		.map((s) => {
+			if (Array.isArray(s.subBlocks) && s.subBlocks.length > 0) {
+				const inner = s.subBlocks
+					.map((sb) => `${sb.title}\n${(sb.lines ?? []).join("\n")}`)
+					.join("\n");
+				return `${s.title}\n${inner}`;
+			}
+			return `${s.title}\n${(s.lines ?? []).join("\n")}`;
+		})
+		.join("\n\n");
+
+	return { summary, detail, sections, timeMode };
 }
 
 export async function generateBriefing({ tone, length, context }) {

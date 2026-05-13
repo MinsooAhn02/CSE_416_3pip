@@ -64,6 +64,7 @@ const BriefingWidget = () => {
 	const stocks = useDataStore((s) => s.stocks);
 	const trends = useDataStore((s) => s.trends);
 	const calEvents = useDataStore((s) => s.calEvents);
+	const tomorrowEvents = useDataStore((s) => s.tomorrowEvents);
 	const newsResults = useDataStore((s) => s.newsResults);
 	const newsAnswer = useDataStore((s) => s.newsAnswer);
 	const trendsResults = useDataStore((s) => s.trendsResults);
@@ -200,10 +201,12 @@ const BriefingWidget = () => {
 				stocks,
 				trends,
 				calEvents,
+				tomorrowEvents,
 				todos,
 				activeWidgetIds,
 				yesterdayMemo,
 				keywordInterests: effectiveInterests,
+				fixedInterestIds,
 				persona,
 				newsResults: (newsResults ?? []).slice(0, 5),
 				newsAnswer: newsAnswer ?? "",
@@ -264,6 +267,15 @@ const BriefingWidget = () => {
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [tone]);
 
+	// 언어가 변경되면 캐시 무효화 후 현재 언어로 재생성
+	// (refresh 버튼을 누르지 않아도 자동으로 사용자 언어를 따라가도록 보장)
+	useEffect(() => {
+		if (!initialGenDoneRef.current) return;
+		setBriefingVersions({ short: null, medium: null, long: null });
+		generateBriefingVersion(BRIEFING_LENGTH, true);
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [i18n.language]);
+
 	// Get the current briefing based on selected length
 	const currentBriefing = briefingVersions[BRIEFING_LENGTH];
 
@@ -272,11 +284,15 @@ const BriefingWidget = () => {
 			return {
 				summary: currentBriefing.summary || t("briefing.today_briefing"),
 				detail: currentBriefing.detail || "",
+				sections: Array.isArray(currentBriefing.sections)
+					? currentBriefing.sections
+					: [],
 			};
 		}
 		return {
 			summary: t("briefing.loading_detail"),
 			detail: "",
+			sections: [],
 		};
 	}, [currentBriefing, t]);
 
@@ -295,13 +311,31 @@ const BriefingWidget = () => {
 				!line.startsWith("}") &&
 				!line.startsWith('"'),
 		);
+	// Dashboard preview: prefer section content (skip titles) when sections are available
 	const dashboardDetailText = useMemo(() => {
-		const detailText = detailLines.join(" ").trim();
-		const fallback = displayBriefing.summary || t("briefing.loading_detail");
-		return (detailText || fallback).replace(/\s+/g, " ").trim();
-	}, [detailLines, displayBriefing.summary, t]);
+		const sectionsText = displayBriefing.sections
+			.flatMap((s) => {
+				if (Array.isArray(s.subBlocks) && s.subBlocks.length > 0) {
+					return s.subBlocks.flatMap((sb) => sb.lines ?? []);
+				}
+				return s.lines ?? [];
+			})
+			.filter(Boolean)
+			.join(" · ")
+			.trim();
+		const fallback = sectionsText || detailLines.join(" ").trim();
+		const safe = (fallback || displayBriefing.summary || t("briefing.loading_detail"))
+			.replace(/\s+/g, " ")
+			.trim();
+		return safe;
+	}, [displayBriefing.sections, detailLines, displayBriefing.summary, t]);
 
 	const greeting = useMemo(() => getTimeGreeting(), [i18n.language]);
+
+	// 모달 본문 글자색 — muted 보다 더 진한(라이트)/더 밝은(다크) 색
+	const modalBodyText = isDark
+		? "text-morning-dark-text/90"
+		: "text-morning-light-text/85";
 
 	const handleRefresh = (e) => {
 		e.stopPropagation();
@@ -527,21 +561,75 @@ const BriefingWidget = () => {
 										) : (
 											<motion.div
 												key="content"
-												className="space-y-3"
+												className={`divide-y ${
+													isDark
+														? "divide-morning-dark-hover"
+														: "divide-morning-light-hover/40"
+												}`}
 												initial={{ opacity: 0 }}
 												animate={{ opacity: 1 }}
 												exit={{ opacity: 0 }}
 												transition={{ duration: 0.3 }}
 											>
-												{detailLines.length > 0 ? (
-													detailLines.map((line, idx) => (
-														<p
-															key={idx}
-															className={`text-sm leading-relaxed ${muted}`}
-														>
-															{line}
-														</p>
+												{displayBriefing.sections.length > 0 ? (
+													displayBriefing.sections.map((section) => (
+														<div key={section.id} className="py-3 first:pt-0 last:pb-0">
+															<p
+																className={`text-[11px] font-bold uppercase tracking-widest mb-1.5 ${
+																	isDark ? "text-blue-300" : "text-blue-700"
+																}`}
+															>
+																{section.title}
+															</p>
+															{Array.isArray(section.subBlocks) && section.subBlocks.length > 0 ? (
+																<div className="space-y-2.5">
+																	{section.subBlocks.map((sb) => (
+																		<div key={sb.id}>
+																			<p
+																				className={`text-[10px] font-semibold uppercase tracking-wider mb-1 ${
+																					isDark ? "text-blue-400/80" : "text-blue-600/80"
+																				}`}
+																			>
+																				{sb.title}
+																			</p>
+																			<div className="space-y-1">
+																				{(sb.lines ?? []).map((line, idx) => (
+																					<p
+																						key={idx}
+																						className={`text-sm leading-relaxed ${modalBodyText}`}
+																					>
+																						{line}
+																					</p>
+																				))}
+																			</div>
+																		</div>
+																	))}
+																</div>
+															) : (
+																<div className="space-y-1">
+																	{(section.lines ?? []).map((line, idx) => (
+																		<p
+																			key={idx}
+																			className={`text-sm leading-relaxed ${modalBodyText}`}
+																		>
+																			{line}
+																		</p>
+																	))}
+																</div>
+															)}
+														</div>
 													))
+												) : detailLines.length > 0 ? (
+													<div className="py-1 space-y-3">
+														{detailLines.map((line, idx) => (
+															<p
+																key={idx}
+																className={`text-sm leading-relaxed ${modalBodyText}`}
+															>
+																{line}
+															</p>
+														))}
+													</div>
 												) : (
 													<p className={`text-sm ${muted}`}>
 														{t("briefing.loading_detail")}

@@ -550,13 +550,22 @@ useSettingsStore.subscribe((state) => {
 
 #### BriefingWidget
 
-- 데이터: weather, stocks, trends, calEvents, todos, keywordInterests, persona, priorityOrder
-- Groq LLM 호출 (`/functions/v1/groq`) → AI 브리핑 생성
-- 브리핑 3가지 길이(short/medium/long) 캐시
-- 어조(tone) + 길이(bLen) 설정 반영
-- 어제 메모 + 오늘 일정/할일을 컨텍스트로 포함
-- `effectiveInterests = mergeInterestLists(fixedInterestIds, keywordInterests)` → 상세/단순 브리핑 모두 `Interest guidance:` 포함
-- 아침 자동일기(`ensureYesterdayDiaryForMorning`): `language: resolveDiaryGenerationLanguage()` + `interests: effectiveInterests` 전달
+- 데이터: weather, stocks, trends, calEvents, **tomorrowEvents**, todos, newsResults, trendsResults, smartSummaries, keywordInterests, **fixedInterestIds**, persona
+- **결정론적 섹션 + 좁은 AI 보강 패턴** (`aiService.generateDetailedBriefing`):
+  - JS로 섹션 구조·순서 고정 → 새로고침 변동성 제거 (item 26-2)
+  - Groq 호출은 3개로 한정(`temperature: 0.1`, 사실 외 생성 금지 가드): 어제 일기 재작성 / 고정 관심사별 1문장 / 스마트 키워드 요약
+- 섹션 순서:
+  1. `header` — 날짜 + 날씨 결합 한 줄. 날씨 상태 → 이모지 매핑(`getWeatherEmoji`).
+  2. `schedule` — 시간대 분기. 오전(5–12): 오늘 일정. 오후·저녁(≥12): 오늘 남은 일정 + 내일 일정(`tomorrowEvents`).
+  3. `yesterday` — 어제 일기/메모를 1–2문장 과거형 사실로 재작성(Groq #1).
+  4. `interests` — `fixedInterestIds` 중 `news/tech/finance/health/food/entertainment`에 대해 각각 한 문장(Groq #2). 데이터 부족 항목은 "오늘 새로운 정보가 없습니다".
+  5. `latest_info` — `subBlocks: [관심 키워드, 주요 뉴스 Top 3]`. 관심 키워드는 스마트 위젯 bullets 요약(Groq #3), 뉴스는 `newsResults[0..2]` + URL 호스트명 출처.
+  6. `market` (조건부) — `fixedInterestIds` 에 `finance` 포함 시 stocks Top 4.
+- 반환: `{ summary, detail, sections, timeMode }`. `sections` 는 `[{ id, title, lines, subBlocks? }]`. `detail` 은 후방호환용 평문.
+- 모달 렌더링: `divide-y` 섹션 블록 + 굵은 카테고리 제목 + `subBlocks` 하위 헤더(작은 글자, 들여쓰기).
+- 언어 일치: 모든 섹션 제목·내용·Groq 프롬프트가 `getLangConfig()` 기반으로 ko/en 분기.
+- `useDataStore.fetchTomorrowCalendar`: 오후·저녁 모드의 "내일 일정"용. `events` Edge Function의 `date` 파라미터 활용, `calendar_{YYYY-MM-DD}` DB 캐시.
+- 아침 자동일기(`ensureYesterdayDiaryForMorning`): `language: resolveDiaryGenerationLanguage()` + `interests: effectiveInterests` 전달.
 
 #### SmartWidgetContent
 
@@ -775,8 +784,9 @@ $$score = \sum \left(base\_weight \times \frac{30 - elapsed\_days}{30}\right), \
 | 적용 지점 | 방식 | 파일 |
 |-----------|------|------|
 | **뉴스 쿼리** | 관심사 상위 5개를 Tavily 쿼리에 삽입 | `useDataStore.js` |
-| **상세 AI 브리핑** | `Interest guidance:` 줄로 Groq 프롬프트에 포함 | `aiService.generateDetailedBriefing()` |
-| **단순 AI 브리핑** | 동일 패턴 — `keywordInterests` → `Interest guidance:` | `aiService.generateBriefing()` |
+| **상세 AI 브리핑 — 관심사 섹션** | `fixedInterestIds` 중 news/tech/finance/health/food/entertainment 각각에 대해 newsResults/stocks/trendsResults/smartSummaries에서 사실 1개 선택 → JSON 출력 → 섹션 라인. 미지원 id는 "기타: ..." 라벨로 묶음 | `aiService.generateInterestSentences()` |
+| **상세 AI 브리핑 — 시장 섹션 (조건부)** | `fixedInterestIds.includes("finance")` + stocks 데이터 존재 시만 노출 | `aiService.generateDetailedBriefing()` |
+| **단순 AI 브리핑** | `keywordInterests` → `Interest guidance:` 줄로 Groq 프롬프트에 포함 | `aiService.generateBriefing()` |
 | **Diary Q&A 질문** | `fixedInterestIds` → `INTEREST_TOPIC_MAP` → 관심사 주제 1개 + 일반 주제 1개 혼합 | `aiService.generatePersonalizedQuestion()` |
 | **AI 일기 자동 생성** | `interests` → `promptContext`에 포함, 관련 데이터 있으면 자연스럽게 언급 | `aiService.generateDiary()` |
 | **브리핑 스코어러 / 페르소나** | `fixedInterestIds` + `keywordInterests` 병합 → `interests` 배열 | `personaContext.buildPersonaContext()` |
@@ -1063,6 +1073,62 @@ https://www.googleapis.com/auth/fitness.activity.read
   - 부팅당 1회 보장: `_trendsWarmupPromise` 게이트로 중복 실행 차단.
   - 안전장치: ko 캐시에 한국어 결과가 0개면 warm-up 생략(문제 1과 동일한 stale 영어 캐시 방지). `_trendsMemCache[lang]`에 이미 값이 있으면 덮어쓰지 않음(race 방지).
   - 결과: F5 직후 첫 언어 전환도 로딩 없이 즉시 표시.
+
+---
+
+### 2026-05-13 — AI 브리핑 결정론적 섹션 + 좁은 AI 보강 리팩토링 (todo.md item 26)
+
+**문제 (briefing.png 사용자 보고):**
+- 새로고침마다 형식·순서가 달라지고 백과사전형 군더더기(노트북은 개인용 컴퓨터..., 한국 음식 배달 서비스를 통해...)가 섞임 — 26-1, 26-2.
+- 모달 배치가 평면적이라 카테고리 구분 약함 — 26-3.
+
+**아키텍처 변경 (`src/services/aiService.js > generateDetailedBriefing`):**
+- 기존: 단일 Groq 호출이 뉴스 제목+관심사 키워드를 받아 "자연스럽게 녹여내" → temperature 0.4 → 백과사전형 paraphrase 빈발.
+- 변경: **결정론적 섹션 셸 (JS 100%) + 좁은 범위 Groq 호출 3개 (temperature 0.1, JSON 또는 1–2문장 한정)**.
+  - Groq #1 `rewriteYesterdayDiary` — 어제 일기 → 1–2문장 과거형 사실. 의견·조언·새 정보 추가 금지.
+  - Groq #2 `generateInterestSentences` — 고정 관심사별 1문장. JSON `{news, tech, finance, health, food, entertainment}`. 데이터 부족이면 빈 문자열.
+  - Groq #3 `summarizeSmartWidgets` — 스마트 위젯 bullets → 1–2문장 자연어 요약.
+- 세 호출을 `Promise.all` 병렬 실행.
+
+**섹션 구조 (lock된 순서):**
+1. `header` — 날짜 + 날씨 한 줄 결합. `getWeatherEmoji(condition)` 정규식 기반 매핑(☀️/⛅/☁️/🌧️/⛈️/❄️/🌫️).
+2. `schedule` — 시간대 분기. `getBriefingTimeMode(now)` (morning 5–12 / afternoon 12–18 / evening 18–5). 오후·저녁이면 두 섹션(`schedule_today_remaining` + `schedule_tomorrow`).
+3. `yesterday` — Groq #1 결과, 실패 시 `toSentenceSummary` fallback.
+4. `interests` — `SUPPORTED_INTEREST_IDS = [news, tech, finance, health, food, entertainment]`에 한해 `{label}: {sentence}` 라인. 미지원 fixed id는 "기타: ..."로 묶음.
+5. `latest_info` — `subBlocks: [관심 키워드, 주요 뉴스 Top 3]`. 키워드는 Groq #3 결과, 뉴스는 `newsResults[0..2]` + `hostFromUrl(url)` 출처 라벨.
+6. `market` — `fixedInterestIds.includes("finance")` && `stocks.length > 0`일 때만 추가. stocks Top 4.
+
+**반환 스키마 변경:**
+- 기존: `{ summary, detail }`.
+- 신규: `{ summary, detail, sections, timeMode }`. `sections = [{ id, title, lines, subBlocks? }]`. `subBlocks = [{ id, title, lines }]`. `detail`은 후방호환용 평문(`FirstLoginBriefingModal` 등 기존 소비자 보호).
+
+**`useDataStore.js` — 내일 일정 지원:**
+- 새 상태 `tomorrowEvents: []`.
+- 새 액션 `fetchTomorrowCalendar(userId, force)` — `events` Edge Function의 `date` 파라미터(`shiftDateString(formatLocalDate(), 1)`) 호출, `calendar_{YYYY-MM-DD}` 키로 DB 캐시. 401·미연동 시 `[]`.
+- `fetchAll`에서 calendar 위젯 활성 시 `fetchCalendar` + `fetchTomorrowCalendar` 병렬 push.
+- Edge Function 변경 없음 — 기존 `events`가 이미 `date` 파라미터 지원.
+
+**`BriefingWidget.jsx` — 모달 UI 재구성:**
+- 컨텍스트에 `tomorrowEvents` + `fixedInterestIds` 추가, `useSettingsStore` 구독.
+- `divide-y` 컨테이너로 섹션 블록 분리. 카테고리 제목: `text-[11px] font-bold uppercase tracking-widest` (파란 액센트).
+- `section.subBlocks` 감지 시 하위 헤더(`text-[10px] font-semibold uppercase tracking-wider`) + 들여쓰기.
+- 대시보드 미리보기(`dashboardDetailText`)도 subBlock lines 평탄화해 `·` 구분자 join.
+
+**언어 일치:**
+- 모든 섹션 제목·내용·3개 Groq 시스템 프롬프트 모두 `getLangConfig()` 분기(`isKo` / `langInstruction`). ko 설정 → 한국어 출력, en 설정 → 영어 출력.
+
+**파일:**
+- `src/services/aiService.js` — `getWeatherEmoji`, `getBriefingTimeMode`, `eventStartTime`, `formatEventLine`, `rewriteYesterdayDiary`, `summarizeSmartWidgets`, `generateInterestSentences`, `hostFromUrl`, `FIXED_INTEREST_LABELS_LOCALIZED`, `SUPPORTED_INTEREST_IDS` 추가. `generateDetailedBriefing` 전면 재작성.
+- `src/store/useDataStore.js` — `tomorrowEvents` state, `fetchTomorrowCalendar` action.
+- `src/components/widgets/BriefingWidget.jsx` — context 확장, 모달 `subBlocks` 렌더링.
+
+**검증:**
+- `npm run build` (vite v6.4.2) — 2105 modules transformed, no errors.
+- 수동 검증 대기: 오전/오후 분기, 날씨 이모지, 관심사 1문장, 언어 전환.
+
+**Round 3 후속 수정:**
+- **언어 자동 추종** (`BriefingWidget.jsx`): `i18n.language`를 watch하는 `useEffect` 추가. 변경 감지 시 `briefingVersions` 캐시 전체(`short/medium/long`)를 null 초기화하고 `generateBriefingVersion(BRIEFING_LENGTH, true)` 강제 실행 → 사용자가 새로고침 버튼을 누르지 않아도 모달·대시보드 미리보기 모두 현재 언어로 즉시 재생성. `generateDetailedBriefing`이 매 호출마다 `getLangConfig()`를 다시 읽으므로 섹션 제목·라벨·Groq 프롬프트가 모두 신규 언어로 일치.
+- **모달 본문 가독성** (`BriefingWidget.jsx`): 새 상수 `modalBodyText = isDark ? "text-morning-dark-text/90" : "text-morning-light-text/85"` 도입. 모달 내 section lines · sub-block lines · `detailLines` fallback 3곳에 적용. 다크 모드 글자가 기존 `muted`(50% 불투명) 대비 더 밝고, 라이트 모드는 기존 42% 대비 더 진해 가독성 향상. 대시보드 미리보기 / "last updated" 푸터는 `muted` 유지(시각적 위계 보존).
 
 ---
 

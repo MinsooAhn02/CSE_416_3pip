@@ -4,11 +4,13 @@
   },
   "permissions": {
     "allow": [
-      "Bash(npm run *)"
+      "Bash(npm run *)",
+      "Bash(node --check src/services/aiService.js)",
+      "Bash(node -e \"const p=require\\('./package.json'\\); console.log\\(JSON.stringify\\(p.scripts,null,2\\)\\)\")"
     ],
     "deny": []
   },
-  "model": "claude-sonnet-4-6",
+  "model": "opus",
   "spinnerTipsEnabled": false,
   "autoMemoryEnabled": false,
   "autoDreamEnabled": false

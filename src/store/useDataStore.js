@@ -2,7 +2,7 @@ import { create } from "zustand";
 import { supabase } from "../lib/supabase";
 import { load, save } from "../utils/storage";
 import { DEFAULT_VIS } from "../constants";
-import { formatLocalDate } from "../utils/date";
+import { formatLocalDate, shiftDateString } from "../utils/date";
 import { getInterestFingerprint, getTopInterestKeywords } from "../utils/interests";
 import { useSettingsStore } from "./useSettingsStore";
 import { useAuthStore } from "./useAuthStore";
@@ -934,6 +934,7 @@ export const useDataStore = create((set, get) => ({
 	newsAnswer: null,
 	newsResults: [],
 	calEvents: [],
+	tomorrowEvents: [],
 	healthData: null,
 	rawData: {
 		weather: null,
@@ -1720,6 +1721,53 @@ export const useDataStore = create((set, get) => ({
 	},
 
 	/* ══════════════════════════════════════════
+	   캘린더 - 내일 일정 (Tomorrow)
+	   오후 브리핑에서 사용
+	   ══════════════════════════════════════════ */
+	fetchTomorrowCalendar: async (userId, force = false) => {
+		if (!supabase) {
+			set({ tomorrowEvents: [] });
+			return;
+		}
+
+		const tomorrowStr = shiftDateString(formatLocalDate(), 1);
+		const cacheKey = `calendar_${tomorrowStr}`;
+
+		try {
+			if (!force) {
+				const dbCached = await readApiCache(cacheKey, userId, false);
+				if (dbCached?.data) {
+					set({ tomorrowEvents: dbCached.data });
+					return;
+				}
+			}
+
+			const {
+				data: { session },
+			} = await supabase.auth.getSession();
+			const token = session?.provider_token;
+			if (!token) {
+				set({ tomorrowEvents: [] });
+				return;
+			}
+
+			const data = await invokeEdge("events", { token, date: tomorrowStr });
+			if (data && Array.isArray(data)) {
+				const filtered = data.filter((ev) =>
+					String(ev?.start ?? "").startsWith(tomorrowStr),
+				);
+				set({ tomorrowEvents: filtered });
+				await writeApiCache(cacheKey, filtered, userId);
+			} else {
+				set({ tomorrowEvents: [] });
+			}
+		} catch (e) {
+			console.warn("fetchTomorrowCalendar failed:", e?.message || e);
+			set({ tomorrowEvents: [] });
+		}
+	},
+
+	/* ══════════════════════════════════════════
 	   건강 (Google Fitness)
 	   Steps + Sleep 중심, 나머지는 보조 데이터
 	   ══════════════════════════════════════════ */
@@ -1925,7 +1973,7 @@ export const useDataStore = create((set, get) => ({
 						console.warn("fetchNews failed in fetchAll:", e?.message),
 					),
 			);
-		if (visibleWidgets.includes("calendar"))
+		if (visibleWidgets.includes("calendar")) {
 			jobs.push(
 				store
 					.fetchCalendar(userId, shouldForceRefresh)
@@ -1933,6 +1981,17 @@ export const useDataStore = create((set, get) => ({
 						console.warn("fetchCalendar failed in fetchAll:", e?.message),
 					),
 			);
+			jobs.push(
+				store
+					.fetchTomorrowCalendar(userId, shouldForceRefresh)
+					.catch((e) =>
+						console.warn(
+							"fetchTomorrowCalendar failed in fetchAll:",
+							e?.message,
+						),
+					),
+			);
+		}
 		if (visibleWidgets.includes("health"))
 			jobs.push(
 				store
