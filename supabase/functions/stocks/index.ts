@@ -27,18 +27,18 @@ function isTwelveError(payload: any) {
 }
 
 async function fetchStooqPrice(alphaSymbol: string): Promise<number | null> {
-	const map: Record<string, string> = {
-		KS11: "^ks11",   // KOSPI Composite
-		IXIC: "^ndq",    // NASDAQ Composite
-		SPX:  "^spx",    // S&P 500
-		EWY:  "ewy.us",
-		QQQ:  "qqq.us",
-		SPY:  "spy.us",
+	const map: Record<string, string[]> = {
+		KS11: ["^kospi", "^ks11", "ks11"], // ^ks11 is often N/D on Stooq; ^kospi is reliable
+		IXIC: ["^ndq"], // NASDAQ Composite
+		SPX: ["^spx"], // S&P 500
+		EWY: ["ewy.us"],
+		QQQ: ["qqq.us"],
+		SPY: ["spy.us"],
 	};
 	const sym = alphaSymbol.toLowerCase();
 	const candidates = map[alphaSymbol]
-		? [map[alphaSymbol]]
-		: [`${sym}.us`, sym];          // try US exchange first, then bare symbol
+		? map[alphaSymbol]
+		: [`${sym}.us`, sym]; // try US exchange first, then bare symbol
 	for (const stooqSymbol of candidates) {
 		const url = `https://stooq.com/q/l/?s=${encodeURIComponent(stooqSymbol)}&f=sd2t2ohlcv&h&e=csv`;
 		try {
@@ -88,8 +88,7 @@ serve(async (req) => {
 	try {
 		const { symbols = ["KOSPI", "NASDAQ", "SP500", "USDKRW"] } =
 			await req.json();
-		const apiKey = Deno.env.get("TWELVEDATA_API_KEY");
-		if (!apiKey) throw new Error("TWELVEDATA_API_KEY not set");
+		const apiKey = Deno.env.get("TWELVEDATA_API_KEY")?.trim() ?? "";
 
 		// Internal symbol mapping -> TwelveData symbols
 		const symbolMap: Record<string, string> = {
@@ -106,11 +105,25 @@ serve(async (req) => {
 
 					// For forex
 					if (sym === "USDKRW") {
-						const url = `https://api.twelvedata.com/quote?symbol=${encodeURIComponent(tdSymbol)}&apikey=${encodeURIComponent(apiKey)}`;
-						const data = await fetchJsonWithTimeout(url, 7000);
-						if (isTwelveError(data)) {
-							const fallback = await fetchUsdKrwFallback().catch(() => null);
-							if (!fallback) return { symbol: sym, ...ZERO };
+						if (apiKey) {
+							const url = `https://api.twelvedata.com/quote?symbol=${encodeURIComponent(tdSymbol)}&apikey=${encodeURIComponent(apiKey)}`;
+							const data = await fetchJsonWithTimeout(url, 7000);
+							if (!isTwelveError(data)) {
+								const price = Number(data?.close ?? 0);
+								const change = Number(data?.change ?? 0);
+								const percent = normalizePercent(data?.percent_change, change);
+								if (Number.isFinite(price) && price > 0) {
+									return {
+										symbol: sym,
+										price,
+										change: Number.isFinite(change) ? change : 0,
+										changePercent: percent,
+									};
+								}
+							}
+						}
+						const fallback = await fetchUsdKrwFallback().catch(() => null);
+						if (fallback) {
 							return {
 								symbol: sym,
 								price: fallback,
@@ -118,31 +131,32 @@ serve(async (req) => {
 								changePercent: "0%",
 							};
 						}
-						const price = Number(data?.close ?? 0);
-						const change = Number(data?.change ?? 0);
-						const percent = normalizePercent(data?.percent_change, change);
-						// TwelveData returned 0 — try er-api fallback
-						if (!Number.isFinite(price) || price <= 0) {
-							const fallback = await fetchUsdKrwFallback().catch(() => null);
-							if (fallback) return { symbol: sym, price: fallback, change: 0, changePercent: "0%" };
-						}
-						return {
-							symbol: sym,
-							price: Number.isFinite(price) ? price : 0,
-							change: Number.isFinite(change) ? change : 0,
-							changePercent: percent,
-						};
+						return { symbol: sym, ...ZERO };
 					}
 
 					// For stocks/ETFs (KS11 needs the exchange qualifier for TwelveData)
-					const exchange = tdSymbol === "KS11" ? "&exchange=XKOS" : "";
-					const url = `https://api.twelvedata.com/quote?symbol=${encodeURIComponent(tdSymbol)}${exchange}&apikey=${encodeURIComponent(apiKey)}`;
-					const data = await fetchJsonWithTimeout(url, 7000);
-					if (isTwelveError(data)) {
-						const fallbackPrice = await fetchStooqPrice(tdSymbol).catch(
-							() => null,
-						);
-						if (!fallbackPrice) return { symbol: sym, ...ZERO };
+					if (apiKey) {
+						const exchange = tdSymbol === "KS11" ? "&exchange=XKOS" : "";
+						const url = `https://api.twelvedata.com/quote?symbol=${encodeURIComponent(tdSymbol)}${exchange}&apikey=${encodeURIComponent(apiKey)}`;
+						const data = await fetchJsonWithTimeout(url, 7000);
+						if (!isTwelveError(data)) {
+							const price = Number(data?.close ?? 0);
+							const change = Number(data?.change ?? 0);
+							const percent = normalizePercent(data?.percent_change, change);
+							if (Number.isFinite(price) && price > 0) {
+								return {
+									symbol: sym,
+									price,
+									change: Number.isFinite(change) ? change : 0,
+									changePercent: percent,
+								};
+							}
+						}
+					}
+					const fallbackPrice = await fetchStooqPrice(tdSymbol).catch(
+						() => null,
+					);
+					if (fallbackPrice) {
 						return {
 							symbol: sym,
 							price: fallbackPrice,
@@ -150,24 +164,7 @@ serve(async (req) => {
 							changePercent: "0%",
 						};
 					}
-					const price = Number(data?.close ?? 0);
-					const change = Number(data?.change ?? 0);
-					const percent = normalizePercent(data?.percent_change, change);
-
-					// TwelveData returned 0 for this symbol — try Stooq fallback
-					if (!Number.isFinite(price) || price <= 0) {
-						const fallbackPrice = await fetchStooqPrice(tdSymbol).catch(() => null);
-						if (fallbackPrice) {
-							return { symbol: sym, price: fallbackPrice, change: 0, changePercent: "0%" };
-						}
-					}
-
-					return {
-						symbol: sym,
-						price: Number.isFinite(price) ? price : 0,
-						change: Number.isFinite(change) ? change : 0,
-						changePercent: percent,
-					};
+					return { symbol: sym, ...ZERO };
 				} catch {
 					return { symbol: sym, ...ZERO };
 				}

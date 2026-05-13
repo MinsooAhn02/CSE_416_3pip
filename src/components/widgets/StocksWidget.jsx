@@ -10,6 +10,53 @@ import { useSettingsStore } from "../../store/useSettingsStore";
 import WidgetCard from "../common/WidgetCard";
 
 const WIDGET_LIMIT = 6;
+const MODAL_GRID_COLUMNS = 4;
+const SYMBOL_ALIAS_MAP = {
+	KOSPI: "KOSPI",
+	KS11: "KOSPI",
+	"^KOSPI": "KOSPI",
+	"^KS11": "KOSPI",
+	NASDAQ: "NASDAQ",
+	IXIC: "NASDAQ",
+	"^IXIC": "NASDAQ",
+	SP500: "SP500",
+	"SP 500": "SP500",
+	"S&P500": "SP500",
+	"S&P 500": "SP500",
+	SPX: "SP500",
+	"^SPX": "SP500",
+	USDKRW: "USDKRW",
+	"USD/KRW": "USDKRW",
+	"USD-KRW": "USDKRW",
+};
+
+const normalizeWidgetSymbol = (value) => {
+	const upper = String(value ?? "")
+		.trim()
+		.toUpperCase();
+	if (!upper) return "";
+	return SYMBOL_ALIAS_MAP[upper] ?? upper;
+};
+
+const normalizeWidgetSymbols = (symbols) =>
+	Array.from(
+		new Set(
+			(Array.isArray(symbols) ? symbols : [])
+				.map(normalizeWidgetSymbol)
+				.filter(Boolean),
+		),
+	);
+
+const getStockKey = (stock) =>
+	normalizeWidgetSymbol(stock?.symbol ?? stock?.name ?? "");
+
+const getStockNumericValue = (stock) => {
+	const raw = stock?.value ?? stock?.price;
+	if (typeof raw === "number") return Number.isFinite(raw) ? raw : 0;
+	if (typeof raw !== "string") return 0;
+	const parsed = Number(raw.replace(/[^0-9.\-]/g, ""));
+	return Number.isFinite(parsed) ? parsed : 0;
+};
 
 const STOCK_OPTIONS = [
 	{ id: "KOSPI", label: "KOSPI" },
@@ -64,19 +111,55 @@ const StocksWidget = () => {
 	};
 
 	const lastUpdatedText = formatLastUpdated(getLastUpdatedMinutes("stocks"));
-	const selectedSet = useMemo(() => new Set(stockSymbols), [stockSymbols]);
-	const customSymbols = useMemo(
-		() => stockSymbols.filter((s) => !presetIds.has(s)),
+	const normalizedStockSymbols = useMemo(
+		() => normalizeWidgetSymbols(stockSymbols),
 		[stockSymbols],
+	);
+	const selectedSet = useMemo(
+		() => new Set(normalizedStockSymbols),
+		[normalizedStockSymbols],
+	);
+	const customSymbols = useMemo(
+		() => normalizedStockSymbols.filter((s) => !presetIds.has(s)),
+		[normalizedStockSymbols],
 	);
 
 	const visibleStocks = orderedStocks.slice(0, WIDGET_LIMIT);
 	const hasMore = orderedStocks.length > WIDGET_LIMIT;
+	const modalStockRows = useMemo(() => {
+		const rows = [];
+		for (let i = 0; i < orderedStocks.length; i += MODAL_GRID_COLUMNS) {
+			rows.push(orderedStocks.slice(i, i + MODAL_GRID_COLUMNS));
+		}
+		return rows;
+	}, [orderedStocks]);
 
 	// Sync orderedStocks from store (preserves drag order until next fetch)
 	useEffect(() => {
-		setOrderedStocks(stocks);
+		setOrderedStocks((prev) => {
+			const prevByKey = new Map(
+				(prev || [])
+					.map((item) => [getStockKey(item), item])
+					.filter(([key]) => Boolean(key)),
+			);
+			return (stocks || []).map((item) => {
+				const key = getStockKey(item);
+				const prevItem = prevByKey.get(key);
+				if (!prevItem) return item;
+				return getStockNumericValue(item) > 0 ? item : prevItem;
+			});
+		});
 	}, [stocks]);
+
+	useEffect(() => {
+		if (normalizedStockSymbols.length === 0) return;
+		const isSameOrderAndValue =
+			normalizedStockSymbols.length === stockSymbols.length &&
+			normalizedStockSymbols.every((s, i) => s === stockSymbols[i]);
+		if (isSameOrderAndValue) return;
+		setStockSymbols(normalizedStockSymbols);
+		void fetchStocks(normalizedStockSymbols, undefined, true);
+	}, [normalizedStockSymbols, stockSymbols, setStockSymbols, fetchStocks]);
 
 	// Prevent body scroll when modal is open
 	useEffect(() => {
@@ -93,40 +176,54 @@ const StocksWidget = () => {
 	}, [showModal]);
 
 	const onDragEnd = (result) => {
-		if (!result.destination || result.source.index === result.destination.index)
-			return;
-		const src = result.source.index;
-		const dst = result.destination.index;
+		if (!result.destination) return;
+		const parseRowIndex = (droppableId) => {
+			const prefix = "stocks-modal-row-";
+			if (!droppableId.startsWith(prefix)) return 0;
+			const value = Number(droppableId.slice(prefix.length));
+			return Number.isFinite(value) ? value : 0;
+		};
+		const src =
+			parseRowIndex(result.source.droppableId) * MODAL_GRID_COLUMNS +
+			result.source.index;
+		const dst =
+			parseRowIndex(result.destination.droppableId) * MODAL_GRID_COLUMNS +
+			result.destination.index;
+		if (src === dst) return;
 		const newStocks = Array.from(orderedStocks);
 		const [moved] = newStocks.splice(src, 1);
 		newStocks.splice(dst, 0, moved);
 		setOrderedStocks(newStocks);
-		const newSymbols = newStocks.map((s) => s.symbol).filter(Boolean);
+		const newSymbols = normalizeWidgetSymbols(
+			newStocks.map((s) => s?.symbol ?? s?.name),
+		);
 		if (newSymbols.length > 0) setStockSymbols(newSymbols);
 	};
 
 	const toggleSymbol = async (symbol) => {
-		const exists = selectedSet.has(symbol);
-		let next = stockSymbols;
+		const normalized = normalizeWidgetSymbol(symbol);
+		const exists = selectedSet.has(normalized);
+		let next = normalizedStockSymbols;
 		if (exists) {
-			next = stockSymbols.filter((s) => s !== symbol);
+			next = normalizedStockSymbols.filter((s) => s !== normalized);
 			if (next.length === 0) return;
 		} else {
-			next = [...stockSymbols, symbol];
+			next = [...normalizedStockSymbols, normalized];
 		}
 		setStockSymbols(next);
 		await fetchStocks(next);
 	};
 
 	const removeSymbol = async (symbol) => {
-		const next = stockSymbols.filter((s) => s !== symbol);
+		const normalized = normalizeWidgetSymbol(symbol);
+		const next = normalizedStockSymbols.filter((s) => s !== normalized);
 		if (next.length === 0) return;
 		setStockSymbols(next);
 		await fetchStocks(next, undefined, true);
 	};
 
 	const addCustomSymbol = async () => {
-		const symbol = customSymbol.trim().toUpperCase();
+		const symbol = normalizeWidgetSymbol(customSymbol);
 		if (!symbol) return;
 		if (selectedSet.has(symbol)) {
 			setCustomSymbol("");
@@ -141,7 +238,7 @@ const StocksWidget = () => {
 			setValidationError(t("widgets.stocks.invalid_ticker", { symbol }));
 			return;
 		}
-		const next = [...stockSymbols, symbol];
+		const next = [...normalizedStockSymbols, symbol];
 		setStockSymbols(next);
 		setCustomSymbol("");
 		await fetchStocks(next);
@@ -154,7 +251,7 @@ const StocksWidget = () => {
 				icon={TrendingUp}
 				widgetId="stocks"
 				headerMeta={lastUpdatedText}
-				onRefresh={() => fetchStocks(stockSymbols, undefined, true)}
+				onRefresh={() => fetchStocks(normalizedStockSymbols, undefined, true)}
 				refreshing={!!loading}
 				refreshIcon={RefreshCw}
 				apiStatus={apiStatus}
@@ -297,112 +394,141 @@ const StocksWidget = () => {
 								transition={{ duration: 0.2 }}
 							/>
 							<motion.div
-								className={`fixed top-1/2 left-1/2 z-[10000] w-full max-w-2xl max-h-[80vh]
-									rounded-2xl border shadow-2xl flex flex-col overflow-hidden ${
-										isDark
-											? "bg-morning-dark-card border-morning-dark-hover text-morning-dark-text"
-											: "bg-morning-light-card border-morning-light-hover/30 text-morning-light-text"
-									}`}
-								style={{ x: "-50%", y: "-50%" }}
-								initial={{ opacity: 0, scale: 0.5 }}
-								animate={{ opacity: 1, scale: 1 }}
-								exit={{ opacity: 0, scale: 0.5 }}
-								transition={{ type: "spring", damping: 25, stiffness: 300 }}
-								onClick={(e) => e.stopPropagation()}
+								className="fixed inset-0 z-[10000] flex items-center justify-center p-4"
+								initial={{ opacity: 0 }}
+								animate={{ opacity: 1 }}
+								exit={{ opacity: 0 }}
+								transition={{ duration: 0.2 }}
 							>
 								<div
-									className={`flex items-center justify-between p-4 border-b ${
-										isDark
-											? "border-morning-dark-hover"
-											: "border-morning-light-hover/30"
-									}`}
-								>
-									<div className="flex items-center gap-3">
-										<TrendingUp size={20} className="text-blue-500" />
-										<h3 className="font-bold text-base">
-											{t("widgets.stocks.title")}
-										</h3>
-									</div>
-									<button
-										onClick={() => setShowModal(false)}
-										className={`p-2 rounded-full transition-colors ${
+									className={`w-full max-w-5xl max-h-[80vh]
+										rounded-2xl border shadow-2xl flex flex-col overflow-hidden ${
 											isDark
-												? "hover:bg-morning-dark-hover"
-												: "hover:bg-morning-light-hover/30"
+												? "bg-morning-dark-card border-morning-dark-hover text-morning-dark-text"
+												: "bg-morning-light-card border-morning-light-hover/30 text-morning-light-text"
+										}`}
+									onClick={(e) => e.stopPropagation()}
+								>
+									<div
+										className={`flex items-center justify-between p-4 border-b ${
+											isDark
+												? "border-morning-dark-hover"
+												: "border-morning-light-hover/30"
 										}`}
 									>
-										<X size={18} />
-									</button>
-								</div>
-								<div className="flex-1 overflow-y-auto p-4">
-									<p className="text-[10px] mb-3 opacity-40 flex items-center gap-1">
-										<GripVertical size={10} />
-										{t("widgets.stocks.drag_to_reorder")}
-									</p>
-									<DragDropContext onDragEnd={onDragEnd}>
-										<Droppable droppableId="stocks-modal-grid">
-											{(provided) => (
-												<div
-													ref={provided.innerRef}
-													{...provided.droppableProps}
-													className="flex flex-wrap gap-2"
-												>
-													{orderedStocks.map((s, i) => (
-														<Draggable
-															key={s.symbol ?? s.name ?? i}
-															draggableId={`stock-${s.symbol ?? s.name ?? i}`}
-															index={i}
-														>
-															{(dragProvided, snapshot) => {
-																const card = (
-																	<div
-																		ref={dragProvided.innerRef}
-																		{...dragProvided.draggableProps}
-																		{...dragProvided.dragHandleProps}
-																		style={{
-																			width: "calc(33.333% - 5.5px)",
-																			...dragProvided.draggableProps.style,
-																			...(snapshot.isDragging
-																				? { zIndex: 10001 }
-																				: {}),
-																		}}
-																		className={`relative p-3 rounded-xl cursor-grab active:cursor-grabbing select-none ${secondaryBgCls} ${snapshot.isDragging ? "shadow-xl ring-1 ring-blue-400/50 opacity-90" : ""}`}
-																	>
-																		<GripVertical
-																			size={11}
-																			className="absolute top-2 right-2 opacity-20 pointer-events-none"
-																		/>
-																		<div className="flex justify-between items-center mb-1 pr-3">
-																			<span
-																				className={`text-[10px] ${isDark ? "text-gray-400" : "text-slate-500"}`}
-																			>
-																				{s.name}
-																			</span>
-																			<span
-																				className={`text-[10px] ${s.up ? "text-red-400" : "text-blue-400"}`}
-																			>
-																				{s.up ? "▲" : "▼"} {s.change}
-																			</span>
-																		</div>
-																		<p className="text-lg font-bold">
-																			{s.value}
-																		</p>
-																	</div>
-																);
-																// Portal the dragging item to document.body to escape
-																// Framer Motion's CSS transform containing block, which
-																// would otherwise misplace position:fixed coordinates.
-																return snapshot.isDragging
-																	? createPortal(card, document.body)
-																	: card;
-															}}
-														</Draggable>
-													))}
-													{provided.placeholder}
+										<div className="flex items-center gap-3">
+											<TrendingUp size={20} className="text-blue-500" />
+											<h3 className="font-bold text-base">
+												{t("widgets.stocks.title")}
+											</h3>
+										</div>
+										<button
+											onClick={() => setShowModal(false)}
+											className={`p-2 rounded-full transition-colors ${
+												isDark
+													? "hover:bg-morning-dark-hover"
+													: "hover:bg-morning-light-hover/30"
+											}`}
+										>
+											<X size={18} />
+										</button>
+									</div>
+									<div className="flex-1 overflow-y-auto p-4">
+										<p className="text-[10px] mb-3 opacity-40 flex items-center gap-1">
+											<GripVertical size={10} />
+											{t("widgets.stocks.drag_to_reorder")}
+										</p>
+										<DragDropContext onDragEnd={onDragEnd}>
+											<div className="overflow-auto pb-1">
+												<div className="space-y-2 min-w-[900px]">
+												{modalStockRows.map((row, rowIndex) => (
+													<Droppable
+														key={`stocks-modal-row-${rowIndex}`}
+														droppableId={`stocks-modal-row-${rowIndex}`}
+														direction="horizontal"
+														type="stocks-modal-grid"
+													>
+														{(provided, dropSnapshot) => (
+															<div
+																ref={provided.innerRef}
+																{...provided.droppableProps}
+																className={`grid grid-cols-4 gap-2 rounded-xl transition-colors ${
+																	dropSnapshot.isDraggingOver
+																		? "bg-blue-500/5"
+																		: ""
+																}`}
+															>
+																{row.map((s, colIndex) => {
+																	const globalIndex =
+																		rowIndex * MODAL_GRID_COLUMNS + colIndex;
+																	const stableId = s.symbol ?? s.name ?? globalIndex;
+																	return (
+																		<Draggable
+																			key={stableId}
+																			draggableId={`stock-${stableId}`}
+																			index={colIndex}
+																		>
+																			{(dragProvided, snapshot) => (
+																				<div
+																					ref={dragProvided.innerRef}
+																					{...dragProvided.draggableProps}
+																					{...dragProvided.dragHandleProps}
+																					style={{
+																						...dragProvided.draggableProps.style,
+																						...(snapshot.isDropAnimating
+																							? {
+																									transitionDuration: "0.001s",
+																									transitionTimingFunction: "linear",
+																								}
+																							: {}),
+																						...(snapshot.isDragging
+																							? { zIndex: 10001 }
+																							: {}),
+																					}}
+																					className={`relative p-3 rounded-xl cursor-grab active:cursor-grabbing select-none min-h-[74px] will-change-transform ${
+																						!snapshot.isDragging &&
+																						!snapshot.isDropAnimating
+																							? "transition-transform duration-200 ease-out"
+																							: ""
+																					} ${secondaryBgCls} ${
+																						snapshot.isDragging
+																							? "shadow-xl ring-1 ring-blue-400/50 opacity-90"
+																							: ""
+																					}`}
+																				>
+																					<GripVertical
+																						size={11}
+																						className="absolute top-2 right-2 opacity-20 pointer-events-none"
+																					/>
+																					<div className="flex justify-between items-center mb-1 pr-3">
+																						<span
+																							className={`text-[10px] truncate ${isDark ? "text-gray-400" : "text-slate-500"}`}
+																						>
+																							{s.name}
+																						</span>
+																						<span
+																							className={`text-[10px] ${s.up ? "text-red-400" : "text-blue-400"}`}
+																						>
+																							{s.up ? "▲" : "▼"} {s.change}
+																						</span>
+																					</div>
+																					<p className="text-lg font-bold">
+																						{s.value}
+																					</p>
+																				</div>
+																			)}
+																		</Draggable>
+																	);
+																})}
+																{provided.placeholder}
+															</div>
+														)}
+													</Droppable>
+												))}
 												</div>
-											)}
-										</Droppable>
-									</DragDropContext>
+											</div>
+										</DragDropContext>
+									</div>
 								</div>
 							</motion.div>
 						</>
