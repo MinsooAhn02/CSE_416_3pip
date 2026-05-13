@@ -1016,46 +1016,64 @@ https://www.googleapis.com/auth/fitness.activity.read
 
 #### 미해결 언어 문제 (상세)
 
+> **2026-05-13 업데이트**: 아래 문제 1~5 모두 코드 수준에서 해결 완료. 각 항목 끝의 "✅ 해결" 블록 참고.
+
 **문제 1. Live Trend 영어 데이터 잔존**
 
 - **현상**: 한국어 모드임에도 Live Trend에 영어 기사 제목이 표시됨
 - **근본 원인**: DB 캐시 테이블(`api_cache`)에 `trends_full_ko` 키로 저장된 이전 영어 데이터가 4시간 TTL 동안 그대로 사용됨. 코드는 한국어 쿼리 + `KO_NEWS_DOMAINS` 필터를 올바르게 구현했지만, 낡은 캐시가 새 fetch를 막음
 - **임시 해결**: TrendsWidget 우측 상단 새로고침(↻) 아이콘 클릭 → `force=true`로 DB 캐시 우회 후 한국어 쿼리 재호출
-- **근본 해결 필요 사항**:
-  1. `api_cache`에서 `trends_full_ko` 행을 직접 삭제하거나 `fetched_at`을 오래된 시간으로 수동 갱신
-  2. 또는 TTL을 4시간에서 단축하거나, 언어 전환 시 해당 언어 DB 캐시만 선택적으로 무효화하는 로직 추가
-- **코드 상태**: `fetchTrends` 내부 한국어 쿼리 및 `include_domains: KO_NEWS_DOMAINS` 설정은 **올바름** — 새 fetch 시 정상 한국어 결과 수신 확인
+- **✅ 해결 (2026-05-13)** — `src/store/useDataStore.js` `fetchTrends` (line ~1244):
+  - DB 캐시 read 직후 `lang === "ko" && localizedResults.length === 0 && fallbackResults.length > 0` 조건을 검사하여 **언어 불일치 stale 캐시를 감지**.
+  - 불일치 시 캐시를 무시하고 fresh fetch 경로로 폴백 → 영어 데이터를 한글로 무리하게 번역해 보여주는 어색한 결과 제거.
+  - DB row 직접 수정/TTL 단축 없이 코드 read 경로에서만 처리하므로 영향 범위 최소.
 
 **문제 2. Smart Widget 언어 필터 한계**
 
 - **현상**: 일부 키워드(예: "카레")는 한국어 모드에서도 영어 뉴스를 보여줌
 - **근본 원인**: Tavily가 해당 키워드에 대해 한국어 제목 기사를 2개 미만으로 반환할 경우 `filterSmartResults`가 전체 결과로 fallback → 영어 기사가 섞여 들어옴
-- **현재 구현**: `filterSmartResults(items, isKo)` — Hangul 감지로 언어 필터 후 2개 이하면 전체 결과 사용 (결과 수 보장 목적)
-- **미완성 개선점**:
-  1. fallback 기준을 2개 → 1개로 낮춰 한국어 결과 1개라도 있으면 한국어만 표시
-  2. 한국어 도메인(`news.naver.com` 등)으로 Tavily 쿼리를 재시도하는 2단계 fetch 구현
-  3. Groq 프롬프트에서 "한국어 기사가 없으면 일반 지식으로 한국어로 답변" 지시 강화
+- **✅ 해결 (2026-05-13)** — `src/services/aiService.js` `generateSmartWidgetData` + `filterSmartResults`:
+  - **2단계 fetch**: 1차 Tavily 응답의 한국어 제목 수가 2개 미만이면 `include_domains: KO_NEWS_DOMAINS` (naver/yna/chosun/joins/hani/news1)로 **재호출**. 결과를 dedupe로 머지한 뒤 다시 언어 필터링.
+  - **fallback 임계값 인하**: `filterSmartResults`의 fallback 기준을 `>= 2` → `>= 1`로 변경. 한국어 결과가 1개라도 있으면 한국어만 표시.
+  - `KO_NEWS_DOMAINS`는 aiService.js 내부 상수로 추가 (useDataStore와 동기화 필요 시 양쪽 갱신).
 
 **문제 3. Smart Widget Groq 응답이 영어로 나올 때**
 
 - **현상**: Groq가 한국어 프롬프트를 받아도 간헐적으로 영어 bullets를 반환함
 - **원인**: Tavily context(기사 본문)가 영어이면 Groq가 context 언어를 따르는 경향
-- **현재 대응**: 프롬프트에 "한국어로 작성" 명시 + `langInstruction` 사용
-- **미완성**: Groq 응답 언어 검증 로직 없음. 응답 bullets에 한글이 없으면 재호출하는 validation 미구현
+- **✅ 해결 (2026-05-13)** — `src/services/aiService.js` `generateSmartWidgetData`:
+  - bullets 파싱 후 `isKo && bullets에 한글 없음`이면 **Groq에 번역 재요청** (전용 system prompt로 영어→한국어 JSON 배열 변환).
+  - 번역 응답에서 한글이 검증된 항목만 채택, 실패 시 원본(영어) bullets 유지 → 위젯이 비는 일은 없음.
+  - 추가 호출 1회뿐이므로 비용 영향 미미.
 
 **문제 4. 뉴스 한국어 출처 검증 미완료**
 
 - **현상**: 한국어 모드에서 뉴스가 `include_domains: KO_NEWS_DOMAINS`로 호출되지만, 실제 표시 기사의 출처가 한국 언론사인지 E2E 검증 안 됨
-- **구현된 것**: `fetchNews`에서 `include_domains: ["news.naver.com", "yna.co.kr", "chosun.com", "joins.com", "hani.co.kr", "news1.kr"]` 전달, `filterLocalizedArticles()` + `scoreArticleForLanguage()` 후처리 필터
-- **검증 필요**: 실제 네트워크 탭에서 Tavily 응답 `results[].url`이 KO_NEWS_DOMAINS 내인지 확인 필요. Tavily가 `include_domains` 파라미터를 항상 엄격히 적용하는지 보장 불명확
+- **✅ 해결 (2026-05-13)** — `src/store/useDataStore.js` `filterByAllowedDomains` + `filterLocalizedArticles`:
+  - 새 헬퍼 `filterByAllowedDomains(items, language)` 추가. `language === "ko"`일 때 URL host가 `KO_NEWS_DOMAINS`에 포함되지 않는 기사를 **클라이언트 측에서 직접 제거** (Tavily의 `include_domains` 미준수 케이스에 대한 방어).
+  - `filterLocalizedArticles`의 마지막 단계에 적용. 화이트리스트 후 결과가 0이면 원본을 유지하여 빈 위젯 방지.
+  - 영어 모드(`lang === "en"`)에는 영향 없음.
 
 **문제 5. `_trendsMemCache` 초기화 시점**
 
-- **현상**: 앱 새로고침(F5) 시 `_trendsMemCache`는 빈 상태 → 첫 언어 전환마다 DB 캐시 또는 API 재호출 발생 (로딩 없는 즉시 전환은 두 번째 방문부터만 동작)
-- **의도된 동작**: 모듈 레벨 변수이므로 탭을 닫지 않는 한 세션 내에서는 유지됨
-- **미완성**: 앱 초기화 시 DB 캐시에서 양 언어 데이터를 미리 읽어 `_trendsMemCache`를 warm-up하는 로직 없음
+- **현상**: 앱 새로고침(F5) 시 `_trendsMemCache`는 빈 상태 → 첫 언어 전환마다 DB 캐시 또는 API 재호출 발생
+- **✅ 해결 (2026-05-13)** — `src/store/useDataStore.js` `warmupTrendsMemCache`:
+  - `fetchAll`에서 userId 확보 후 `warmupTrendsMemCache(userId)`를 **fetchTrends와 병렬로 호출** (await 안 함, fire-and-forget).
+  - 두 언어(`trends_full_ko`, `trends_full_en`)를 DB에서 동시 read해서 `_trendsMemCache.ko`/`.en`에 적재. **추가 API 호출 없음** (DB read만).
+  - 부팅당 1회 보장: `_trendsWarmupPromise` 게이트로 중복 실행 차단.
+  - 안전장치: ko 캐시에 한국어 결과가 0개면 warm-up 생략(문제 1과 동일한 stale 영어 캐시 방지). `_trendsMemCache[lang]`에 이미 값이 있으면 덮어쓰지 않음(race 방지).
+  - 결과: F5 직후 첫 언어 전환도 로딩 없이 즉시 표시.
 
 ---
+
+### 2026-05-13 — 미해결 언어 문제 1~5 해결
+
+- **문제 1 (Trends ko 영어 잔존 캐시 무효화)** `useDataStore.js > fetchTrends`: DB 캐시 read 후 `lang === "ko"`인데 `localizedResults`가 0이면 stale 영어 캐시로 간주, 캐시 무시하고 fresh fetch.
+- **문제 2 (Smart Widget 2단계 한국어 fetch)** `aiService.js > generateSmartWidgetData`: 1차 응답 한국어 결과 < 2개면 `include_domains: KO_NEWS_DOMAINS` 재호출 후 머지. `filterSmartResults` fallback 임계값 `>= 2` → `>= 1`.
+- **문제 3 (Groq 영어 응답 → 한국어 번역)** `aiService.js > generateSmartWidgetData`: bullets에 한글이 전혀 없으면 Groq에 번역 재요청, 한글 검증된 항목만 채택.
+- **문제 4 (뉴스 출처 엄격 화이트리스트)** `useDataStore.js > filterByAllowedDomains`: `lang === "ko"`일 때 `KO_NEWS_DOMAINS` 외 도메인 기사를 클라이언트 측에서 제거 (Tavily `include_domains` 미준수 방어). 결과 0이면 원본 유지.
+- **문제 5 (`_trendsMemCache` warm-up)** `useDataStore.js > warmupTrendsMemCache`: `fetchAll`에서 양 언어 DB 캐시를 메모리로 미리 적재. 부팅당 1회 보장(`_trendsWarmupPromise` 게이트). F5 직후 첫 언어 전환도 즉시 표시.
+- 상세 설명: 위 "미해결 언어 문제 (상세)" 섹션의 각 항목 "✅ 해결" 블록 참고.
 
 ### 2026-05-13 — 보안 취약점 수정
 

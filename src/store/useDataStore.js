@@ -20,6 +20,10 @@ const CACHE_THRESHOLD_MS = 4 * 60 * 60 * 1000; // 4시간
 // 언어별 in-memory 캐시 — 언어 전환 시 로딩 없이 즉시 표시
 const _trendsMemCache = {}; // { ko: { trends, trendsResults, trendsAnswer }, en: {...} }
 
+// 문제 5 fix: 앱 부팅 시 단일 warm-up을 보장하기 위한 게이트.
+// fetchAll이 여러 번 호출되더라도 DB 읽기는 한 번만 수행.
+let _trendsWarmupPromise = null;
+
 const ACCESS_TIME_KEY = "mb_last_access_time";
 
 const getLastAccessTime = () => load(ACCESS_TIME_KEY, 0);
@@ -281,6 +285,58 @@ const readApiCache = async (cacheKey, userIdArg, forceRefresh = false) => {
 	if (!Number.isFinite(age) || age > CACHE_THRESHOLD_MS) return null;
 
 	return { data: data.data ?? null, fetchedAt: fetchedAtMs };
+};
+
+/**
+ * 문제 5 fix: 앱 초기화 시 양 언어(ko/en) trends DB 캐시를 _trendsMemCache로 미리 읽어옴.
+ * 이렇게 하면 F5 직후 첫 언어 전환도 로딩 없이 즉시 표시됨.
+ *
+ * - 부팅당 1회만 수행 (_trendsWarmupPromise 게이트)
+ * - 추가 API 호출 없음 (DB read만)
+ * - lang=ko 캐시에 한국어 결과가 0개면(문제 1과 동일한 stale 영어 캐시) 해당 슬롯은 비움
+ * - 동시 진행 중인 fetchTrends가 _trendsMemCache[lang]를 set한 경우, 기존 값을 보존
+ */
+const warmupTrendsMemCache = async (userIdArg) => {
+	if (_trendsWarmupPromise) return _trendsWarmupPromise;
+	const userId = userIdArg ?? (await getUserId());
+	if (!userId || !supabase) return null;
+
+	_trendsWarmupPromise = (async () => {
+		const langs = ["ko", "en"];
+		await Promise.all(
+			langs.map(async (lang) => {
+				if (_trendsMemCache[lang]) return; // 이미 fetchTrends가 채웠으면 건드리지 않음
+				try {
+					const dbCached = await readApiCache(`trends_full_${lang}`, userId, false);
+					const results = dbCached?.data?.results ?? [];
+					if (!Array.isArray(results) || results.length === 0) return;
+
+					if (lang === "ko") {
+						const hasKorean = results.some((item) =>
+							HANGUL_REGEX.test(String(item?.title || "")),
+						);
+						if (!hasKorean) return; // stale 영어 캐시면 warm-up 생략
+					}
+
+					if (_trendsMemCache[lang]) return; // race 방지
+					_trendsMemCache[lang] = {
+						trends: dbCached.data.trends ?? [],
+						trendsAnswer: dbCached.data.answer ?? null,
+						trendsResults: results,
+					};
+				} catch {
+					/* warm-up 실패는 silently 허용 — fetchTrends에서 정상 재시도 */
+				}
+			}),
+		);
+	})();
+
+	try {
+		await _trendsWarmupPromise;
+	} catch {
+		_trendsWarmupPromise = null;
+	}
+	return null;
 };
 
 const writeApiCache = async (cacheKey, payload, userIdArg) => {
@@ -606,8 +662,23 @@ const dedupeArticles = (items = []) => {
 	});
 };
 
-const filterLocalizedArticles = (items, language, limit = 10) =>
-	dedupeArticles(
+// 문제 4 fix: 엄격 도메인 화이트리스트.
+// lang=ko 모드에서 뉴스 출처를 KO_NEWS_DOMAINS로 강제. Tavily가 include_domains를
+// 항상 엄격히 지키지 않을 수 있으므로 클라이언트 측 후처리 필터로 보장.
+// 단, 화이트리스트 적용 후 결과가 0이면 fallback으로 원본을 유지(빈 위젯 방지).
+const filterByAllowedDomains = (items, language) => {
+	if (language !== "ko" || !Array.isArray(items) || items.length === 0) {
+		return items;
+	}
+	const filtered = items.filter((item) => {
+		const host = getUrlHost(item?.url);
+		return KO_NEWS_DOMAINS.some((domain) => host.includes(domain));
+	});
+	return filtered.length > 0 ? filtered : items;
+};
+
+const filterLocalizedArticles = (items, language, limit = 10) => {
+	const localized = dedupeArticles(
 		(Array.isArray(items) ? items : [])
 			.map((item) => {
 				const normalized = normalizeArticleItem(item);
@@ -616,9 +687,9 @@ const filterLocalizedArticles = (items, language, limit = 10) =>
 			})
 			.filter(Boolean)
 			.sort((a, b) => b.__score - a.__score),
-	)
-		.slice(0, limit)
-		.map(({ __score, ...rest }) => rest);
+	).map(({ __score, ...rest }) => rest);
+	return filterByAllowedDomains(localized, language).slice(0, limit);
+};
 
 const buildTrendTitlesFromResults = (items, limit = 8) =>
 	Array.from(
@@ -1248,16 +1319,33 @@ export const useDataStore = create((set, get) => ({
 				7,
 			);
 			const fallbackResults = normalizeArticleList(dbCached?.data?.results ?? [], 7);
+			// 문제 1 fix: 캐시 read 시 언어 검증.
+			// lang=ko인데 캐시 데이터에 한국어 결과가 하나도 없으면(낡은 영어 캐시)
+			// 캐시 무시하고 fresh fetch로 진행 — 영어 데이터를 한글로 강제 번역해 보여주는
+			// 어색한 결과를 방지.
+			const cacheLanguageMismatch =
+				lang === "ko" &&
+				localizedResults.length === 0 &&
+				fallbackResults.length > 0;
+			if (cacheLanguageMismatch) {
+				console.info(
+					`[trends] ${cacheKey} cache invalidated: no Korean content in cached data`,
+				);
+			}
 			const rawDisplayResults =
 				localizedResults.length > 0 ? localizedResults : fallbackResults;
 			const displayResults =
-				lang === "ko"
-					? await translateArticlesToKorean(rawDisplayResults)
-					: rawDisplayResults;
+				cacheLanguageMismatch
+					? []
+					: lang === "ko"
+						? await translateArticlesToKorean(rawDisplayResults)
+						: rawDisplayResults;
 			const displayTrends =
 				buildTrendTitlesFromResults(displayResults, 8).length > 0
 					? buildTrendTitlesFromResults(displayResults, 8)
-					: dbCached?.data?.trends ?? [];
+					: cacheLanguageMismatch
+						? []
+						: dbCached?.data?.trends ?? [];
 			if (displayResults.length > 0 || displayTrends.length > 0) {
 				_trendsMemCache[lang] = {
 					trends: displayTrends,
@@ -1795,7 +1883,11 @@ export const useDataStore = create((set, get) => ({
 
 		set({ activeWidgetIds: visibleWidgets });
 
-
+		// 문제 5 fix: 양 언어 trends 캐시를 메모리에 미리 적재 (DB read만, API 호출 없음).
+		// fetchTrends와 병렬로 진행 — fetchTrends가 끝나기 전이라도 다른 언어는 이미 준비됨.
+		if (userId && visibleWidgets.includes("trends")) {
+			warmupTrendsMemCache(userId).catch(() => {});
+		}
 
 		const stockSymbols =
 			useSettingsStore?.getState?.()?.stockSymbols ?? defaultStockSymbols;

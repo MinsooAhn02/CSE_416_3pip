@@ -1099,12 +1099,35 @@ export async function generateBriefing({ tone, length, context }) {
 const _HANGUL = /[가-힣]/;
 const _LATIN  = /[a-zA-Z]/;
 
+// 문제 2 fix: KO 검색 시 도메인 화이트리스트로 2단계 재시도 + fallback 임계값 1로 인하
+const KO_NEWS_DOMAINS = [
+	"news.naver.com",
+	"yna.co.kr",
+	"chosun.com",
+	"joins.com",
+	"hani.co.kr",
+	"news1.kr",
+];
+
 const filterSmartResults = (items, isKo) => {
 	const langFiltered = items.filter((r) => {
 		const t = r.title ?? "";
 		return isKo ? _HANGUL.test(t) : (!_HANGUL.test(t) && _LATIN.test(t));
 	});
-	return langFiltered.length >= 2 ? langFiltered : items;
+	// 한국어 결과 1개라도 있으면 한국어만 표시 (이전: 2개 미만이면 전체 사용)
+	return langFiltered.length >= 1 ? langFiltered : items;
+};
+
+const dedupeByUrl = (items) => {
+	const seen = new Set();
+	const out = [];
+	for (const r of items) {
+		const key = String(r?.url || r?.title || "").trim().toLowerCase();
+		if (!key || seen.has(key)) continue;
+		seen.add(key);
+		out.push(r);
+	}
+	return out;
 };
 
 export async function generateSmartWidgetData(keyword, context = {}) {
@@ -1118,8 +1141,25 @@ export async function generateSmartWidgetData(keyword, context = {}) {
 
 	const tavilyData = await invokeFunction("tavily", { query: tavilyQuery });
 
-	const rawResults = tavilyData?.results ?? [];
-	const langFiltered = filterSmartResults(rawResults, isKo);
+	let rawResults = tavilyData?.results ?? [];
+	let langFiltered = filterSmartResults(rawResults, isKo);
+
+	// 문제 2 fix: 한국어 모드인데 한국어 결과가 2개 미만이면 KO_NEWS_DOMAINS 화이트리스트로
+	// 2단계 재호출. 첫 호출 결과와 머지 후 다시 필터링.
+	if (isKo) {
+		const koCount = rawResults.filter((r) => _HANGUL.test(r?.title ?? "")).length;
+		if (koCount < 2) {
+			const retry = await invokeFunction("tavily", {
+				query: tavilyQuery,
+				include_domains: KO_NEWS_DOMAINS,
+			});
+			const retryResults = retry?.results ?? [];
+			if (retryResults.length > 0) {
+				rawResults = dedupeByUrl([...retryResults, ...rawResults]);
+				langFiltered = filterSmartResults(rawResults, isKo);
+			}
+		}
+	}
 
 	const newsItems = langFiltered
 		.slice(0, 3)
@@ -1196,6 +1236,38 @@ export async function generateSmartWidgetData(keyword, context = {}) {
 	// Groq 완전 실패 시 뉴스 제목으로 최후 fallback
 	if (bullets.length === 0 && newsItems.length > 0) {
 		bullets = newsItems.map((n) => n.title).slice(0, 3);
+	}
+
+	// 문제 3 fix: Groq 응답 언어 검증.
+	// 한국어 모드인데 bullets에 한글이 전혀 없으면(Tavily context가 영어라서 끌려간 경우)
+	// Groq에 번역 재요청해서 한국어로 변환.
+	if (isKo && bullets.length > 0) {
+		const hasHangul = bullets.some((b) => _HANGUL.test(b));
+		if (!hasHangul) {
+			const translated = await invokeFunction("groq", {
+				system: [
+					"You translate English bullet points into natural, formal Korean.",
+					"Return only valid JSON: an array of translated Korean strings.",
+					"Preserve order and meaning. No code fences, no extra text.",
+				].join("\n"),
+				prompt: `Translate to Korean and return JSON only:\n${JSON.stringify(bullets)}`,
+				temperature: 0.1,
+			});
+			if (translated?.text) {
+				try {
+					const match = translated.text.trim().match(/\[[\s\S]*\]/);
+					const parsed = JSON.parse(match ? match[0] : translated.text.trim());
+					if (Array.isArray(parsed) && parsed.length > 0) {
+						const koBullets = parsed
+							.map((b) => String(b).trim())
+							.filter((b) => b.length > 3 && _HANGUL.test(b));
+						if (koBullets.length > 0) bullets = koBullets.slice(0, 4);
+					}
+				} catch {
+					/* translation parse failed — keep English bullets as last resort */
+				}
+			}
+		}
 	}
 
 	// ─── Step 3: SmartWidgetContent 포맷으로 조합 ───────────────────

@@ -11,7 +11,7 @@
 	},
 	"permissions": ["storage"],
 	"externally_connectable": {
-		"matches": ["https://morningbrief.ai/*", "http://localhost:3000/*"]
+		"matches": ["https://morningbriefing.dksalstn0621.workers.dev/*", "http://localhost:3000/*"]
 	},
 	"icons": {
 		"16": "icons/icon16.png",
