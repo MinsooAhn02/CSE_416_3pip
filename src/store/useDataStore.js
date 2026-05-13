@@ -316,6 +316,24 @@ const extractLayoutWidgetIds = (layouts) => {
 };
 
 const defaultStockSymbols = ["KOSPI", "NASDAQ", "SP500", "USDKRW"];
+const STOCK_SYMBOL_ALIAS_MAP = {
+	KOSPI: "KOSPI",
+	KS11: "KOSPI",
+	"^KOSPI": "KOSPI",
+	"^KS11": "KOSPI",
+	NASDAQ: "NASDAQ",
+	IXIC: "NASDAQ",
+	"^IXIC": "NASDAQ",
+	SP500: "SP500",
+	"SP 500": "SP500",
+	"S&P500": "SP500",
+	"S&P 500": "SP500",
+	SPX: "SP500",
+	"^SPX": "SP500",
+	USDKRW: "USDKRW",
+	"USD/KRW": "USDKRW",
+	"USD-KRW": "USDKRW",
+};
 const KO_NEWS_DOMAINS = [
 	"news.naver.com",
 	"yna.co.kr",
@@ -351,6 +369,7 @@ const normalizeStockSymbols = (symbols) => {
 						.trim()
 						.toUpperCase(),
 				)
+				.map((s) => STOCK_SYMBOL_ALIAS_MAP[s] ?? s)
 				.filter(Boolean),
 		),
 	);
@@ -647,27 +666,55 @@ const normalizeGroqWeather = (payload) => {
 };
 
 /* ── 주식 정규화 ── */
+const toTwoDecimalPercentString = (value) => {
+	const cleaned = String(value ?? "")
+		.replace(/,/g, "")
+		.replace(/%/g, "")
+		.trim();
+	const n = Number(cleaned);
+	if (!Number.isFinite(n)) return null;
+	return `${n.toFixed(2)}%`;
+};
+
+const toStockDisplayValue = (value) => {
+	const n = Number(value);
+	if (!Number.isFinite(n) || n <= 0) return "--";
+	return numberFormatter.format(n);
+};
+
 const normalizeStockItem = (item) => {
 	if (!item) return null;
 	if ("name" in item && "value" in item) {
 		// Cached item — backfill symbol if missing (old cache format)
+		const normalizedChange = toTwoDecimalPercentString(item.change);
+		const normalizedValue = toStockDisplayValue(
+			typeof item.value === "string"
+				? item.value.replace(/[^0-9.\-]/g, "")
+				: item.value,
+		);
+		const baseItem =
+			normalizedChange != null ? { ...item, change: normalizedChange } : item;
+		const normalizedItem = { ...baseItem, value: normalizedValue };
 		if (!("symbol" in item)) {
-			return { ...item, symbol: item.name === "S&P 500" ? "SP500" : item.name };
+			return {
+				...normalizedItem,
+				symbol: item.name === "S&P 500" ? "SP500" : item.name,
+			};
 		}
-		return item;
+		return normalizedItem;
 	}
 
 	const numericChange = Number(item.change ?? 0);
 	const numericPrice = Number(item.price ?? 0);
+	const normalizedPercent = toTwoDecimalPercentString(item.changePercent);
 
 	return {
 		symbol: item.symbol,
 		name: item.symbol === "SP500" ? "S&P 500" : item.symbol,
-		value: numberFormatter.format(numericPrice),
+		value: toStockDisplayValue(numericPrice),
 		change:
-			typeof item.changePercent === "string"
-				? item.changePercent.replace(/^\+/, "")
-				: `${numericChange >= 0 ? "+" : ""}${numberFormatter.format(numericChange)}`,
+			normalizedPercent ??
+			`${numericChange >= 0 ? "+" : ""}${numberFormatter.format(numericChange)}`,
 		up: numericChange >= 0,
 	};
 };
@@ -686,6 +733,61 @@ const hasMeaningfulStockValues = (rows) => {
 		const parsed = Number(v.replace(/[^0-9.\-]/g, ""));
 		return Number.isFinite(parsed) && parsed > 0;
 	});
+};
+
+const getStockSymbolKey = (row) => {
+	const upper = String(row?.symbol ?? row?.name ?? "")
+		.trim()
+		.toUpperCase();
+	if (!upper) return "";
+	return STOCK_SYMBOL_ALIAS_MAP[upper] ?? upper;
+};
+
+const getStockRowNumericValue = (row) => {
+	const rawPrice = Number(row?.price ?? 0);
+	if (Number.isFinite(rawPrice) && rawPrice > 0) return rawPrice;
+	const v = row?.value;
+	if (typeof v !== "string") return 0;
+	const parsed = Number(v.replace(/[^0-9.\-]/g, ""));
+	return Number.isFinite(parsed) ? parsed : 0;
+};
+
+const mergeStocksWithPreviousValidValues = (nextRows, prevRows) => {
+	if (!Array.isArray(nextRows) || nextRows.length === 0) return [];
+	const prevByKey = new Map(
+		(Array.isArray(prevRows) ? prevRows : [])
+			.map((row) => [getStockSymbolKey(row), row])
+			.filter(([key]) => Boolean(key)),
+	);
+	return nextRows.map((row) => {
+		if (getStockRowNumericValue(row) > 0) return row;
+		const key = getStockSymbolKey(row);
+		const prev = prevByKey.get(key);
+		return prev && getStockRowNumericValue(prev) > 0 ? prev : row;
+	});
+};
+
+const pickBestStockRowsForSymbols = (symbols, ...sources) => {
+	const normalizedSymbols = normalizeStockSymbols(symbols);
+	const bestByKey = new Map();
+
+	for (const source of sources) {
+		const rows = Array.isArray(source) ? source : [];
+		for (const row of rows) {
+			const key = getStockSymbolKey(row);
+			if (!key) continue;
+			const current = bestByKey.get(key);
+			const currentValue = getStockRowNumericValue(current);
+			const incomingValue = getStockRowNumericValue(row);
+			if (!current || (incomingValue > 0 && currentValue <= 0)) {
+				bestByKey.set(key, row);
+			}
+		}
+	}
+
+	return normalizedSymbols
+		.map((symbol) => bestByKey.get(symbol))
+		.filter(Boolean);
 };
 
 /* ── 건강 데이터 정규화: Steps + Sleep 유효 필터링 ── */
@@ -945,14 +1047,44 @@ export const useDataStore = create((set, get) => ({
 	fetchStocks: async (symbols = defaultStockSymbols, userId, force = false) => {
 		const normalizedSymbols = normalizeStockSymbols(symbols);
 		const cacheKey = `stocks_${normalizedSymbols.join("_")}`;
+		const localCachedStocks = cached("stocks", []);
+		const localCachedAt = Number(load("mb_cache_stocks_at", 0));
+		const previousStocks = Array.isArray(get().stocks) ? get().stocks : [];
 
 		// ✅ 캐시 우선 확인
 		if (!force) {
 			const dbCached = await readApiCache(cacheKey, userId, false);
 			if (dbCached?.data && hasMeaningfulStockValues(dbCached.data)) {
-				set({ stocks: dbCached.data });
-				cacheIt("stocks", dbCached.data);
-				get().markFetched("stocks", dbCached.fetchedAt);
+				const pickedCachedRows = pickBestStockRowsForSymbols(
+					normalizedSymbols,
+					dbCached.data,
+				);
+				if (hasMeaningfulStockValues(pickedCachedRows)) {
+					set((s) => ({
+						stocks: pickedCachedRows,
+						errors: { ...s.errors, stocks: null },
+					}));
+					cacheIt("stocks", pickedCachedRows);
+					get().markFetched("stocks", dbCached.fetchedAt);
+					get().setApiStatus("stocks", "ok");
+					return; // ← loading 상태 변경 없음
+				}
+			}
+
+			const pickedLocalRows = pickBestStockRowsForSymbols(
+				normalizedSymbols,
+				previousStocks,
+				localCachedStocks,
+			);
+			if (hasMeaningfulStockValues(pickedLocalRows)) {
+				set((s) => ({
+					stocks: pickedLocalRows,
+					errors: { ...s.errors, stocks: null },
+				}));
+				get().markFetched(
+					"stocks",
+					localCachedAt > 0 ? localCachedAt : Date.now(),
+				);
 				get().setApiStatus("stocks", "ok");
 				return; // ← loading 상태 변경 없음
 			}
@@ -970,19 +1102,48 @@ export const useDataStore = create((set, get) => ({
 				symbols: normalizedSymbols,
 			});
 
-			if (
-				edge?.ok &&
-				Array.isArray(edge.data) &&
-				hasMeaningfulStockValues(edge.data)
-			) {
+			const normalizedEdgeRows =
+				edge?.ok && Array.isArray(edge.data)
+					? edge.data.map(normalizeStockItem).filter(Boolean)
+					: [];
+
+			if (edge?.ok && Array.isArray(edge.data)) {
 				set((s) => ({
 					rawData: { ...s.rawData, stocks: edge.data },
 				}));
-				const normalized = edge.data.map(normalizeStockItem).filter(Boolean);
-				set({ stocks: normalized });
-				cacheIt("stocks", normalized);
-				await writeApiCache(cacheKey, normalized, userId);
-				get().markFetched("stocks");
+				const merged = pickBestStockRowsForSymbols(
+					normalizedSymbols,
+					normalizedEdgeRows,
+					previousStocks,
+					localCachedStocks,
+				);
+				if (hasMeaningfulStockValues(merged)) {
+					set({ stocks: merged });
+					cacheIt("stocks", merged);
+					await writeApiCache(cacheKey, merged, userId);
+					get().markFetched("stocks");
+					get().setApiStatus("stocks", "ok");
+					return;
+				}
+			}
+
+			const fallbackRows = pickBestStockRowsForSymbols(
+				normalizedSymbols,
+				normalizedEdgeRows,
+				previousStocks,
+				localCachedStocks,
+			);
+			if (hasMeaningfulStockValues(fallbackRows)) {
+				set((s) => ({
+					stocks: fallbackRows,
+					errors: { ...s.errors, stocks: null },
+				}));
+				cacheIt("stocks", fallbackRows);
+				await writeApiCache(cacheKey, fallbackRows, userId);
+				get().markFetched(
+					"stocks",
+					localCachedAt > 0 ? localCachedAt : Date.now(),
+				);
 				get().setApiStatus("stocks", "ok");
 				return;
 			}
@@ -998,11 +1159,32 @@ export const useDataStore = create((set, get) => ({
 				},
 				rawData: { ...s.rawData, stocks: edge?.data ?? null },
 			}));
-			set({ stocks: [] });
+			set({ stocks: previousStocks.length > 0 ? previousStocks : [] });
 			get().markFetched("stocks");
 			get().setApiStatus("stocks", "error");
 		} catch (e) {
 			console.warn("fetchStocks failed:", e?.message || e);
+
+			const fallbackRows = pickBestStockRowsForSymbols(
+				normalizedSymbols,
+				previousStocks,
+				localCachedStocks,
+			);
+			if (hasMeaningfulStockValues(fallbackRows)) {
+				set((s) => ({
+					stocks: fallbackRows,
+					errors: { ...s.errors, stocks: null },
+				}));
+				cacheIt("stocks", fallbackRows);
+				await writeApiCache(cacheKey, fallbackRows, userId);
+				get().markFetched(
+					"stocks",
+					localCachedAt > 0 ? localCachedAt : Date.now(),
+				);
+				get().setApiStatus("stocks", "ok");
+				return;
+			}
+
 			set((s) => ({
 				errors: {
 					...s.errors,
@@ -1013,7 +1195,7 @@ export const useDataStore = create((set, get) => ({
 					),
 				},
 			}));
-			set({ stocks: [] });
+			set({ stocks: previousStocks.length > 0 ? previousStocks : [] });
 			get().markFetched("stocks");
 			get().setApiStatus("stocks", "error");
 		} finally {

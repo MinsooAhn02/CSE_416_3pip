@@ -7,6 +7,10 @@ const corsHeaders = {
 };
 
 const ZERO = { price: 0, change: 0, changePercent: "0%" };
+const TWELVEDATA_TIMEOUT_MS = 3200;
+const YAHOO_TIMEOUT_MS = 3200;
+const STOOQ_TIMEOUT_MS = 2600;
+const FX_FALLBACK_TIMEOUT_MS = 4500;
 
 async function fetchJsonWithTimeout(url: string, timeoutMs = 7000) {
 	const controller = new AbortController();
@@ -20,10 +24,55 @@ async function fetchJsonWithTimeout(url: string, timeoutMs = 7000) {
 	}
 }
 
+async function fetchTextWithTimeout(url: string, timeoutMs = 5000) {
+	const controller = new AbortController();
+	const timer = setTimeout(() => controller.abort(), timeoutMs);
+	try {
+		const res = await fetch(url, { signal: controller.signal });
+		if (!res.ok) throw new Error(`HTTP ${res.status}`);
+		return await res.text();
+	} finally {
+		clearTimeout(timer);
+	}
+}
+
 function isTwelveError(payload: any) {
 	return Boolean(
 		payload?.code || payload?.status === "error" || payload?.message,
 	);
+}
+
+const yahooSymbolMap: Record<string, string> = {
+	KS11: "^KS11",
+	IXIC: "^IXIC",
+	SPX: "^GSPC",
+	EWY: "EWY",
+	QQQ: "QQQ",
+	SPY: "SPY",
+	"USD/KRW": "KRW=X",
+};
+
+async function fetchYahooQuote(
+	alphaSymbol: string,
+): Promise<{ price: number; change: number; changePercent: string } | null> {
+	const yahooSymbol = yahooSymbolMap[alphaSymbol] ?? alphaSymbol;
+	const url = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${encodeURIComponent(yahooSymbol)}`;
+	const data = await fetchJsonWithTimeout(url, YAHOO_TIMEOUT_MS);
+	const quote = data?.quoteResponse?.result?.[0];
+	const price = Number(quote?.regularMarketPrice ?? quote?.postMarketPrice ?? 0);
+	if (!Number.isFinite(price) || price <= 0) return null;
+
+	const change = Number(quote?.regularMarketChange ?? 0);
+	const changePercentRaw = Number(quote?.regularMarketChangePercent);
+	const changePercent = Number.isFinite(changePercentRaw)
+		? toPercentString(changePercentRaw)
+		: toPercentString(change);
+
+	return {
+		price,
+		change: Number.isFinite(change) ? change : 0,
+		changePercent,
+	};
 }
 
 async function fetchStooqPrice(alphaSymbol: string): Promise<number | null> {
@@ -42,9 +91,7 @@ async function fetchStooqPrice(alphaSymbol: string): Promise<number | null> {
 	for (const stooqSymbol of candidates) {
 		const url = `https://stooq.com/q/l/?s=${encodeURIComponent(stooqSymbol)}&f=sd2t2ohlcv&h&e=csv`;
 		try {
-			const res = await fetch(url);
-			if (!res.ok) continue;
-			const csv = await res.text();
+			const csv = await fetchTextWithTimeout(url, STOOQ_TIMEOUT_MS);
 			const lines = csv.trim().split("\n");
 			if (lines.length < 2) continue;
 			const row = lines[1].split(",");
@@ -60,7 +107,7 @@ async function fetchStooqPrice(alphaSymbol: string): Promise<number | null> {
 async function fetchUsdKrwFallback(): Promise<number | null> {
 	const data = await fetchJsonWithTimeout(
 		"https://open.er-api.com/v6/latest/USD",
-		7000,
+		FX_FALLBACK_TIMEOUT_MS,
 	);
 	const rate = Number(data?.rates?.KRW);
 	if (!Number.isFinite(rate) || rate <= 0) return null;
@@ -70,7 +117,8 @@ async function fetchUsdKrwFallback(): Promise<number | null> {
 const toPercentString = (value: unknown) => {
 	const n = Number(value);
 	if (!Number.isFinite(n)) return "0%";
-	const signed = n > 0 ? `+${n}` : `${n}`;
+	const rounded = Math.round(n * 100) / 100;
+	const signed = rounded > 0 ? `+${rounded.toFixed(2)}` : `${rounded.toFixed(2)}`;
 	return `${signed}%`;
 };
 
@@ -107,7 +155,7 @@ serve(async (req) => {
 					if (sym === "USDKRW") {
 						if (apiKey) {
 							const url = `https://api.twelvedata.com/quote?symbol=${encodeURIComponent(tdSymbol)}&apikey=${encodeURIComponent(apiKey)}`;
-							const data = await fetchJsonWithTimeout(url, 7000);
+							const data = await fetchJsonWithTimeout(url, TWELVEDATA_TIMEOUT_MS);
 							if (!isTwelveError(data)) {
 								const price = Number(data?.close ?? 0);
 								const change = Number(data?.change ?? 0);
@@ -121,6 +169,10 @@ serve(async (req) => {
 									};
 								}
 							}
+						}
+						const yahooFx = await fetchYahooQuote(tdSymbol).catch(() => null);
+						if (yahooFx) {
+							return { symbol: sym, ...yahooFx };
 						}
 						const fallback = await fetchUsdKrwFallback().catch(() => null);
 						if (fallback) {
@@ -138,7 +190,7 @@ serve(async (req) => {
 					if (apiKey) {
 						const exchange = tdSymbol === "KS11" ? "&exchange=XKOS" : "";
 						const url = `https://api.twelvedata.com/quote?symbol=${encodeURIComponent(tdSymbol)}${exchange}&apikey=${encodeURIComponent(apiKey)}`;
-						const data = await fetchJsonWithTimeout(url, 7000);
+						const data = await fetchJsonWithTimeout(url, TWELVEDATA_TIMEOUT_MS);
 						if (!isTwelveError(data)) {
 							const price = Number(data?.close ?? 0);
 							const change = Number(data?.change ?? 0);
@@ -152,6 +204,10 @@ serve(async (req) => {
 								};
 							}
 						}
+					}
+					const yahooQuote = await fetchYahooQuote(tdSymbol).catch(() => null);
+					if (yahooQuote) {
+						return { symbol: sym, ...yahooQuote };
 					}
 					const fallbackPrice = await fetchStooqPrice(tdSymbol).catch(
 						() => null,

@@ -125,7 +125,11 @@ const StocksWidget = () => {
 	);
 
 	const visibleStocks = orderedStocks.slice(0, WIDGET_LIMIT);
-	const hasMore = orderedStocks.length > WIDGET_LIMIT;
+	const totalStockCount = Math.max(
+		orderedStocks.length,
+		normalizedStockSymbols.length,
+	);
+	const hasMore = totalStockCount > WIDGET_LIMIT;
 	const modalStockRows = useMemo(() => {
 		const rows = [];
 		for (let i = 0; i < orderedStocks.length; i += MODAL_GRID_COLUMNS) {
@@ -368,7 +372,9 @@ const StocksWidget = () => {
 								onClick={() => setShowModal(true)}
 								className={`mt-2 w-full text-xs py-1.5 rounded-lg ${hoverCls} opacity-70`}
 							>
-								{t("common.view_more", { count: stocks.length - WIDGET_LIMIT })}
+								{t("common.view_more", {
+									count: Math.max(totalStockCount - WIDGET_LIMIT, 0),
+								})}
 							</button>
 						)}
 					</>
@@ -452,7 +458,7 @@ const StocksWidget = () => {
 															<div
 																ref={provided.innerRef}
 																{...provided.droppableProps}
-																className={`grid grid-cols-4 gap-2 rounded-xl transition-colors ${
+																className={`grid grid-cols-4 gap-2 rounded-xl ${
 																	dropSnapshot.isDraggingOver
 																		? "bg-blue-500/5"
 																		: ""
@@ -485,14 +491,9 @@ const StocksWidget = () => {
 																							? { zIndex: 10001 }
 																							: {}),
 																					}}
-																					className={`relative p-3 rounded-xl cursor-grab active:cursor-grabbing select-none min-h-[74px] will-change-transform ${
-																						!snapshot.isDragging &&
-																						!snapshot.isDropAnimating
-																							? "transition-transform duration-200 ease-out"
-																							: ""
-																					} ${secondaryBgCls} ${
+																					className={`relative p-3 rounded-xl cursor-grab active:cursor-grabbing select-none min-h-[74px] ${secondaryBgCls} ${
 																						snapshot.isDragging
-																							? "shadow-xl ring-1 ring-blue-400/50 opacity-90"
+																							? "shadow-xl ring-1 ring-blue-400/50"
 																							: ""
 																					}`}
 																				>
