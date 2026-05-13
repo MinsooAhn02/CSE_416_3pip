@@ -1,13 +1,15 @@
 {
-	"env": {
-		"CLAUDE_NO_COST_WARNINGS": "1"
-	},
-	"permissions": {
-		"allow": [],
-		"deny": []
-	},
-	"model": "claude-sonnet-4-6",
-	"spinnerTipsEnabled": false,
-	"autoMemoryEnabled": false,
-	"autoDreamEnabled": false
+  "env": {
+    "CLAUDE_NO_COST_WARNINGS": "1"
+  },
+  "permissions": {
+    "allow": [
+      "Bash(npm run *)"
+    ],
+    "deny": []
+  },
+  "model": "claude-sonnet-4-6",
+  "spinnerTipsEnabled": false,
+  "autoMemoryEnabled": false,
+  "autoDreamEnabled": false
 }

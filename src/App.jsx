@@ -19,6 +19,7 @@ import OnboardingModal from "./components/modals/OnboardingModal";
 import SettingsModal from "./components/modals/SettingsModal";
 import FirstLoginBriefingModal from "./components/modals/FirstLoginBriefingModal";
 import WidgetSettingsModal from "./components/modals/WidgetSettingsModal";
+import ExtensionInstallBanner from "./components/banners/ExtensionInstallBanner";
 
 /* ── v8: 1:3:3 Layout Architecture with Widget Scroll Box (REQ-WS-001) ── */
 
@@ -200,6 +201,7 @@ const App = () => {
 				backgroundAttachment: "fixed",
 			}}
 		>
+			<ExtensionInstallBanner />
 			<TopNav />
 
 			{/* v8: 1:3:3 Dashboard Layout Architecture with Widget Scroll Box (REQ-WS-001) */}
