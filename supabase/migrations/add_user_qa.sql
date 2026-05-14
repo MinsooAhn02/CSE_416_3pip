@@ -12,6 +12,11 @@ create table if not exists public.user_qa (
   created_at timestamptz default now()
 );
 
+-- Data API grants (Supabase는 2026-05-30부터 public 테이블에 자동 GRANT를 하지 않음)
+grant select on public.user_qa to anon;
+grant select, insert, update, delete on public.user_qa to authenticated;
+grant select, insert, update, delete on public.user_qa to service_role;
+
 create index if not exists user_qa_user_date
   on public.user_qa(user_id, asked_date);
 

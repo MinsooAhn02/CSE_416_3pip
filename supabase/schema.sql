@@ -21,6 +21,11 @@ create table if not exists public.user_settings (
   updated_at timestamptz default now()
 );
 
+-- Data API grants (Supabase는 2026-05-30부터 public 테이블에 자동 GRANT를 하지 않음)
+grant select on public.user_settings to anon;
+grant select, insert, update, delete on public.user_settings to authenticated;
+grant select, insert, update, delete on public.user_settings to service_role;
+
 alter table public.user_settings
   add column if not exists pin_lock_mode text default 'immediate';
 
@@ -57,6 +62,10 @@ create table if not exists public.widget_layouts (
   updated_at timestamptz default now()
 );
 
+grant select on public.widget_layouts to anon;
+grant select, insert, update, delete on public.widget_layouts to authenticated;
+grant select, insert, update, delete on public.widget_layouts to service_role;
+
 alter table public.widget_layouts enable row level security;
 
 drop policy if exists "Users can read own layouts" on public.widget_layouts;
@@ -86,6 +95,10 @@ create table if not exists public.todos (
   is_recurring boolean generated always as (is_fixed) stored,
   created_at timestamptz default now()
 );
+
+grant select on public.todos to anon;
+grant select, insert, update, delete on public.todos to authenticated;
+grant select, insert, update, delete on public.todos to service_role;
 
 alter table public.todos
   add column if not exists completed boolean default false;
@@ -129,6 +142,10 @@ create table if not exists public.smart_keywords (
   unique(user_id, keyword)
 );
 
+grant select on public.smart_keywords to anon;
+grant select, insert, update, delete on public.smart_keywords to authenticated;
+grant select, insert, update, delete on public.smart_keywords to service_role;
+
 alter table public.smart_keywords enable row level security;
 
 drop policy if exists "Users can read own keywords" on public.smart_keywords;
@@ -159,6 +176,10 @@ create table if not exists public.diaries (
   updated_at timestamptz default now(),
   unique(user_id, date)
 );
+
+grant select on public.diaries to anon;
+grant select, insert, update, delete on public.diaries to authenticated;
+grant select, insert, update, delete on public.diaries to service_role;
 
 alter table public.diaries
   add column if not exists ai_generated_diary text;
@@ -224,6 +245,10 @@ create table if not exists public.api_cache (
   data jsonb not null,
   fetched_at timestamptz default now()
 );
+
+grant select on public.api_cache to anon;
+grant select, insert, update, delete on public.api_cache to authenticated;
+grant select, insert, update, delete on public.api_cache to service_role;
 
 alter table public.api_cache enable row level security;
 
