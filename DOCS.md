@@ -1,6 +1,6 @@
 # MorningBriefing.AI - 통합 프로젝트 문서
 
-> 최종 정리일: 2026-05-13 (4차)
+> 최종 정리일: 2026-05-15 (5차)
 > 관리 정책: 문서는 DOCS.md 단일 파일로 유지
 
 ---
@@ -108,9 +108,11 @@ src/
   mock/
     data.js                       # API 실패 시 fallback 데이터
   services/
-    aiService.js                  # Groq LLM 호출 (브리핑 생성, 개인화 배치)
+    aiService.js                  # Groq LLM 호출 (브리핑 생성, 일기 생성, 일기 재작성)
+    diaryGenerationService.js     # 일기 생성 컨텍스트 빌드 + generateAndSaveDiaryForDate
   store/
     useAuthStore.js
+    useBriefingHistoryStore.js    # 시간대별 브리핑 스냅샷 저장 (localStorage + Supabase)
     useDataStore.js
     useDiaryStore.js
     useGoogleCalendarStore.js     # Google Calendar/Tasks 동기화 + 로컬 fallback
@@ -160,9 +162,10 @@ mount
 조건: `isLoggedIn=true && user.id` 존재
 
 ```
-hydrateFromDB() → settings/widgets/todos/diary 병렬 로드
+hydrateFromDB() → settings/widgets/todos/diary/briefingHistory 병렬 로드
   └─ fetchAll({ useExistingCache: true })  ← 캐시 우선, 빠른 첫 렌더
   └─ AI 후속 처리 (generateAiTodoOnLoad 등)
+  └─ useMidnightTrigger → 새 날 첫 로그인 시 전날 일기 lazy 합성
 
 Fallback: user.id 지연 시 1200ms 타임아웃 후 fetchAll() 단독 실행
 ```
@@ -174,7 +177,8 @@ Fallback: user.id 지연 시 1200ms 타임아웃 후 fetchAll() 단독 실행
 3. 위젯별 수동 새로고침: `force=true`로 캐시 우회
 4. 언어 변경: `i18n.on("languageChanged")` → 뉴스/트렌드 강제 재호출 (useDataStore 모듈 레벨)
 5. 관심사 변경: `useSettingsStore.subscribe()` → 뉴스만 강제 재호출
-6. 자정: `useMidnightTrigger` → 할일 리셋 + 개인화 배치
+6. 자정 polling 제거 → `useMidnightTrigger` 는 **로그인 시 1회** 만 실행: 전날(들) 브리핑 스냅샷 기반 일기 lazy 합성 + 할일 리셋
+7. AI 브리핑 1시간 자동 갱신: `BriefingWidget` 내부 `setInterval(60min)`
 
 ---
 
@@ -237,6 +241,7 @@ Fallback: user.id 지연 시 1200ms 타임아웃 후 fetchAll() 단독 실행
 - `addKeywordInterest(keyword, category)`: 중복 없이 추가, score=1 초기화
 - `removeKeywordInterest(keyword)`: 제거
 - `resetKeywordInterests()`: 전체 초기화
+- `bumpKeyword(keyword, category, delta=10)`: 기존 키워드면 score += delta, 없으면 신규 추가. 알림 없이 백그라운드 실행. note 저장·Q&A 답변 저장 시 자동 호출
 - `dismissFirstLoginModal()`: 오늘 날짜 기록 → 재표시 방지
 
 **DB sync:** 모든 설정 변경 → `user_settings` upsert (비차단 백그라운드)
@@ -337,23 +342,88 @@ useSettingsStore.subscribe((state) => {
 
 | 필드 | 타입 | 저장 |
 |------|------|------|
-| `entries` | `{[date]: {diary, memo}}` | localStorage + DB |
+| `entries` | `{[date]: {diary, aiGeneratedDiary, editedDiary, notes, memo, feedback}}` | localStorage + DB |
 | `diaryAnswers` | `{[date]: string[]}` | DB |
+| `todayQA` | `[{question, answer}]` | DB |
 | `wasActiveToday` | boolean | 메모리 |
 | `pinSet` | boolean | localStorage |
 | `isPinAuthenticated` | boolean | 세션 메모리 |
+
+**feedback 필드 구조:**
+
+```js
+feedback: {
+  rating: "like" | "dislike" | null,
+  history: [{ at: ISO, text: string }],  // 누적 피드백
+  pendingRewrite: string | null,          // 확정 전 임시 재작성본
+  confirmedAt: ISO | null,
+}
+```
 
 **주요 액션:**
 
 - `setPIN/verifyPIN/clearPinAuth/resetPIN`: PIN 관리 — `setPIN`/`verifyPIN`은 async. 저장 시 Web Crypto API SHA-256 해시로 변환. `verifyPIN` 호출 시 구형 평문 PIN이 남아있으면 자동 마이그레이션
 - `getDiary/saveDiary/saveMemo`: 로컬 + `diaries` 테이블 upsert
+- `saveGeneratedDiary(dateStr, diaryText)`: AI 생성 일기 저장. `aiGeneratedDiary` + `diary` 동시 세팅, `editedDiary` 초기화
 - `addAnswer(dateStr, question, answer)`: `user_qa` 테이블 insert
 - `hydrateFromDB()`: `diaries` + `user_qa` DB → 로컬 동기화
+- `setFeedbackRating(dateStr, rating)`: like/dislike 토글. 일기 내용은 변경하지 않음
+- `applyFeedbackRewrite(dateStr, feedbackText, language)`: `aiGeneratedDiary` + 누적 feedback → Groq `rewriteDiaryWithFeedback` 호출 → 결과를 `feedback.pendingRewrite`에 저장
+- `confirmRewrite(dateStr)`: `pendingRewrite` → `diary`/`editedDiary` 덮어쓰기 + DB sync. 되돌릴 수 없음
+- `discardPendingRewrite(dateStr)`: `pendingRewrite` 초기화
 - Mock 데이터(2026-03-25/26/27)가 기본 포함, localStorage 데이터가 우선
 
 ---
 
-### 5.6 useTodoStore
+### 5.6 useBriefingHistoryStore
+
+**상태:**
+
+| 필드 | 타입 | 저장 |
+|------|------|------|
+| `byDate` | `{[YYYY-MM-DD]: Snapshot[]}` | localStorage (`mb_briefing_history`) + Supabase `briefing_snapshots` |
+
+**Snapshot 구조:**
+
+```js
+{
+  capturedAt: ISO,           // 저장 시각
+  source: "auto"|"refresh", // 자동(3h 간격) vs 수동 refresh
+  text: string,              // 브리핑 detail 전문
+  summary: string,           // 1줄 요약
+  sections: array,           // 섹션 구조체
+}
+```
+
+**저장 정책 (`shouldSave`):**
+
+- `source === "refresh"` → 무조건 저장
+- 그날 첫 저장이면 → 저장
+- 마지막 저장 이후 ≥3시간 경과 → 저장
+
+**주요 액션:**
+
+- `addSnapshot(snapshot)`: 오늘 날짜로 snapshot 추가. localStorage + Supabase `briefing_snapshots` insert (테이블 미존재 시 조용히 무시)
+- `getSnapshotsForDate(date)`: 해당 날짜 snapshot 배열 반환
+- `getLastSavedAt(date)`: 마지막 저장 시각 (ISO)
+- `shouldSave(source)`: 저장 정책 판단 → true/false
+- `clearDate(date)`: 해당 날짜 snapshot 전체 삭제 (일기 합성 완료 후 호출)
+- `hydrateFromDB()`: Supabase `briefing_snapshots` → 로컬 동기화. 앱 로그인 시 자동 실행
+
+**Supabase 테이블 (옵션, 미생성 시 localStorage only):**
+
+```sql
+-- briefing_snapshots
+user_id     uuid
+date        date
+captured_at timestamptz
+source      text  -- "auto" | "refresh"
+payload     jsonb -- { text, summary, sections }
+```
+
+---
+
+### 5.8 useTodoStore
 
 **상태:** `todos: [{id, text, completed, isFixed}]` (localStorage + DB)
 
@@ -367,7 +437,7 @@ useSettingsStore.subscribe((state) => {
 
 ---
 
-### 5.7 useGoogleCalendarStore
+### 5.9 useGoogleCalendarStore
 
 **상태:** `events`, `tasks`, `taskLists`, `selectedTaskListFilter`, `selectedDate`, `loading`, `error`
 
@@ -381,7 +451,7 @@ useSettingsStore.subscribe((state) => {
 
 ---
 
-### 5.8 useQuickLinksStore
+### 5.10 useQuickLinksStore
 
 **상태:** `links: [{id, name, url, icon, color}]` (localStorage)
 
@@ -550,9 +620,9 @@ useSettingsStore.subscribe((state) => {
 
 #### BriefingWidget
 
-- 데이터: weather, stocks, trends, calEvents, **tomorrowEvents**, todos, newsResults, trendsResults, smartSummaries, keywordInterests, **fixedInterestIds**, persona
+- 데이터: weather, stocks, trends, calEvents(현재 시각 이후 미종료 이벤트만 필터), **tomorrowEvents**, todos, newsResults, trendsResults, smartSummaries, keywordInterests, **fixedInterestIds**, persona
 - **결정론적 섹션 + 좁은 AI 보강 패턴** (`aiService.generateDetailedBriefing`):
-  - JS로 섹션 구조·순서 고정 → 새로고침 변동성 제거 (item 26-2)
+  - JS로 섹션 구조·순서 고정 → 새로고침 변동성 제거
   - Groq 호출은 3개로 한정(`temperature: 0.1`, 사실 외 생성 금지 가드): 어제 일기 재작성 / 고정 관심사별 1문장 / 스마트 키워드 요약
 - 섹션 순서:
   1. `header` — 날짜 + 날씨 결합 한 줄. 날씨 상태 → 이모지 매핑(`getWeatherEmoji`).
@@ -565,6 +635,14 @@ useSettingsStore.subscribe((state) => {
 - 모달 렌더링: `divide-y` 섹션 블록 + 굵은 카테고리 제목 + `subBlocks` 하위 헤더(작은 글자, 들여쓰기).
 - 언어 일치: 모든 섹션 제목·내용·Groq 프롬프트가 `getLangConfig()` 기반으로 ko/en 분기.
 - `useDataStore.fetchTomorrowCalendar`: 오후·저녁 모드의 "내일 일정"용. `events` Edge Function의 `date` 파라미터 활용, `calendar_{YYYY-MM-DD}` DB 캐시.
+
+**갱신 및 저장 정책 (5차 신규):**
+
+- **1시간 자동 갱신**: 초기 생성 완료 후 `setInterval(60min)` 로 자동 regenerate
+- **스냅샷 저장**: 생성 완료 후 `useBriefingHistoryStore.shouldSave()` 판단 → true면 `addSnapshot()` 호출
+  - 첫 저장이거나 마지막 저장 이후 ≥3시간 → `source: "auto"` 로 저장
+  - manual refresh → `source: "refresh"` 로 무조건 저장
+- **일정 필터**: 브리핑 컨텍스트에 투입되는 `calEvents`는 현재 시각 이후 미종료 이벤트만 포함
 - 아침 자동일기(`ensureYesterdayDiaryForMorning`): `language: resolveDiaryGenerationLanguage()` + `interests: effectiveInterests` 전달.
 
 #### SmartWidgetContent
@@ -581,6 +659,19 @@ useSettingsStore.subscribe((state) => {
 - PIN 인증 후 접근
 - 질문 응답 입력 → `user_qa` 테이블 저장
 - `fixedInterestIds` 구독 → `generatePersonalizedQuestion()` 에 전달 → `INTEREST_TOPIC_MAP` 기반 관심사 주제 1개 + 일반 주제 1개 혼합 질문 생성
+- **관심사 bump (5차 신규)**: 답변 저장 시 단순 키워드 추출 → `useSettingsStore.bumpKeyword(kw, "qa", 5)` 자동 호출 (score +5/키워드)
+
+#### DiaryPanel
+
+- 일기 표시 + 직접 편집 + 메모 편집
+- **Feedback UI (5차 신규)**:
+  - 일기가 존재할 때 패널 하단에 Like / Dislike 버튼 노출
+  - Dislike 클릭 → 피드백 텍스트 입력 + "재작성" 버튼
+  - 재작성 → `useDiaryStore.applyFeedbackRewrite()` → Groq → `pendingRewrite` 미리보기 렌더링
+  - 미리보기 상태에서 "다시 재작성" 가능 (baseline은 항상 `aiGeneratedDiary`)
+  - "확정" 클릭 → `ConfirmDialog` 경고("되돌릴 수 없습니다") → `confirmRewrite()` → DB 동기화
+  - "취소" → `discardPendingRewrite()` → 미리보기 제거
+- **메모 → 관심사 (5차 신규)**: 메모 저장 시 단순 키워드 추출 → `bumpKeyword(kw, "note", 10)` 자동 호출
 
 ---
 
@@ -788,8 +879,49 @@ $$score = \sum \left(base\_weight \times \frac{30 - elapsed\_days}{30}\right), \
 | **상세 AI 브리핑 — 시장 섹션 (조건부)** | `fixedInterestIds.includes("finance")` + stocks 데이터 존재 시만 노출 | `aiService.generateDetailedBriefing()` |
 | **단순 AI 브리핑** | `keywordInterests` → `Interest guidance:` 줄로 Groq 프롬프트에 포함 | `aiService.generateBriefing()` |
 | **Diary Q&A 질문** | `fixedInterestIds` → `INTEREST_TOPIC_MAP` → 관심사 주제 1개 + 일반 주제 1개 혼합 | `aiService.generatePersonalizedQuestion()` |
-| **AI 일기 자동 생성** | `interests` → `promptContext`에 포함, 관련 데이터 있으면 자연스럽게 언급 | `aiService.generateDiary()` |
+| **AI 일기 자동 생성** | `interests` + `briefingSnapshots`(시간대별 브리핑 텍스트) + `previousDayDiary/Feedback` → `promptContext`에 포함 | `aiService.generateDiary()` |
 | **브리핑 스코어러 / 페르소나** | `fixedInterestIds` + `keywordInterests` 병합 → `interests` 배열 | `personaContext.buildPersonaContext()` |
+| **Q&A 답변 → score bump** | 답변 저장 시 단순 토큰화 → `bumpKeyword(kw, "qa", 5)` | `DiaryCard.jsx` |
+| **메모(note) → score bump** | 메모 저장 시 단순 토큰화 → `bumpKeyword(kw, "note", 10)` | `DiaryPanel.jsx` |
+
+### 11.7 일기 생성 흐름 (5차 개편)
+
+```
+새로운 날 첫 로그인
+  └─ useMidnightTrigger (마운트 시 1회)
+  └─ recoverMissedDiaries(): lastAccess → today까지 skipped 날짜 순회
+      └─ 각 날짜: useBriefingHistoryStore.getSnapshotsForDate(date)
+          ├─ 스냅샷 0건 → 일기 skip (접속 안 한 날)
+          └─ 스냅샷 있음 → generateAndSaveDiaryForDate(date, { briefingSnapshots })
+              └─ buildDiaryGenerationContext():
+                  - briefingSnapshots: 시간대별 브리핑 texts (최대 6개, 앞 200자)
+                  - previousDayDiary: 전날 일기 (최대 400자)
+                  - previousDayFeedback: 전날 피드백 누적 (최대 200자)
+              └─ aiService.generateDiary() → Groq → diaryText
+              └─ useDiaryStore.saveGeneratedDiary(date, diaryText)
+              └─ useBriefingHistoryStore.clearDate(date) ← 스냅샷 정리
+```
+
+### 11.8 일기 재작성 흐름 (5차 신규)
+
+```
+DiaryPanel → Dislike 클릭
+  └─ feedbackText 입력 + "재작성" 클릭
+  └─ useDiaryStore.applyFeedbackRewrite(date, feedbackText, language)
+      └─ baseline = aiGeneratedDiary (불변)
+      └─ feedbackHistory에 새 항목 추가
+      └─ aiService.rewriteDiaryWithFeedback({ originalDiary: baseline, feedbackHistory, language })
+          └─ Groq → 재작성 일기 텍스트
+      └─ feedback.pendingRewrite = rewritten
+  → "다시 재작성" 클릭: 동일 baseline + 누적 feedbackHistory로 반복 가능
+  → "확정" 클릭:
+      └─ ConfirmDialog 경고 → 승인 시
+      └─ useDiaryStore.confirmRewrite(date)
+          └─ diary = pendingRewrite, editedDiary = pendingRewrite
+          └─ DB upsert (edited_diary)
+          └─ pendingRewrite = null, confirmedAt = now()
+  → "취소": discardPendingRewrite → pendingRewrite = null
+```
 
 **INTEREST_TOPIC_MAP** (ko/en × 8): `news`, `tech`, `fashion`, `finance`, `health`, `food`, `entertainment`, `sports` → 각 언어별 자연어 주제 문구로 매핑. 관심사가 없으면 기존 `TOPIC_POOL` 랜덤 선택으로 fallback.
 
@@ -799,7 +931,7 @@ resolveDiaryGenerationLanguage()  [diaryGenerationService.js, exported]
   1. useSettingsStore.diaryLanguage === "ko" | "en" → 명시 설정 우선
   2. 아니면 i18n.language → "en"/"ko" 매핑
 ```
-`BriefingWidget`의 아침 자동일기(`ensureYesterdayDiaryForMorning`)와 자정 자동일기(`useMidnightTrigger → generateAndSaveDiaryForDate`) 모두 이 함수를 사용해 언어 일관성 보장.
+`BriefingWidget`의 아침 자동일기(`ensureYesterdayDiaryForMorning`)와 로그인 시 lazy 합성(`useMidnightTrigger → generateAndSaveDiaryForDate`) 모두 이 함수를 사용해 언어 일관성 보장.
 
 ---
 
@@ -819,7 +951,7 @@ resolveDiaryGenerationLanguage()  [diaryGenerationService.js, exported]
 
 | 훅 | 역할 |
 |----|------|
-| `useMidnightTrigger` | 로그인 상태에서 자정 도달 시 `ensureDailyReset()` + `runPersonalizationBatch()` 실행 |
+| `useMidnightTrigger` | 로그인 시 1회 실행. 전날(들) 브리핑 스냅샷이 있으면 일기 lazy 합성 → 스냅샷 정리. 새 날이면 todo 리셋. 자정 60초 polling 없음 |
 | `useTheme` | `isDark, cardCls, listItemBgCls, secondaryBgCls, muted, hoverCls, borderCls` 등 테마 CSS 클래스 반환 |
 
 ### 12.3 src/constants/

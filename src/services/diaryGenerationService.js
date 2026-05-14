@@ -4,7 +4,7 @@ import { useDiaryStore } from "../store/useDiaryStore";
 import { useGoogleCalendarStore } from "../store/useGoogleCalendarStore";
 import { useSettingsStore } from "../store/useSettingsStore";
 import i18n from "../l10n/i18n";
-import { formatLocalDate, isSameLocalDate } from "../utils/date";
+import { formatLocalDate, isSameLocalDate, shiftDateString } from "../utils/date";
 import { materializeTasksForDate } from "../utils/taskRecurrence";
 import { generateDiary } from "./aiService";
 import { mergeInterestLists } from "../utils/interests";
@@ -88,7 +88,7 @@ const fetchCompletedTasksForDate = async (dateStr) => {
 
 export const buildDiaryGenerationContext = async (
 	dateStr,
-	{ wasActiveDay } = {},
+	{ wasActiveDay, briefingSnapshots, previousDayDiary, previousDayFeedback } = {},
 ) => {
 	const dataStore = useDataStore.getState();
 	const diaryStore = useDiaryStore.getState();
@@ -99,9 +99,23 @@ export const buildDiaryGenerationContext = async (
 		diaryStore.wasActiveOn?.(dateStr) ||
 		dateStr === formatLocalDate() ||
 		diaryAnswers.length > 0 ||
-		!!(existingEntry?.notes || existingEntry?.memo || "").trim();
+		!!(existingEntry?.notes || existingEntry?.memo || "").trim() ||
+		(Array.isArray(briefingSnapshots) && briefingSnapshots.length > 0);
 
 	const settingsStore = useSettingsStore.getState();
+
+	// 전날 일기 + 피드백 — 미제공 시 store에서 직접 조회
+	let prevDiary = previousDayDiary;
+	let prevFeedback = previousDayFeedback;
+	if (prevDiary === undefined) {
+		const prevDateStr = shiftDateString(dateStr, -1);
+		const prevEntry = diaryStore.getDiary(prevDateStr);
+		prevDiary = prevEntry?.diary || "";
+		prevFeedback = prevEntry?.feedback?.history
+			?.map((f) => f.text)
+			.filter(Boolean)
+			.join("\n") || "";
+	}
 
 	return {
 		completedTodos: await fetchCompletedTasksForDate(dateStr),
@@ -120,12 +134,15 @@ export const buildDiaryGenerationContext = async (
 			settingsStore.fixedInterestIds ?? [],
 			settingsStore.keywordInterests ?? []
 		).slice(0, 10),
+		briefingSnapshots: Array.isArray(briefingSnapshots) ? briefingSnapshots : [],
+		previousDayDiary: prevDiary || "",
+		previousDayFeedback: prevFeedback || "",
 	};
 };
 
 export const generateAndSaveDiaryForDate = async (
 	dateStr,
-	{ overwrite = false, wasActiveDay } = {},
+	{ overwrite = false, wasActiveDay, briefingSnapshots, previousDayDiary, previousDayFeedback } = {},
 ) => {
 	const diaryStore = useDiaryStore.getState();
 	const existingEntry = diaryStore.getDiary(dateStr);
@@ -138,7 +155,12 @@ export const generateAndSaveDiaryForDate = async (
 		};
 	}
 
-	const payload = await buildDiaryGenerationContext(dateStr, { wasActiveDay });
+	const payload = await buildDiaryGenerationContext(dateStr, {
+		wasActiveDay,
+		briefingSnapshots,
+		previousDayDiary,
+		previousDayFeedback,
+	});
 	const diaryText = await generateDiary({
 		...payload,
 		language: resolveDiaryGenerationLanguage(),

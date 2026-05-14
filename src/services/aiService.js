@@ -2100,6 +2100,9 @@ export async function generateDiary({
 	wasActiveDay = false,
 	language = "ko",
 	interests = [],
+	briefingSnapshots = [],
+	previousDayDiary = "",
+	previousDayFeedback = "",
 }) {
 	const resolvedLanguage = resolveDiaryLanguage(language);
 	const diaryCopy = getDiaryCopy(resolvedLanguage);
@@ -2131,6 +2134,17 @@ export async function generateDiary({
 		language: resolvedLanguage,
 	});
 
+	// 시간대별 브리핑 스냅샷 요약 (최대 6개, 텍스트 앞 200자)
+	const snapshotLines = Array.isArray(briefingSnapshots)
+		? briefingSnapshots.slice(0, 6).map((s) => {
+				const time = s.capturedAt
+					? new Date(s.capturedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+					: "";
+				const text = (s.text || s.summary || "").slice(0, 200);
+				return time ? `[${time}] ${text}` : text;
+			})
+		: [];
+
 	const promptContext = {
 		date: formattedDate,
 		wasActiveDay,
@@ -2141,7 +2155,11 @@ export async function generateDiary({
 		trends: Array.isArray(trends) ? trends.slice(0, 5) : [],
 		diaryAnswers: Array.isArray(diaryAnswers) ? diaryAnswers.slice(0, 3) : [],
 		memo: normalizeDiaryLineText(memo),
-		briefingText: normalizeDiaryLineText(briefingText),
+		briefingText: snapshotLines.length > 0
+			? snapshotLines.join("\n")
+			: normalizeDiaryLineText(briefingText),
+		previousDayDiary: normalizeDiaryLineText(previousDayDiary).slice(0, 400),
+		previousDayFeedback: normalizeDiaryLineText(previousDayFeedback).slice(0, 200),
 		interests: Array.isArray(interests)
 			? interests.map((i) => (typeof i === "string" ? i : i?.keyword)).filter(Boolean).slice(0, 8)
 			: [],
@@ -2166,6 +2184,8 @@ export async function generateDiary({
 		"- If memo exists, weave it in naturally as a factual note.",
 		"- If the day was inactive, mention that naturally.",
 		"- If user interests are listed and relevant data (trends, news, stocks) exists, briefly reference them naturally.",
+		"- briefingText contains time-stamped briefing snapshots saved throughout the day — use them as the primary source for what actually happened.",
+		"- If previousDayDiary is provided, write in a similar tone and style. If previousDayFeedback is provided, address those points in this entry.",
 		"",
 		"Input data:",
 		JSON.stringify(promptContext, null, 2),
@@ -2227,5 +2247,65 @@ export async function generateDiary({
 		summary: fallbackSummary,
 		language: resolvedLanguage,
 	});
+}
+
+/**
+ * 피드백 기반 일기 재작성
+ * @param {string} originalDiary - aiGeneratedDiary (baseline, 불변)
+ * @param {Array<{text: string}>} feedbackHistory - 누적 피드백 목록
+ * @param {string} language - "ko" | "en"
+ * @returns {string} 재작성된 일기 전문
+ */
+export async function rewriteDiaryWithFeedback({
+	originalDiary = "",
+	feedbackHistory = [],
+	language = "ko",
+}) {
+	const resolvedLanguage = resolveDiaryLanguage(language);
+	const isKo = resolvedLanguage === "ko";
+	const feedbackText = feedbackHistory
+		.map((f) => f.text || "")
+		.filter(Boolean)
+		.join("\n");
+
+	const systemPrompt = isKo
+		? [
+				"당신은 사용자의 피드백을 바탕으로 일기를 개선하는 보조 AI입니다.",
+				"원본 일기의 사실과 구조를 유지하되, 피드백에서 요청한 사항을 반영하여 다시 작성하세요.",
+				"과장하거나 사실을 추가·삭제하지 마세요. 순수하게 표현과 스타일만 개선하세요.",
+			].join("\n")
+		: [
+				"You are a diary improvement assistant. Rewrite the diary based on the user's feedback.",
+				"Preserve all facts and structure from the original. Only improve expression and style per the feedback.",
+				"Do not invent new facts or remove existing ones.",
+			].join("\n");
+
+	const prompt = isKo
+		? [
+				"아래 원본 일기를 피드백을 반영하여 다시 작성하세요.",
+				"사실은 그대로 유지하되, 피드백 내용을 반영해 표현·어조를 개선하세요.",
+				"JSON 없이 일기 본문 텍스트만 반환하세요.",
+				"",
+				"[원본 일기]",
+				originalDiary,
+				"",
+				"[피드백]",
+				feedbackText || "(없음)",
+			].join("\n")
+		: [
+				"Rewrite the diary below based on the feedback.",
+				"Keep all facts intact. Only adjust tone and style per the feedback.",
+				"Return only the rewritten diary text, no JSON.",
+				"",
+				"[Original Diary]",
+				originalDiary,
+				"",
+				"[Feedback]",
+				feedbackText || "(none)",
+			].join("\n");
+
+	const data = await invokeFunction("groq", { prompt, system: systemPrompt });
+	const rewritten = data?.text?.trim();
+	return rewritten || originalDiary;
 }
 

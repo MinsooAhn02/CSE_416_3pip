@@ -7,6 +7,7 @@ import { useWidgetStore } from "./store/useWidgetStore";
 import { useDataStore } from "./store/useDataStore";
 import { useTodoStore } from "./store/useTodoStore";
 import { useDiaryStore } from "./store/useDiaryStore";
+import { useBriefingHistoryStore } from "./store/useBriefingHistoryStore";
 import { useTheme } from "./hooks/useTheme";
 import { useMidnightTrigger } from "./hooks/useMidnightTrigger";
 import { supabase } from "./lib/supabase";
@@ -101,6 +102,7 @@ const App = () => {
 					useWidgetStore.getState().hydrateFromDB?.(),
 					useTodoStore.getState().hydrateFromDB?.(),
 					useDiaryStore.getState().hydrateFromDB?.(),
+					useBriefingHistoryStore.getState().hydrateFromDB?.(),
 				]);
 			} catch (e) {
 				console.warn("Hydrate failed:", e?.message);

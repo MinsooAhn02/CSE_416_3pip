@@ -9,6 +9,13 @@ import { useSettingsStore } from "../../store/useSettingsStore";
 import { generatePersonalizedQuestion } from "../../services/aiService";
 import { formatLocalDate } from "../../utils/date";
 
+const STOP_WORDS = new Set(["이","그","저","것","수","을","를","이","가","은","는","에","의","도","로","와","과","만","에서","으로","한","있","없","하","이다","아","어","야"]);
+const extractKeywords = (text) =>
+	text.split(/[\s,.!?;:()\[\]{}<>'"\/\\]+/)
+		.map((w) => w.replace(/[^가-힣a-zA-Z0-9]/g, "").toLowerCase())
+		.filter((w) => w.length >= 2 && !STOP_WORDS.has(w))
+		.slice(0, 5);
+
 const todayStr = () => formatLocalDate();
 
 const DiaryCard = () => {
@@ -19,6 +26,7 @@ const DiaryCard = () => {
 	const persona = useAuthStore((s) => s.persona);
 	const weather = useDataStore((s) => s.weather);
 	const fixedInterestIds = useSettingsStore((s) => s.fixedInterestIds) || [];
+	const bumpKeyword = useSettingsStore((s) => s.bumpKeyword);
 
 	const [question, setQuestion] = useState(null);
 	const [isLoadingQ, setIsLoadingQ] = useState(true);
@@ -77,7 +85,10 @@ const DiaryCard = () => {
 		setIsSaving(true);
 		setSaveError(false);
 		try {
-			await addAnswer(todayStr(), question, answerText.trim());
+			const trimmedAnswer = answerText.trim();
+			await addAnswer(todayStr(), question, trimmedAnswer);
+			// 답변에서 키워드 추출 → 관심사 score bump
+			extractKeywords(trimmedAnswer).forEach((kw) => bumpKeyword(kw, "qa", 5));
 			setIsSaving(false);
 			setSaved(true);
 			setTimeout(() => {

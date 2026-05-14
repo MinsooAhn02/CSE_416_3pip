@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
-import { BookOpen, Lock, Edit2, RotateCcw, Save, Settings, X } from "lucide-react";
+import { BookOpen, Lock, Edit2, RotateCcw, Save, Settings, X, ThumbsUp, ThumbsDown, RefreshCw, CheckCircle } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useTheme } from "../../hooks/useTheme";
 import { useDiaryStore } from "../../store/useDiaryStore";
 import { useSettingsStore } from "../../store/useSettingsStore";
 import { generateAndSaveDiaryForDate } from "../../services/diaryGenerationService";
 import PINModal from "../modals/PINModal";
+import ConfirmDialog from "../common/ConfirmDialog";
 
 const DiaryPanel = ({ selectedDate, onClose, compact = false }) => {
 	const { i18n } = useTranslation();
@@ -15,6 +16,10 @@ const DiaryPanel = ({ selectedDate, onClose, compact = false }) => {
 		saveDiary,
 		saveMemo,
 		revertDiaryToGenerated,
+		setFeedbackRating,
+		applyFeedbackRewrite,
+		confirmRewrite,
+		discardPendingRewrite,
 		pinSet,
 		isPinAuthenticated,
 		pinAuthExpiresAt,
@@ -24,6 +29,7 @@ const DiaryPanel = ({ selectedDate, onClose, compact = false }) => {
 	const pinLockMode = useSettingsStore((state) => state.pinLockMode);
 	const setShowSettings = useSettingsStore((state) => state.setShowSettings);
 	const setSettingsTab = useSettingsStore((state) => state.setSettingsTab);
+	const bumpKeyword = useSettingsStore((state) => state.bumpKeyword);
 	const pinRequired = pinSet && pinLockMode !== "off";
 
 	const currentEntry = getDiary(selectedDate);
@@ -41,6 +47,11 @@ const DiaryPanel = ({ selectedDate, onClose, compact = false }) => {
 	const [memoContent, setMemoContent] = useState("");
 	const [isSaving, setIsSaving] = useState(false);
 	const [isGeneratingDiary, setIsGeneratingDiary] = useState(false);
+
+	// Feedback state
+	const [feedbackText, setFeedbackText] = useState("");
+	const [isRewriting, setIsRewriting] = useState(false);
+	const [showConfirmDialog, setShowConfirmDialog] = useState(false);
 	const isKo = i18n.language?.toLowerCase().startsWith("ko");
 	const copy = useMemo(
 		() =>
@@ -68,6 +79,15 @@ const DiaryPanel = ({ selectedDate, onClose, compact = false }) => {
 						editMemo: "메모 편집",
 						clickMemo: "클릭해서 메모 추가...",
 						memoPlaceholder: "메모를 입력해보세요...",
+						feedbackLabel: "피드백",
+						feedbackPlaceholder: "어떤 점을 개선하면 좋을까요?",
+						rewrite: "재작성",
+						rewriting: "재작성 중...",
+						confirmRewrite: "확정",
+						discardRewrite: "취소",
+						confirmWarningTitle: "일기를 덮어쓰시겠습니까?",
+						confirmWarningBody: "원본으로 되돌릴 수 없습니다.",
+						pendingRewriteLabel: "재작성 미리보기",
 				  }
 				: {
 						diaryTitle: "Diary",
@@ -92,6 +112,15 @@ const DiaryPanel = ({ selectedDate, onClose, compact = false }) => {
 						editMemo: "Edit memo",
 						clickMemo: "Click to add memo...",
 						memoPlaceholder: "Write your memo here...",
+						feedbackLabel: "Feedback",
+						feedbackPlaceholder: "What would you like to improve?",
+						rewrite: "Rewrite",
+						rewriting: "Rewriting...",
+						confirmRewrite: "Confirm",
+						discardRewrite: "Discard",
+						confirmWarningTitle: "Overwrite diary?",
+						confirmWarningBody: "This cannot be undone.",
+						pendingRewriteLabel: "Rewrite preview",
 				  },
 		[isKo],
 	);
@@ -191,11 +220,26 @@ const DiaryPanel = ({ selectedDate, onClose, compact = false }) => {
 		}
 	};
 
+	// 간단한 키워드 추출: 공백 분리 → 2자 이상, stop-word 제외 → 상위 5개
+	const extractKeywordsFromNote = (text) => {
+		const STOP = new Set(["이","그","저","것","수","을","를","이","가","은","는","에","의","도","로","와","과","도","만","에서","으로","한","했","있","없","하","했다","했는데","이다","아","어","야","했고","했지"]);
+		return text
+			.split(/[\s,.!?;:()\[\]{}<>'"\/\\]+/)
+			.map((w) => w.replace(/[^가-힣a-zA-Z0-9]/g, "").toLowerCase())
+			.filter((w) => w.length >= 2 && !STOP.has(w))
+			.slice(0, 5);
+	};
+
 	const handleSaveMemo = async () => {
 		setIsSaving(true);
 		try {
-			await saveMemo(selectedDate, memoContent.trim());
+			const trimmed = memoContent.trim();
+			await saveMemo(selectedDate, trimmed);
 			setIsEditingMemo(false);
+			// 키워드 추출 → 관심사 score bump
+			if (trimmed) {
+				extractKeywordsFromNote(trimmed).forEach((kw) => bumpKeyword(kw, "note", 10));
+			}
 		} catch (err) {
 			console.error("Failed to save memo:", err);
 		} finally {
@@ -213,6 +257,31 @@ const DiaryPanel = ({ selectedDate, onClose, compact = false }) => {
 		} finally {
 			setIsGeneratingDiary(false);
 		}
+	};
+
+	const handleFeedbackRating = (rating) => {
+		setFeedbackRating(selectedDate, rating);
+	};
+
+	const handleRewrite = async () => {
+		if (!feedbackText.trim() || isRewriting) return;
+		setIsRewriting(true);
+		try {
+			const language = i18n.language?.startsWith("ko") ? "ko" : "en";
+			await applyFeedbackRewrite(selectedDate, feedbackText.trim(), language);
+			setFeedbackText("");
+		} finally {
+			setIsRewriting(false);
+		}
+	};
+
+	const handleConfirmRewrite = async () => {
+		await confirmRewrite(selectedDate);
+		setShowConfirmDialog(false);
+	};
+
+	const handleDiscardRewrite = () => {
+		discardPendingRewrite(selectedDate);
 	};
 
 	const handleLock = () => {
@@ -558,7 +627,117 @@ const DiaryPanel = ({ selectedDate, onClose, compact = false }) => {
 							</div>
 						)}
 					</div>
+
+					{/* ── Feedback 섹션 (일기가 있을 때만 표시) ── */}
+					{canEditDiary && !isEditingDiary && (
+						<div className="space-y-2 pt-2 border-t border-white/10">
+							<div className="flex items-center justify-between">
+								<span className={`text-xs font-medium ${isDark ? "opacity-70" : "text-gray-600"}`}>
+									{copy.feedbackLabel}
+								</span>
+								<div className="flex gap-1">
+									<button
+										onClick={() => handleFeedbackRating("like")}
+										className={`p-1.5 rounded-lg transition-colors ${
+											currentEntry?.feedback?.rating === "like"
+												? "text-emerald-400 bg-emerald-500/20"
+												: `${isDark ? "hover:bg-white/10" : "hover:bg-gray-100"} opacity-50 hover:opacity-100`
+										}`}
+										title="Like"
+									>
+										<ThumbsUp size={13} />
+									</button>
+									<button
+										onClick={() => handleFeedbackRating("dislike")}
+										className={`p-1.5 rounded-lg transition-colors ${
+											currentEntry?.feedback?.rating === "dislike"
+												? "text-red-400 bg-red-500/20"
+												: `${isDark ? "hover:bg-white/10" : "hover:bg-gray-100"} opacity-50 hover:opacity-100`
+										}`}
+										title="Dislike"
+									>
+										<ThumbsDown size={13} />
+									</button>
+								</div>
+							</div>
+
+							{/* Dislike 선택 시 재작성 입력란 */}
+							{currentEntry?.feedback?.rating === "dislike" && !currentEntry?.feedback?.pendingRewrite && (
+								<div className="space-y-2">
+									<textarea
+										value={feedbackText}
+										onChange={(e) => setFeedbackText(e.target.value)}
+										rows={2}
+										className={`w-full px-3 py-2 rounded-lg text-xs outline-none border transition-all focus:ring-2 focus:ring-blue-500/30 resize-none ${inputCls}`}
+										placeholder={copy.feedbackPlaceholder}
+									/>
+									<button
+										onClick={handleRewrite}
+										disabled={!feedbackText.trim() || isRewriting}
+										className="w-full px-3 py-2 rounded-lg text-xs font-medium bg-blue-500 hover:bg-blue-600 text-white transition-colors flex items-center justify-center gap-1 disabled:opacity-50"
+									>
+										<RefreshCw size={13} className={isRewriting ? "animate-spin" : ""} />
+										{isRewriting ? copy.rewriting : copy.rewrite}
+									</button>
+								</div>
+							)}
+
+							{/* pendingRewrite 미리보기 */}
+							{currentEntry?.feedback?.pendingRewrite && (
+								<div className="space-y-2">
+									<p className={`text-xs font-medium ${isDark ? "opacity-70" : "text-gray-600"}`}>
+										{copy.pendingRewriteLabel}
+									</p>
+									<div className={`p-3 rounded-lg text-xs leading-relaxed whitespace-pre-wrap ${secondaryBgCls} border border-blue-500/30`}>
+										{currentEntry.feedback.pendingRewrite}
+									</div>
+									<div className="flex gap-2">
+										<button
+											onClick={() => setShowConfirmDialog(true)}
+											className="flex-1 px-3 py-2 rounded-lg text-xs font-medium bg-blue-500 hover:bg-blue-600 text-white transition-colors flex items-center justify-center gap-1"
+										>
+											<CheckCircle size={13} />
+											{copy.confirmRewrite}
+										</button>
+										<button
+											onClick={handleRewrite}
+											disabled={isRewriting}
+											className={`flex-1 px-3 py-2 rounded-lg text-xs font-medium transition-colors flex items-center justify-center gap-1 ${secondaryBgCls} ${isDark ? "hover:bg-white/10" : "hover:bg-gray-100"} disabled:opacity-50`}
+										>
+											<RefreshCw size={13} className={isRewriting ? "animate-spin" : ""} />
+											{isRewriting ? copy.rewriting : copy.rewrite}
+										</button>
+										<button
+											onClick={handleDiscardRewrite}
+											className={`px-3 py-2 rounded-lg text-xs font-medium transition-colors ${secondaryBgCls} ${isDark ? "hover:bg-white/10" : "hover:bg-gray-100"}`}
+										>
+											{copy.discardRewrite}
+										</button>
+									</div>
+
+									{/* 재작성 시 추가 피드백 입력란 */}
+									<textarea
+										value={feedbackText}
+										onChange={(e) => setFeedbackText(e.target.value)}
+										rows={2}
+										className={`w-full px-3 py-2 rounded-lg text-xs outline-none border transition-all focus:ring-2 focus:ring-blue-500/30 resize-none ${inputCls}`}
+										placeholder={copy.feedbackPlaceholder}
+									/>
+								</div>
+							)}
+						</div>
+					)}
 				</div>
+			)}
+
+			{/* 확정 경고 모달 */}
+			{showConfirmDialog && (
+				<ConfirmDialog
+					title={copy.confirmWarningTitle}
+					message={copy.confirmWarningBody}
+					onConfirm={handleConfirmRewrite}
+					onCancel={() => setShowConfirmDialog(false)}
+				/>
 			)}
 		</div>
 	);

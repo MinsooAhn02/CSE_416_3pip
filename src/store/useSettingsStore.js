@@ -318,6 +318,24 @@ export const useSettingsStore = create((set, get) => ({
 		notifySaved();
 	},
 
+	// keyword 존재하면 score += delta, 없으면 새로 추가 (알림 없음, 백그라운드)
+	bumpKeyword: (keyword, category = "note", delta = 10) => {
+		if (!keyword?.trim()) return;
+		const k = keyword.trim().toLowerCase();
+		const current = get().keywordInterests;
+		const idx = current.findIndex((item) => item.keyword?.toLowerCase() === k);
+		let updated;
+		if (idx >= 0) {
+			updated = current.map((item, i) =>
+				i === idx ? { ...item, score: (item.score ?? 0) + delta } : item
+			);
+		} else {
+			updated = [{ keyword: k, category, score: delta }, ...current];
+		}
+		set({ keywordInterests: updated });
+		syncSettings({ keyword_interests: updated });
+	},
+
 	removeKeywordInterest: (keyword) => {
 		const updated = get().keywordInterests.filter(
 			(item) => item.keyword !== keyword

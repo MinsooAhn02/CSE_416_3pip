@@ -11,7 +11,6 @@
     ],
     "deny": []
   },
-  "model": "opus",
   "spinnerTipsEnabled": false,
   "autoMemoryEnabled": false,
   "autoDreamEnabled": false

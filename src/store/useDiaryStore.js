@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { load, save } from "../utils/storage";
 import { supabase } from "../lib/supabase";
+import { rewriteDiaryWithFeedback } from "../services/aiService";
 import { formatLocalDate, parseDateString } from "../utils/date";
 import {
 	DEFAULT_PIN_LOCK_MODE,
@@ -46,6 +47,18 @@ const normalizeDateKey = (dateStr) => {
 	return parsed ? formatLocalDate(parsed) : dateStr;
 };
 
+const normalizeFeedback = (fb) => {
+	if (!fb || typeof fb !== "object") {
+		return { rating: null, history: [], pendingRewrite: null, confirmedAt: null };
+	}
+	return {
+		rating: fb.rating ?? null,
+		history: Array.isArray(fb.history) ? fb.history : [],
+		pendingRewrite: typeof fb.pendingRewrite === "string" ? fb.pendingRewrite : null,
+		confirmedAt: fb.confirmedAt ?? null,
+	};
+};
+
 const normalizeEntry = (entry) => {
 	const safeEntry =
 		entry && typeof entry === "object" ? entry : {};
@@ -70,6 +83,7 @@ const normalizeEntry = (entry) => {
 		editedDiary,
 		notes,
 		memo: notes,
+		feedback: normalizeFeedback(safeEntry.feedback),
 	};
 };
 
@@ -429,6 +443,106 @@ export const useDiaryStore = create((set, get) => ({
 
 	saveMemo: async (dateStr, memoText) => {
 		return get().saveNotes(dateStr, memoText);
+	},
+
+	/* ── Feedback / 재작성 ── */
+	setFeedbackRating: (dateStr, rating) => {
+		set((state) => {
+			const prevEntry = normalizeEntry(state.entries[dateStr]);
+			const entries = {
+				...state.entries,
+				[dateStr]: normalizeEntry({
+					...prevEntry,
+					feedback: { ...normalizeFeedback(prevEntry.feedback), rating },
+				}),
+			};
+			return { entries: saveEntriesLocally(entries) };
+		});
+	},
+
+	applyFeedbackRewrite: async (dateStr, feedbackText, language = "ko") => {
+		const entry = normalizeEntry(get().entries[dateStr]);
+		const baseline = entry.aiGeneratedDiary || entry.diary || "";
+		const prevFeedback = normalizeFeedback(entry.feedback);
+		const newHistory = [
+			...prevFeedback.history,
+			{ at: new Date().toISOString(), text: feedbackText },
+		];
+
+		const rewritten = await rewriteDiaryWithFeedback({
+			originalDiary: baseline,
+			feedbackHistory: newHistory,
+			language,
+		});
+
+		set((state) => {
+			const prev = normalizeEntry(state.entries[dateStr]);
+			const entries = {
+				...state.entries,
+				[dateStr]: normalizeEntry({
+					...prev,
+					feedback: {
+						...normalizeFeedback(prev.feedback),
+						rating: "dislike",
+						history: newHistory,
+						pendingRewrite: rewritten,
+					},
+				}),
+			};
+			return { entries: saveEntriesLocally(entries) };
+		});
+
+		return rewritten;
+	},
+
+	confirmRewrite: async (dateStr) => {
+		const entry = normalizeEntry(get().entries[dateStr]);
+		const pending = entry.feedback?.pendingRewrite;
+		if (!pending) return;
+
+		set((state) => {
+			const prev = normalizeEntry(state.entries[dateStr]);
+			const entries = {
+				...state.entries,
+				[dateStr]: normalizeEntry({
+					...prev,
+					diary: pending,
+					editedDiary: pending,
+					feedback: {
+						...normalizeFeedback(prev.feedback),
+						pendingRewrite: null,
+						confirmedAt: new Date().toISOString(),
+					},
+				}),
+			};
+			return { entries: saveEntriesLocally(entries) };
+		});
+
+		if (!supabase) return;
+		try {
+			const { data: { user } } = await supabase.auth.getUser();
+			if (!user) return;
+			await supabase.from("diaries").upsert(
+				{ user_id: user.id, date: dateStr, edited_diary: pending, updated_at: new Date().toISOString() },
+				{ onConflict: "user_id,date" },
+			);
+		} catch (e) {
+			console.warn("Confirm rewrite DB sync failed:", e?.message);
+		}
+	},
+
+	discardPendingRewrite: (dateStr) => {
+		set((state) => {
+			const prev = normalizeEntry(state.entries[dateStr]);
+			const entries = {
+				...state.entries,
+				[dateStr]: normalizeEntry({
+					...prev,
+					feedback: { ...normalizeFeedback(prev.feedback), pendingRewrite: null },
+				}),
+			};
+			return { entries: saveEntriesLocally(entries) };
+		});
 	},
 
 	/* ── DiaryCard Q&A 관리 (user_qa 테이블) ── */
