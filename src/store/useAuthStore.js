@@ -35,7 +35,10 @@ export const useAuthStore = create((set, get) => ({
 				].join(" "),
 				queryParams: {
 					access_type: "offline",
-					prompt: "consent",
+					// "select_account" 대신 "consent"를 쓰면 이미 권한을 허용한
+					// 재방문 유저에게도 매 로그인마다 전체 동의 화면을 다시 띄움.
+					// 재방문 유저는 계정만 선택하고 바로 대시보드로 진입하도록 변경.
+					prompt: "select_account",
 					include_granted_scopes: "true",
 				},
 				redirectTo: window.location.origin,

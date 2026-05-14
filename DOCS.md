@@ -954,6 +954,64 @@ https://www.googleapis.com/auth/fitness.activity.read
 
 ## 18) 최근 반영 사항
 
+### 2026-05-14 — Cloudflare 배포 실패 수정 (`wrangler.jsonc` 추가)
+
+**증상:** 고객이 "로그인 이슈"를 제보 → Cloudflare 빌드 로그 분석 결과 **로그인이 아니라 배포 자체가 실패**하고 있었음.
+
+**진단 — 빌드 파이프라인 로그:**
+
+| 단계 | 명령 | 결과 |
+| --- | --- | --- |
+| 1. 의존성 설치 | `bun install` | ✅ 183 packages |
+| 2. 빌드 | `npm run build` (`vite build`) | ✅ `dist/` 생성 |
+| 3. 배포 | `npx wrangler versions upload` | ❌ `Missing entry-point to Worker script or to assets directory` |
+
+**근본 원인:** 레포에 `wrangler.jsonc`/`wrangler.toml` 설정 파일이 없고 배포 명령에 `--assets` 플래그도 없어, wrangler가 무엇을 업로드할지 모르는 상태. 빌드는 성공하지만 배포 단계에서 매번 실패 → **새 빌드가 한 번도 라이브에 반영된 적 없음.** 그래서 직전 OAuth 코드 수정(`prompt: "select_account"`)도, Supabase URL 설정 변경도 고객에게 적용되지 않았고, 이것이 "로그인 이슈"의 실제 원인.
+
+**수정 (`wrangler.jsonc` 신규 생성, 레포 루트):**
+```jsonc
+{
+	"name": "morningbriefing",
+	"compatibility_date": "2026-05-13",
+	"assets": {
+		"directory": "./dist",
+		"not_found_handling": "single-page-application"
+	}
+}
+```
+- `name`: 기존 Worker 이름 `morningbriefing` (도메인 `morningbriefing.dksalstn0621.workers.dev`와 일치).
+- `assets.directory`: Vite 출력 폴더 `./dist`.
+- `not_found_handling: "single-page-application"`: OAuth 콜백(`…/?code=xxx`) 및 딥링크가 404 대신 `index.html`을 받도록 — Workers SPA 라우팅 문제도 함께 해결.
+
+**검증 필요:** 다음 배포에서 `wrangler versions upload`가 `./dist`를 정상 업로드하는지 빌드 로그로 확인. 배포 성공 후에야 OAuth 코드 수정이 라이브에 반영됨.
+
+### 2026-05-14 — 로그인 진입 단계 축소 (Google OAuth)
+
+**사용자 불만:** 로그인 시 대시보드 진입까지 거치는 화면이 너무 많음.
+
+**진단 — 4단계 화면의 원인 구분:**
+
+| 사용자가 보는 화면 | 원인 | 코드로 수정 가능? |
+| --- | --- | --- |
+| 1. Google 계정 선택 | 정상 OAuth 흐름 | — |
+| 2. "Google에서 확인하지 않은 앱" 경고 | GCP OAuth 앱이 **미검증** 상태 + sensitive/restricted 스코프 요청 | ❌ GCP Console 설정 |
+| 3. "고급 → 이동(안전하지 않음)" 링크 | 동일 (미검증 앱은 진행 버튼을 숨김) | ❌ GCP Console 설정 |
+| 4. Calendar/Tasks/Fitness 동의 화면 | sensitive/restricted 스코프는 최초 1회 동의 필수 — 단 `prompt: "consent"`가 **매 로그인마다** 강제로 재노출 중이었음 | ✅ 부분 수정 |
+
+**코드 수정 (`src/store/useAuthStore.js > login`):**
+- `queryParams.prompt`를 `"consent"` → `"select_account"`로 변경. 이전에는 이미 권한을 허용한 재방문 유저에게도 매 로그인마다 전체 동의 화면이 다시 떴음. 변경 후 재방문 유저는 계정만 선택하고 바로 대시보드 진입.
+- provider_token 경로 영향 없음: 최초 동의가 `access_type: "offline"`로 이뤄져 refresh token이 저장돼 있으므로 `ensureProviderToken()`의 `refreshSession()`이 계속 동작.
+- 스코프는 사용자 요청에 따라 5종(Calendar, Tasks, Fitness ×3) 전부 로그인 시점 요청 유지.
+
+**코드로 해결 불가 — 다음 개발자가 GCP Console에서 처리해야 할 작업 (화면 2·3):**
+1. **게시 상태 확인** — GCP Console → APIs & Services → OAuth consent screen. "Testing"이면 비-테스트 유저 전원이 미검증 경고를 봄. 임시방편으로 "Test users"에 유저 추가, 또는 "In production" 전환.
+2. **앱 검증 제출** — sensitive(Calendar, Tasks) + restricted(Fitness ×3) 스코프 요청 때문에 필수. 검증된 도메인·개인정보처리방침 URL·데모 영상 필요. **restricted Fitness 스코프는 연 1회 third-party CASA 보안 평가**가 추가로 필요(가장 느리고 비용이 큰 단계).
+3. **대안** — Fitness 검증이 지연되면 `useAuthStore.js`의 `fitness.*` 스코프 3종을 제거. restricted 스코프가 빠지면 검증 난이도가 크게 낮아짐(sensitive-only).
+
+**요약:** 매 로그인 재동의(화면 4 반복)는 코드 버그였고 수정 완료. "미검증 앱" 경고(화면 2·3)는 코드 버그가 아니라 Google 검증 상태 문제로, 검증 완료 전까지 신규 유저에게는 계속 노출됨.
+
+**남은 작업(선택):** 로그인 *이후* 인앱 단계(2-step `OnboardingModal`, `FirstLoginBriefingModal`의 강제 10초 카운트다운)도 "화면이 많다"는 체감에 기여 — 코드로 전부 정리 가능, 미착수.
+
 ### 2026-05-13 — 위젯 API 최적화 & 언어/UI 개선 (2차)
 
 #### 반영 완료

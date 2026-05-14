@@ -1,0 +1,8 @@
+{
+	"name": "morningbriefing",
+	"compatibility_date": "2026-05-13",
+	"assets": {
+		"directory": "./dist",
+		"not_found_handling": "single-page-application"
+	}
+}
