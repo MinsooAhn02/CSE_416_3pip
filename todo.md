@@ -73,10 +73,12 @@
 
 ## To Fix
 
-13. ews 한국어 모드에서 한국어 출처만 표시 확인
+13. News 한국어 모드에서 한국어 출처만 표시 확인
     - 파일: `src/store/useDataStore.js`
     - 내용: include_domains + filterLocalizedArticles 동작 검증
 
-28. Stocks 통화 단위 표시: 미장이면 $, 국장이면 ₩ 표시 (StocksWidget.jsx normalizeStockItem 수정 필요)
+101. 일기장에 diar card에 답변한 내용이 적혀있지 않을 뿐더러, ai briefing의 내용이 들어가 있지 않음
+102. stocks widget: 아직도 ticker 를 입력하면 값이 0이여서 --가 되는 버그가 있음. vix, aapl 등 몇개의 주식이나 지수도 입력이 안됌. 주식과 지수를 동시에 입력하는 로직이 잘못되었나 점검을 해야할 듯.
+103. 
 
 100. (마무리 단계) i18n En/Ko 설정 적용. dashboard, user settings, briefing에서도 설정한 언어로 display.

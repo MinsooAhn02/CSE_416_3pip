@@ -268,39 +268,41 @@ const NewsWidget = () => {
 											<X size={18} />
 										</button>
 									</div>
-									<div className="flex-1 overflow-y-auto p-4">
-										<div className="grid grid-cols-3 gap-2">
-											{allItems.map((item, i) => (
+									<div className="flex-1 overflow-y-auto">
+										<div className={`flex flex-col divide-y ${dividerCls}`}>
+											{allItems.slice(0, 10).map((item, i) => (
 												<a
 													key={i}
 													{...linkProps(item)}
-													className="overflow-hidden rounded-xl group aspect-square relative block"
+													className={`flex gap-3 px-4 py-3 transition-colors ${hoverBtnCls}`}
 												>
-													{item.image ? (
-														<img
-															src={item.image}
-															alt=""
-															className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
-															onError={(e) => {
-																e.currentTarget.style.display = "none";
-																e.currentTarget.parentElement
-																	.querySelector(".modal-grid-fallback")
-																	?.classList.remove("hidden");
-															}}
-														/>
-													) : null}
-													<div
-														className={`modal-grid-fallback ${item.image ? "hidden" : ""} w-full h-full flex items-center justify-center ${secondaryBgCls}`}
-													>
-														<Newspaper size={24} className="opacity-20" />
+													<div className={`w-20 h-14 flex-shrink-0 rounded-lg overflow-hidden ${secondaryBgCls}`}>
+														{item.image ? (
+															<img
+																src={item.image}
+																alt=""
+																className="w-full h-full object-cover"
+																loading="lazy"
+																onError={(e) => {
+																	e.currentTarget.style.display = "none";
+																}}
+															/>
+														) : (
+															<div className="w-full h-full flex items-center justify-center">
+																<Newspaper size={16} className="opacity-20" />
+															</div>
+														)}
 													</div>
-													{item.title && (
-														<div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent px-2 pb-2 pt-6">
-															<p className="text-[10px] text-white font-medium line-clamp-2 leading-tight">
-																{item.title}
+													<div className="flex-1 min-w-0">
+														<p className="text-sm font-medium line-clamp-2 leading-snug">
+															{item.title}
+														</p>
+														{item.source && (
+															<p className={`text-[11px] mt-1 ${isDark ? "text-gray-500" : "text-slate-400"}`}>
+																{item.source}
 															</p>
-														</div>
-													)}
+														)}
+													</div>
 												</a>
 											))}
 										</div>

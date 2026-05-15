@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { Sparkles, RefreshCw, X } from "lucide-react";
@@ -116,8 +116,6 @@ const BriefingWidget = () => {
 		attempted: false,
 	});
 	const detailPreviewContainerRef = useRef(null);
-	const detailPreviewRef = useRef(null);
-	const [dashboardDetailPreview, setDashboardDetailPreview] = useState("");
 
 	// 마운트 시 오늘의 Q&A 답변 로드
 	useEffect(() => {
@@ -350,24 +348,6 @@ const BriefingWidget = () => {
 				!line.startsWith("}") &&
 				!line.startsWith('"'),
 		);
-	// Dashboard preview: prefer section content (skip titles) when sections are available
-	const dashboardDetailText = useMemo(() => {
-		const sectionsText = displayBriefing.sections
-			.flatMap((s) => {
-				if (Array.isArray(s.subBlocks) && s.subBlocks.length > 0) {
-					return s.subBlocks.flatMap((sb) => sb.lines ?? []);
-				}
-				return s.lines ?? [];
-			})
-			.filter(Boolean)
-			.join(" · ")
-			.trim();
-		const fallback = sectionsText || detailLines.join(" ").trim();
-		const safe = (fallback || displayBriefing.summary || t("briefing.loading_detail"))
-			.replace(/\s+/g, " ")
-			.trim();
-		return safe;
-	}, [displayBriefing.sections, detailLines, displayBriefing.summary, t]);
 
 	const greeting = useMemo(() => getTimeGreeting(), [i18n.language]);
 
@@ -392,60 +372,6 @@ const BriefingWidget = () => {
 		setIsExpanded(false);
 	};
 
-	const fitDashboardDetailPreview = useCallback(() => {
-		const el = detailPreviewRef.current;
-		const containerEl = detailPreviewContainerRef.current;
-		if (!el || !containerEl) return;
-
-		const fullText = dashboardDetailText;
-		if (!fullText) {
-			setDashboardDetailPreview((prev) => (prev === "" ? prev : ""));
-			return;
-		}
-
-		const availableHeight = containerEl.clientHeight;
-		if (availableHeight <= 0) return;
-		el.style.height = `${availableHeight}px`;
-		el.style.maxHeight = `${availableHeight}px`;
-
-		el.textContent = fullText;
-		if (el.scrollHeight <= el.clientHeight) {
-			setDashboardDetailPreview((prev) =>
-				prev === fullText ? prev : fullText,
-			);
-			return;
-		}
-
-		let low = 0;
-		let high = fullText.length;
-		let bestFit = "...";
-
-		while (low <= high) {
-			const mid = Math.floor((low + high) / 2);
-			const candidate = `${fullText.slice(0, mid).trimEnd()}...`;
-			el.textContent = candidate;
-			if (el.scrollHeight <= el.clientHeight) {
-				bestFit = candidate;
-				low = mid + 1;
-			} else {
-				high = mid - 1;
-			}
-		}
-
-		setDashboardDetailPreview((prev) => (prev === bestFit ? prev : bestFit));
-	}, [dashboardDetailText]);
-
-	useEffect(() => {
-		fitDashboardDetailPreview();
-	}, [fitDashboardDetailPreview]);
-
-	useEffect(() => {
-		const containerEl = detailPreviewContainerRef.current;
-		if (!containerEl || typeof ResizeObserver === "undefined") return undefined;
-		const observer = new ResizeObserver(() => fitDashboardDetailPreview());
-		observer.observe(containerEl);
-		return () => observer.disconnect();
-	}, [fitDashboardDetailPreview]);
 
 	return (
 		<>
@@ -487,22 +413,47 @@ const BriefingWidget = () => {
 
 				<div
 					ref={detailPreviewContainerRef}
-					className="space-y-2 flex-1 min-h-0 pr-1"
+					className={`flex-1 min-h-0 overflow-hidden divide-y ${isDark ? "divide-morning-dark-hover/40" : "divide-morning-light-hover/30"}`}
 				>
 					{isLoading && !hasBriefings ? (
-						<div className="space-y-2">
+						<div className="space-y-2 pt-1">
 							<SkeletonLine width="90%" />
 							<SkeletonLine width="100%" />
 							<SkeletonLine width="85%" />
 						</div>
-					) : (
+					) : displayBriefing.sections.length > 0 ? (
+						displayBriefing.sections.map((section) => (
+							<div key={section.id} className="py-1.5 first:pt-0 last:pb-0">
+								<p className={`text-[9px] font-bold uppercase tracking-wider mb-0.5 ${isDark ? "text-blue-400/70" : "text-blue-600/70"}`}>
+									{section.title}
+								</p>
+								<p
+									className={`text-[11px] leading-snug ${muted} overflow-hidden`}
+									style={{
+										display: "-webkit-box",
+										WebkitLineClamp: 2,
+										WebkitBoxOrient: "vertical",
+									}}
+								>
+									{(Array.isArray(section.subBlocks) && section.subBlocks.length > 0
+										? section.subBlocks.flatMap((sb) => sb.lines ?? [])
+										: section.lines ?? []
+									).join(" · ")}
+								</p>
+							</div>
+						))
+					) : detailLines.length > 0 ? (
 						<p
-							ref={detailPreviewRef}
-							className={`text-xs leading-relaxed ${muted} h-full overflow-hidden break-words`}
+							className={`text-[11px] leading-snug ${muted} overflow-hidden pt-1`}
+							style={{
+								display: "-webkit-box",
+								WebkitLineClamp: 6,
+								WebkitBoxOrient: "vertical",
+							}}
 						>
-							{dashboardDetailPreview}
+							{detailLines.join(" · ")}
 						</p>
-					)}
+					) : null}
 				</div>
 
 				<p className={`mt-4 text-[10px] ${muted} text-center`}>

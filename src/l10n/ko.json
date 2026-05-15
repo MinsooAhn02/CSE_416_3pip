@@ -180,15 +180,13 @@
       "title": "주식/환율",
       "change": "변동",
       "volume": "거래량",
-      "symbol_settings": "심볼 설정",
-      "select_symbols": "표시할 심볼 선택",
-      "custom_input": "직접 입력 (예: AAPL)",
+      "custom_input": "티커 추가 (예: AAPL, VIX, DJI)",
       "loading": "주식/환율 데이터를 불러오는 중...",
       "no_data": "표시할 주식/환율 데이터가 없습니다.",
-      "invalid_ticker": "\"{{symbol}}\"은 유효하지 않은 티커입니다. AAPL, TSLA, NVDA 등을 시도해 보세요.",
-      "remove_symbol": "심볼 삭제",
+      "invalid_ticker": "\"{{symbol}}\"은 유효하지 않은 티커입니다. AAPL, TSLA, VIX 등을 시도해 보세요.",
       "drag_to_reorder": "드래그하여 순서 변경",
-      "manage_order": "순서 관리"
+      "confirm_delete_title": "주식 삭제",
+      "confirm_delete_message": "{{symbol}}을(를) 목록에서 삭제하시겠습니까?"
     },
     "trends": {
       "title": "실시간 트렌드",

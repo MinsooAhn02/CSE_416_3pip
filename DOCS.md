@@ -1,6 +1,6 @@
 # MorningBriefing.AI - 통합 프로젝트 문서
 
-> 최종 정리일: 2026-05-15
+> 최종 정리일: 2026-05-16
 > 관리 정책: 문서는 DOCS.md 단일 파일로 유지
 
 ---
@@ -1131,5 +1131,70 @@ https://www.googleapis.com/auth/fitness.activity.read
 2. 병합 완료 후 임시 문서는 삭제
 3. 동일 주제는 DOCS.md 내부 단일 섹션만 유지
 4. 코드 변경 시 관련 섹션(위젯/스토어/스키마) 동시 업데이트
+
+---
+
+## 18) 2026-05-16 — Widget Round 4 (News / Stocks / AI Briefing)
+
+### News: 한국어 모드 엄격 도메인 필터
+
+- **파일**: `src/store/useDataStore.js`
+- `filterByAllowedDomains`의 "결과 0 → unfiltered fallback" 로직 제거.  
+  `lang=ko`일 때 KO_NEWS_DOMAINS 화이트리스트(naver.com, yna.co.kr, chosun.com, joins.com, hani.co.kr, news1.kr) 필터 결과가 비어 있으면 빈 배열 반환 — 영어 기사 노출 완전 방지.
+- `fetchNews`의 `fallbackLocalResults` / `fallbackGlobalResults` 경로도 제거.  
+  캐시 읽기 경로(`dbCached`)에서도 동일하게 `filterLocalizedArticles` 결과만 사용.
+- 영어 모드(`lang !== "ko"`) 동작 변화 없음.
+
+### News: 모달 뷰 리스트 레이아웃
+
+- **파일**: `src/components/widgets/NewsWidget.jsx`
+- 기존 `showAllModal` 내 `grid grid-cols-3 aspect-square` 그리드 → 수직 스크롤 리스트로 교체.
+- 각 row: 왼쪽 썸네일(80×56 px 고정) + 오른쪽 타이틀 2줄 clamp + source 표시.
+- `allItems.slice(0, 10)` — 최대 10개 표시.
+- `divide-y` 구분선, 테마 hover 색 적용.
+
+### Stocks: 통합 모달 (설정 패널 + 순서 관리 + 전체 보기 → 단일 모달)
+
+- **파일**: `src/components/widgets/StocksWidget.jsx`
+- 제거: `showSettings`(설정 드롭다운), `showViewAll`(전체보기 모달), `STOCK_OPTIONS`(preset 토글), `toggleSymbol`, `customSymbols` memo, `presetIds`.
+- 대시보드 헤더의 ⚙ 설정 아이콘 → `+` 아이콘으로 교체, 클릭 시 통합 모달 오픈.
+- "View More" 버튼 → 동일한 통합 모달 오픈.
+- **통합 모달 구조**:
+  1. 헤더 (타이틀 + 닫기)
+  2. 티커 입력 칸 + Add 버튼 (모달 상단, 고정)
+  3. 드래그-리오더 카드 그리드 (@hello-pangea/dnd, 기존 애니메이션 그대로)
+  4. 각 카드 우상단 X 버튼 → `ConfirmDialog` (확인/취소) → 확인 시 삭제
+- **기존 사용자 데이터**: `stockSymbols` 배열 구조 변경 없음. KOSPI/NASDAQ/SP500/USDKRW는 alias map 통해 정상 작동.
+- 미사용 i18n 키 제거: `symbol_settings`, `select_symbols`, `manage_order`, `remove_symbol`.
+- 신규 i18n 키 추가: `confirm_delete_title`, `confirm_delete_message` (en/ko).
+
+### Stocks: 지수 티커 범용 지원 (Edge Function)
+
+- **파일**: `supabase/functions/stocks/index.ts`
+- **기존 문제**: symbolMap에 없는 지수(VIX, DJI, RUT, N225, HSI, FTSE, GDAXI 등)는 Yahoo가 `^PREFIX` 형식을 요구하는데 bare symbol로 조회해서 항상 `--` 반환.
+- **해결 방식 (하드코딩 없음)**:
+  - `fetchYahooQuote`: primary 심볼로 조회 실패 시 `^${symbol}` 자동 재시도. yahooSymbolMap에 없는 심볼만 적용.
+  - `fetchStooqPrice`: 기본 후보 배열을 `[sym.us, ^sym, sym]`으로 확장 — Stooq 인덱스 `^vix`, `^dji` 등 자동 커버.
+  - TwelveData 브랜치는 변경 없음 (실패 시 새 Yahoo/Stooq 체인으로 자연히 낙하).
+- **재배포 필요**: `supabase functions deploy stocks`
+
+### AI Briefing: 관심사(Interests) 섹션 제거
+
+- **파일**: `src/services/aiService.js`
+- `FIXED_INTEREST_LABELS_LOCALIZED`, `SUPPORTED_INTEREST_IDS` 상수 삭제.
+- `generateInterestSentences` 함수 삭제 (~107 lines).
+- `Promise.all` 병렬 호출에서 `generateInterestSentences` 제거; `[diaryRewrite, smartSummary]` 두 개만 유지.
+- `// ── 5) 관심사 …` 섹션 블록 (`sections.push({ id: "interests", ... })`) 삭제.
+- "오늘 최신 정보" (latest_info) 섹션이 smart keyword + Top 3 뉴스로 유사한 정보를 이미 커버.
+
+### AI Briefing: 대시보드 미리보기 섹션 분리 (CSS line-clamp)
+
+- **파일**: `src/components/widgets/BriefingWidget.jsx`
+- **기존**: 모든 섹션 내용을 `·` 구분자로 이어붙인 단일 `<p>` + 바이너리 서치 높이 피팅 (~50 lines).
+- **변경**: `displayBriefing.sections`를 순회해 `divide-y` 섹션 구조로 렌더링.  
+  각 섹션: 9px 대문자 타이틀 + 11px 내용 (`-webkit-line-clamp: 2`으로 2줄 자동 트리밍).  
+  `overflow-hidden` 컨테이너가 하단 초과 섹션 클리핑.
+- 제거: `dashboardDetailText` useMemo, `dashboardDetailPreview` useState, `detailPreviewRef` useRef, `fitDashboardDetailPreview` useCallback, 관련 useEffect 2개, `useCallback` import.
+- 모달 뷰는 변경 없음 (기존 divide-y 섹션 구조 그대로).
 
 ---

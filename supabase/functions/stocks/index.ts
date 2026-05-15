@@ -55,24 +55,37 @@ const yahooSymbolMap: Record<string, string> = {
 async function fetchYahooQuote(
 	alphaSymbol: string,
 ): Promise<{ price: number; change: number; changePercent: string } | null> {
-	const yahooSymbol = yahooSymbolMap[alphaSymbol] ?? alphaSymbol;
-	const url = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${encodeURIComponent(yahooSymbol)}`;
-	const data = await fetchJsonWithTimeout(url, YAHOO_TIMEOUT_MS);
-	const quote = data?.quoteResponse?.result?.[0];
-	const price = Number(quote?.regularMarketPrice ?? quote?.postMarketPrice ?? 0);
-	if (!Number.isFinite(price) || price <= 0) return null;
+	const primary = yahooSymbolMap[alphaSymbol] ?? alphaSymbol;
+	// For unknown symbols, also try the ^PREFIX variant that Yahoo uses for indices.
+	const candidates: string[] = [primary];
+	if (!primary.startsWith("^") && !(alphaSymbol in yahooSymbolMap)) {
+		candidates.push(`^${alphaSymbol}`);
+	}
 
-	const change = Number(quote?.regularMarketChange ?? 0);
-	const changePercentRaw = Number(quote?.regularMarketChangePercent);
-	const changePercent = Number.isFinite(changePercentRaw)
-		? toPercentString(changePercentRaw)
-		: toPercentString(change);
+	for (const candidate of [...new Set(candidates)]) {
+		try {
+			const url = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${encodeURIComponent(candidate)}`;
+			const data = await fetchJsonWithTimeout(url, YAHOO_TIMEOUT_MS);
+			const quote = data?.quoteResponse?.result?.[0];
+			const price = Number(quote?.regularMarketPrice ?? quote?.postMarketPrice ?? 0);
+			if (!Number.isFinite(price) || price <= 0) continue;
 
-	return {
-		price,
-		change: Number.isFinite(change) ? change : 0,
-		changePercent,
-	};
+			const change = Number(quote?.regularMarketChange ?? 0);
+			const changePercentRaw = Number(quote?.regularMarketChangePercent);
+			const changePercent = Number.isFinite(changePercentRaw)
+				? toPercentString(changePercentRaw)
+				: toPercentString(change);
+
+			return {
+				price,
+				change: Number.isFinite(change) ? change : 0,
+				changePercent,
+			};
+		} catch {
+			continue;
+		}
+	}
+	return null;
 }
 
 async function fetchStooqPrice(alphaSymbol: string): Promise<number | null> {
@@ -87,7 +100,7 @@ async function fetchStooqPrice(alphaSymbol: string): Promise<number | null> {
 	const sym = alphaSymbol.toLowerCase();
 	const candidates = map[alphaSymbol]
 		? map[alphaSymbol]
-		: [`${sym}.us`, sym]; // try US exchange first, then bare symbol
+		: [`${sym}.us`, `^${sym}`, sym]; // US exchange → index prefix → bare symbol
 	for (const stooqSymbol of candidates) {
 		const url = `https://stooq.com/q/l/?s=${encodeURIComponent(stooqSymbol)}&f=sd2t2ohlcv&h&e=csv`;
 		try {

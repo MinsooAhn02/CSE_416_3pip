@@ -46,6 +46,13 @@ serve(async (req) => {
 		if (Array.isArray(include_domains) && include_domains.length > 0) {
 			tavilyBody.include_domains = include_domains;
 		}
+		// 위치 정보가 있으면 Tavily에 전달 (지역 뉴스 관련성 향상)
+		if (location && typeof location === "object" &&
+			typeof (location as Record<string, unknown>).lat === "number" &&
+			typeof (location as Record<string, unknown>).lon === "number") {
+			const loc = location as { lat: number; lon: number };
+			tavilyBody.location = `${loc.lat},${loc.lon}`;
+		}
 
 		const res = await fetch("https://api.tavily.com/search", {
 			method: "POST",

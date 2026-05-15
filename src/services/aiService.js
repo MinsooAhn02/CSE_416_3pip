@@ -878,33 +878,6 @@ const summarizeSmartWidgets = async ({ smartSummaries, tone, lang, langInstructi
 	}
 };
 
-/**
- * 고정 관심사 ID → 사람이 읽는 라벨 매핑 (lang-aware)
- */
-const FIXED_INTEREST_LABELS_LOCALIZED = {
-	ko: {
-		news: "뉴스",
-		tech: "기술",
-		finance: "금융",
-		health: "건강",
-		food: "음식",
-		entertainment: "엔터테인먼트",
-		fashion: "패션",
-		sports: "스포츠",
-	},
-	en: {
-		news: "News",
-		tech: "Tech",
-		finance: "Finance",
-		health: "Health",
-		food: "Food",
-		entertainment: "Entertainment",
-		fashion: "Fashion",
-		sports: "Sports",
-	},
-};
-
-const SUPPORTED_INTEREST_IDS = ["news", "tech", "finance", "health", "food", "entertainment"];
 
 /**
  * URL → 호스트명 (출처 라벨용). 실패 시 빈 문자열.
@@ -919,119 +892,6 @@ const hostFromUrl = (url) => {
 	}
 };
 
-/**
- * Groq 호출: 사용자의 고정 관심사 각각에 대해 한 문장 요약 생성.
- * 입력 데이터(뉴스/주식/트렌드/스마트요약)에서 가장 관련 높은 사실 하나를 선택해
- * 1문장 작성. 없으면 빈 문자열.
- * 반환: { [interestId]: string }
- */
-const generateInterestSentences = async ({
-	fixedInterestIds,
-	newsResults,
-	stocks,
-	trendsResults,
-	smartSummaries,
-	tone,
-	lang,
-	langInstruction,
-}) => {
-	const targetIds = (Array.isArray(fixedInterestIds) ? fixedInterestIds : [])
-		.map((id) => String(id).toLowerCase())
-		.filter((id) => SUPPORTED_INTEREST_IDS.includes(id));
-	if (targetIds.length === 0) return {};
-
-	const isKo = lang === "ko";
-	const labels = FIXED_INTEREST_LABELS_LOCALIZED[isKo ? "ko" : "en"];
-
-	// 데이터 컨텍스트 구성 — Groq 토큰 절약을 위해 압축
-	const newsLines = (newsResults ?? [])
-		.slice(0, 5)
-		.map((n, i) => {
-			const src = n?.source || hostFromUrl(n?.url);
-			return `${i + 1}. ${truncateText(n?.title, 120)}${src ? ` (${src})` : ""}`;
-		})
-		.join("\n");
-	const stockLines = (stocks ?? [])
-		.slice(0, 5)
-		.map((s) => `${s?.name ?? s?.symbol}: ${s?.value} (${s?.change})`)
-		.join("\n");
-	const trendLines = (trendsResults ?? [])
-		.slice(0, 5)
-		.map((tr, i) => `${i + 1}. ${truncateText(tr?.title, 120)}`)
-		.join("\n");
-	const smartLines = (smartSummaries ?? [])
-		.slice(0, 4)
-		.map(
-			(s) =>
-				`[${truncateText(s?.keyword, 40)}] ${(Array.isArray(s?.bullets) ? s.bullets : [])
-					.slice(0, 2)
-					.map((b) => truncateText(b, 90))
-					.join(" / ")}`,
-		)
-		.join("\n");
-
-	const interestList = targetIds.map((id) => `${id} (${labels[id] ?? id})`).join(", ");
-
-	const prompt = [
-		isKo
-			? "사용자의 고정 관심사 각각에 대해 오늘의 새로운 정보 한 문장을 작성하세요."
-			: "For each of the user's fixed interests, write ONE sentence about today's new info.",
-		isKo
-			? "아래 데이터에서 가장 관련 깊은 사실 하나만 골라 짧고 명확한 한 문장으로 서술. 새로운 사실을 지어내지 말고 데이터에 있는 내용만 사용. 데이터가 부족한 관심사는 빈 문자열 \"\" 반환."
-			: "Pick the single most relevant fact from the data below for each interest and write one short clear sentence. Do not invent facts; use only the given data. Return \"\" for interests with no data.",
-		"",
-		isKo ? `대상 관심사: ${interestList}` : `Target interests: ${interestList}`,
-		"",
-		isKo ? "[뉴스]" : "[News]",
-		newsLines || (isKo ? "(데이터 없음)" : "(no data)"),
-		"",
-		isKo ? "[주식/환율]" : "[Stocks/FX]",
-		stockLines || (isKo ? "(데이터 없음)" : "(no data)"),
-		"",
-		isKo ? "[트렌드]" : "[Trends]",
-		trendLines || (isKo ? "(데이터 없음)" : "(no data)"),
-		"",
-		isKo ? "[스마트 키워드 요약]" : "[Smart keyword summaries]",
-		smartLines || (isKo ? "(데이터 없음)" : "(no data)"),
-		"",
-		isKo
-			? "출력 형식: 순수 JSON 객체만 출력. 예: {\"news\": \"...\", \"tech\": \"\", ...}. 키는 대상 관심사 ID, 값은 한 문장 또는 빈 문자열."
-			: "Output format: pure JSON object only. Example: {\"news\": \"...\", \"tech\": \"\", ...}. Keys are the target interest IDs; values are one sentence or empty string.",
-	].join("\n");
-
-	try {
-		const data = await invokeFunction("groq", {
-			prompt,
-			system: [
-				isKo
-					? "고정 관심사별 1문장 요약을 사실 기반으로 작성한다."
-					: "Write one fact-based sentence per fixed interest.",
-				isKo
-					? "각 문장은 30자~80자, 군더더기 없음. JSON 외 다른 텍스트 금지."
-					: "Each sentence 60-180 chars, no filler. Output JSON only — no other text.",
-				`Tone: ${tone || "neutral"}.`,
-				langInstruction,
-			].join("\n"),
-			temperature: 0.1,
-		});
-		const text = String(data?.text || "").trim();
-		if (!text) return {};
-		// JSON 추출 (모델이 코드펜스/접두 텍스트를 붙일 수 있음)
-		const jsonMatch = text.match(/\{[\s\S]*\}/);
-		if (!jsonMatch) return {};
-		const parsed = JSON.parse(jsonMatch[0]);
-		const result = {};
-		for (const id of targetIds) {
-			const v = parsed?.[id];
-			if (typeof v === "string" && v.trim()) {
-				result[id] = truncateText(v.trim(), 200);
-			}
-		}
-		return result;
-	} catch {
-		return {};
-	}
-};
 
 /**
  * 상세 브리핑 생성 (deterministic sections + 좁은 범위 AI 보강)
@@ -1131,21 +991,11 @@ export async function generateDetailedBriefing({ tone, length, context }) {
 		}
 	}
 
-	// ── 4·5·6) Groq 병렬 호출 — 어제 일기 / 관심사 1문장 / 스마트 위젯 요약 ──
-	const [diaryRewrite, interestSentences, smartSummary] = await Promise.all([
+	// ── 4·5) Groq 병렬 호출 — 어제 일기 / 스마트 위젯 요약 ──
+	const [diaryRewrite, smartSummary] = await Promise.all([
 		rewriteYesterdayDiary({
 			diaryText: context?.yesterdayDiary,
 			memoText: context?.yesterdayMemo,
-			tone,
-			lang,
-			langInstruction,
-		}),
-		generateInterestSentences({
-			fixedInterestIds: context?.fixedInterestIds,
-			newsResults: context?.newsResults,
-			stocks: context?.stocks,
-			trendsResults: context?.trendsResults,
-			smartSummaries: context?.smartSummaries,
 			tone,
 			lang,
 			langInstruction,
@@ -1173,43 +1023,7 @@ export async function generateDetailedBriefing({ tone, length, context }) {
 		});
 	}
 
-	// ── 5) 관심사 — 고정 관심사별 1문장, 미지원 항목은 키워드만 ──
-	{
-		const fixedIds = (Array.isArray(context?.fixedInterestIds)
-			? context.fixedInterestIds
-			: []
-		).map((id) => String(id).toLowerCase());
-		const labels = FIXED_INTEREST_LABELS_LOCALIZED[isKo ? "ko" : "en"];
-
-		const sentenceIds = fixedIds.filter((id) => SUPPORTED_INTEREST_IDS.includes(id));
-		const otherFixed = fixedIds.filter((id) => !SUPPORTED_INTEREST_IDS.includes(id));
-
-		const lines = [];
-		for (const id of sentenceIds) {
-			const sentence = interestSentences?.[id];
-			const label = labels[id] ?? id;
-			if (sentence) {
-				lines.push(`${label}: ${sentence}`);
-			} else {
-				lines.push(
-					`${label}: ${isKo ? "오늘 새로운 정보가 없습니다." : "No new info today."}`,
-				);
-			}
-		}
-		if (otherFixed.length > 0) {
-			const otherLabels = otherFixed.map((id) => labels[id] ?? id).join(", ");
-			lines.push(`${isKo ? "기타" : "Other"}: ${otherLabels}`);
-		}
-		if (lines.length === 0) lines.push(isKo ? "관심사 없음" : "None");
-
-		sections.push({
-			id: "interests",
-			title: isKo ? "관심사" : "Interests",
-			lines,
-		});
-	}
-
-	// ── 6) 오늘 최신 정보 — 스마트 키워드 + 주요 뉴스 3개 (sub-blocks) ─
+	// ── 5) 오늘 최신 정보 — 스마트 키워드 + 주요 뉴스 3개 (sub-blocks) ─
 	{
 		const newsResults = Array.isArray(context?.newsResults) ? context.newsResults : [];
 		const topNewsLines = newsResults

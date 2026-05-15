@@ -481,17 +481,15 @@ const scoreArticleForLanguage = (item, language) => {
 	const host = getUrlHost(item?.url);
 
 	const titleScore = scoreLocalizedText(title, language);
-	const hostBonus =
-		language === "ko"
-			? KO_NEWS_DOMAINS.some((domain) => host.includes(domain))
-				? 2
-				: 0
-			: EN_NEWS_DOMAINS.some((domain) => host.includes(domain))
-				? 2
-				: 0;
+	const isKoHost = KO_NEWS_DOMAINS.some((domain) => host.includes(domain));
+	const isEnHost = EN_NEWS_DOMAINS.some((domain) => host.includes(domain));
+	const hostBonus = language === "ko" ? (isKoHost ? 2 : 0) : (isEnHost ? 2 : 0);
 
 	if (language === "ko") {
-		return titleScore > 0 ? titleScore * 4 + hostBonus : -1;
+		if (titleScore > 0) return titleScore * 4 + hostBonus;
+		// 신뢰할 수 있는 한국 도메인 기사는 영어 제목이어도 수용 (낮은 우선순위)
+		if (isKoHost) return hostBonus;
+		return -1;
 	}
 
 	if (titleScore > 0) return titleScore * 4 + hostBonus;
@@ -662,18 +660,18 @@ const dedupeArticles = (items = []) => {
 	});
 };
 
-// 문제 4 fix: 엄격 도메인 화이트리스트.
-// lang=ko 모드에서 뉴스 출처를 KO_NEWS_DOMAINS로 강제. Tavily가 include_domains를
-// 항상 엄격히 지키지 않을 수 있으므로 클라이언트 측 후처리 필터로 보장.
-// 단, 화이트리스트 적용 후 결과가 0이면 fallback으로 원본을 유지(빈 위젯 방지).
+// lang=ko 모드에서 KO_NEWS_DOMAINS 화이트리스트를 우선 적용.
+// 이 함수는 filterLocalizedArticles가 language score > 0 (한국어 기사)만 추린 뒤 호출되므로,
+// 도메인 필터 후 0개면 items(이미 한국어 기사들)를 그대로 반환해도 안전.
+// → 1차: 한국 신뢰 도메인 기사, 2차: 한국어 기사(도메인 무관), 3차: 빈 상태 (영어 기사 불가)
 const filterByAllowedDomains = (items, language) => {
 	if (language !== "ko" || !Array.isArray(items) || items.length === 0) {
 		return items;
 	}
-	const filtered = items.filter((item) => {
-		const host = getUrlHost(item?.url);
-		return KO_NEWS_DOMAINS.some((domain) => host.includes(domain));
-	});
+	const filtered = items.filter((item) =>
+		KO_NEWS_DOMAINS.some((domain) => getUrlHost(item?.url).includes(domain)),
+	);
+	// filtered가 비어도 items는 이미 언어 점수 양수 = 한국어 기사들만 → 안전한 fallback
 	return filtered.length > 0 ? filtered : items;
 };
 
@@ -1490,14 +1488,11 @@ export const useDataStore = create((set, get) => ({
 		// ✅ 캐시 우선 확인 (cacheKey에 언어가 포함되어 있으므로 언어별로 독립 캐시됨)
 		if (!force) {
 			const dbCached = await readApiCache(cacheKey, userId, false);
-			const localizedResults = filterLocalizedArticles(
+			const rawDisplayResults = filterLocalizedArticles(
 				dbCached?.data?.results ?? [],
 				lang,
 				10,
 			);
-			const fallbackResults = normalizeArticleList(dbCached?.data?.results ?? [], 10);
-			const rawDisplayResults =
-				localizedResults.length > 0 ? localizedResults : fallbackResults;
 			const displayResults =
 				lang === "ko"
 					? await translateArticlesToKorean(rawDisplayResults)
@@ -1534,7 +1529,10 @@ export const useDataStore = create((set, get) => ({
 					? `반드시 한국어 기사 제목만 사용하고 영어/외국어 기사 제목은 제외. 현재 위치(위도 ${locationObj.lat}, 경도 ${locationObj.lon}) 주변 지역의 한국어 최신 뉴스 속보${interestClause}`
 					: `반드시 한국어 기사 제목만 사용하고 영어/외국어 기사 제목은 제외. 대한민국 한국어 최신 뉴스 속보${interestClause}`);
 
-			const includeDomains = isEn ? EN_NEWS_DOMAINS : KO_NEWS_DOMAINS;
+			// ko 모드: include_domains 없이 Tavily에 한국어 쿼리만 전달.
+			// include_domains: KO_NEWS_DOMAINS를 쓰면 Tavily 인덱스가 빈약한 한국 도메인에서
+			// 결과 0개가 나오는 경우가 많음. 언어 필터링은 클라이언트 scoreArticleForLanguage에서 수행.
+			const includeDomains = isEn ? EN_NEWS_DOMAINS : [];
 			const globalNewsQuery = isEn
 				? "top English-language world breaking news headlines today"
 				: "반드시 한국어 기사 제목만 사용하고 영어/외국어 기사 제목은 제외. 한국어 기사 기준 세계 주요 뉴스 속보 오늘";
@@ -1545,13 +1543,13 @@ export const useDataStore = create((set, get) => ({
 					mode: "news",
 					max_results: 5,
 					location: locationObj,
-					include_domains: includeDomains,
+					...(includeDomains.length > 0 ? { include_domains: includeDomains } : {}),
 				}),
 				invokeEdgeDetailed("tavily", {
 					query: globalNewsQuery,
 					mode: "news",
 					max_results: 5,
-					include_domains: includeDomains,
+					...(includeDomains.length > 0 ? { include_domains: includeDomains } : {}),
 				}),
 			]);
 
@@ -1565,22 +1563,12 @@ export const useDataStore = create((set, get) => ({
 			const globalResults = globalEdge?.ok
 				? filterLocalizedArticles(globalEdge.data?.results ?? [], lang, 5)
 				: [];
-			const fallbackLocalResults = localEdge?.ok
-				? normalizeArticleList(localEdge.data?.results ?? [], 5)
-				: [];
-			const fallbackGlobalResults = globalEdge?.ok
-				? normalizeArticleList(globalEdge.data?.results ?? [], 5)
-				: [];
-			const chosenLocalResults =
-				localResults.length > 0 ? localResults : fallbackLocalResults;
-			const chosenGlobalResults =
-				globalResults.length > 0 ? globalResults : fallbackGlobalResults;
 			const didFetchAny = Boolean(localEdge?.ok || globalEdge?.ok);
 
-			if (chosenLocalResults.length > 0 || chosenGlobalResults.length > 0) {
+			if (localResults.length > 0 || globalResults.length > 0) {
 				const merged = dedupeArticles([
-					...chosenLocalResults,
-					...chosenGlobalResults,
+					...localResults,
+					...globalResults,
 				]).slice(0, 10);
 				const finalResults =
 					lang === "ko"

@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { TrendingUp, RefreshCw, Settings, X, GripVertical } from "lucide-react";
+import { TrendingUp, RefreshCw, X, GripVertical, Plus } from "lucide-react";
+import ConfirmDialog from "../common/ConfirmDialog";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 import { useTranslation } from "react-i18next";
 import { useTheme } from "../../hooks/useTheme";
@@ -59,13 +60,6 @@ const getStockNumericValue = (stock) => {
 	return Number.isFinite(parsed) ? parsed : 0;
 };
 
-const STOCK_OPTIONS = [
-	{ id: "KOSPI", label: "KOSPI" },
-	{ id: "NASDAQ", label: "NASDAQ" },
-	{ id: "SP500", label: "S&P 500" },
-	{ id: "USDKRW", label: "USD/KRW" },
-];
-
 const StockCard = ({ s, isDark, secondaryBgCls, bodyStyle }) => (
 	<div className={`p-3 rounded-xl ${secondaryBgCls}`}>
 		<div className="flex justify-between items-center mb-1">
@@ -95,16 +89,13 @@ const CURRENCY_MAP = {
 const getCurrency = (s) =>
 	CURRENCY_MAP[s.symbol] ?? (String(s.name ?? "").includes("KRW") ? "KRW" : "USD");
 
-const presetIds = new Set(STOCK_OPTIONS.map((o) => o.id));
-
 const StocksWidget = () => {
 	const { isDark, hoverCls, secondaryBgCls, borderCls } = useTheme();
 	const { body: bodyStyle } = useFontSize();
 	const { t } = useTranslation();
-	const [showSettings, setShowSettings] = useState(false);
 	const [showModal, setShowModal] = useState(false);
-	const [showViewAll, setShowViewAll] = useState(false);
 	const [customSymbol, setCustomSymbol] = useState("");
+	const [confirmDelete, setConfirmDelete] = useState({ open: false, symbol: null });
 	const [validating, setValidating] = useState(false);
 	const [validationError, setValidationError] = useState(null);
 	const stocks = useDataStore((s) => s.stocks);
@@ -131,10 +122,6 @@ const StocksWidget = () => {
 	);
 	const selectedSet = useMemo(
 		() => new Set(normalizedStockSymbols),
-		[normalizedStockSymbols],
-	);
-	const customSymbols = useMemo(
-		() => normalizedStockSymbols.filter((s) => !presetIds.has(s)),
 		[normalizedStockSymbols],
 	);
 
@@ -179,9 +166,9 @@ const StocksWidget = () => {
 		void fetchStocks(normalizedStockSymbols, undefined, true);
 	}, [normalizedStockSymbols, stockSymbols, setStockSymbols, fetchStocks]);
 
-	// Prevent body scroll when any modal is open
+	// Prevent body scroll when modal is open
 	useEffect(() => {
-		if (showModal || showViewAll) {
+		if (showModal) {
 			const scrollbarWidth =
 				window.innerWidth - document.documentElement.clientWidth;
 			document.body.style.overflow = "hidden";
@@ -191,7 +178,7 @@ const StocksWidget = () => {
 			document.body.style.overflow = "";
 			document.body.style.paddingRight = "";
 		};
-	}, [showModal, showViewAll]);
+	}, [showModal]);
 
 	const onDragEnd = (result) => {
 		if (!result.destination) return;
@@ -216,20 +203,6 @@ const StocksWidget = () => {
 			newStocks.map((s) => s?.symbol ?? s?.name),
 		);
 		if (newSymbols.length > 0) setStockSymbols(newSymbols);
-	};
-
-	const toggleSymbol = async (symbol) => {
-		const normalized = normalizeWidgetSymbol(symbol);
-		const exists = selectedSet.has(normalized);
-		let next = normalizedStockSymbols;
-		if (exists) {
-			next = normalizedStockSymbols.filter((s) => s !== normalized);
-			if (next.length === 0) return;
-		} else {
-			next = [...normalizedStockSymbols, normalized];
-		}
-		setStockSymbols(next);
-		await fetchStocks(next);
 	};
 
 	const removeSymbol = async (symbol) => {
@@ -277,101 +250,13 @@ const StocksWidget = () => {
 			>
 				<div className="flex justify-end mb-2">
 					<button
-						onClick={() => setShowSettings((v) => !v)}
+						onClick={() => setShowModal(true)}
 						className={`p-1 rounded-md ${hoverCls}`}
-						title={t("widgets.stocks.symbol_settings")}
+						title={t("common.add")}
 					>
-						<Settings size={13} className="opacity-70" />
+						<Plus size={13} className="opacity-70" />
 					</button>
 				</div>
-
-				{showSettings && (
-					<div
-						className={`mb-3 p-2 rounded-lg border ${borderCls} ${secondaryBgCls}`}
-					>
-						<p className="text-[11px] mb-2 opacity-70">
-							{t("widgets.stocks.select_symbols")}
-						</p>
-						<div className="grid grid-cols-2 gap-2">
-							{STOCK_OPTIONS.map((opt) => (
-								<button
-									key={opt.id}
-									onClick={() => toggleSymbol(opt.id)}
-									className={`text-xs px-2 py-1 rounded-md border ${
-										selectedSet.has(opt.id)
-											? "border-blue-400 text-blue-400"
-											: isDark
-												? "border-gray-600"
-												: "border-gray-300"
-									}`}
-								>
-									{opt.label}
-								</button>
-							))}
-						</div>
-						{customSymbols.length > 0 && (
-							<div className="mt-2 flex flex-wrap gap-1">
-								{customSymbols.map((sym) => (
-									<span
-										key={sym}
-										className="flex items-center gap-1 text-[11px] px-2 py-1 rounded-md border border-blue-400 text-blue-400"
-									>
-										{sym}
-										<button
-											onClick={() => void removeSymbol(sym)}
-											className="hover:text-red-400 transition-colors"
-											title={t("widgets.stocks.remove_symbol")}
-										>
-											<X size={10} />
-										</button>
-									</span>
-								))}
-							</div>
-						)}
-						<div className="mt-2 flex flex-col gap-1">
-							<div className="flex items-center gap-2">
-								<input
-									type="text"
-									value={customSymbol}
-									onChange={(e) => {
-										setCustomSymbol(e.target.value);
-										setValidationError(null);
-									}}
-									onKeyDown={(e) => {
-										if (e.key === "Enter") {
-											e.preventDefault();
-											void addCustomSymbol();
-										}
-									}}
-									placeholder={t("widgets.stocks.custom_input")}
-									className={`flex-grow text-xs rounded-md px-2 py-1.5 border outline-none ${
-										validationError
-											? "border-red-400"
-											: isDark
-												? "bg-white/5 border-white/20"
-												: "bg-white border-gray-300"
-									}`}
-								/>
-								<button
-									onClick={() => void addCustomSymbol()}
-									disabled={validating}
-									className="text-xs px-2 py-1.5 rounded-md border border-blue-400 text-blue-400 disabled:opacity-50 whitespace-nowrap"
-								>
-									{validating ? "..." : t("common.add")}
-								</button>
-							</div>
-							{validationError && (
-								<p className="text-[10px] text-red-400">{validationError}</p>
-							)}
-						</div>
-						<button
-							onClick={() => { setShowSettings(false); setShowModal(true); }}
-							className={`mt-2 w-full text-[11px] py-1.5 rounded-lg ${hoverCls} opacity-60 border ${borderCls}`}
-						>
-							{t("widgets.stocks.manage_order")}
-						</button>
-					</div>
-				)}
 
 				{loading ? (
 					<p className="text-sm opacity-60">{t("widgets.stocks.loading")}</p>
@@ -390,7 +275,7 @@ const StocksWidget = () => {
 						</div>
 						{hasMore && (
 							<button
-								onClick={() => setShowViewAll(true)}
+								onClick={() => setShowModal(true)}
 								className={`mt-2 w-full text-xs py-1.5 rounded-lg ${hoverCls} opacity-70`}
 							>
 								{t("common.view_more", {
@@ -460,6 +345,44 @@ const StocksWidget = () => {
 											<X size={18} />
 										</button>
 									</div>
+									{/* Ticker input */}
+									<div className={`flex-shrink-0 px-4 py-3 border-b ${isDark ? "border-morning-dark-hover" : "border-morning-light-hover/30"}`}>
+										<div className="flex items-center gap-2">
+											<input
+												type="text"
+												value={customSymbol}
+												onChange={(e) => {
+													setCustomSymbol(e.target.value);
+													setValidationError(null);
+												}}
+												onKeyDown={(e) => {
+													if (e.key === "Enter") {
+														e.preventDefault();
+														void addCustomSymbol();
+													}
+												}}
+												placeholder={t("widgets.stocks.custom_input")}
+												className={`flex-grow text-xs rounded-md px-2 py-1.5 border outline-none ${
+													validationError
+														? "border-red-400"
+														: isDark
+															? "bg-white/5 border-white/20"
+															: "bg-white border-gray-300"
+												}`}
+											/>
+											<button
+												onClick={() => void addCustomSymbol()}
+												disabled={validating}
+												className="text-xs px-3 py-1.5 rounded-md border border-blue-400 text-blue-400 disabled:opacity-50 whitespace-nowrap"
+											>
+												{validating ? "..." : t("common.add")}
+											</button>
+										</div>
+										{validationError && (
+											<p className="text-[10px] text-red-400 mt-1">{validationError}</p>
+										)}
+									</div>
+
 									<div className="flex-1 overflow-y-auto p-4">
 										<p className="text-[10px] mb-3 opacity-40 flex items-center gap-1">
 											<GripVertical size={10} />
@@ -518,9 +441,21 @@ const StocksWidget = () => {
 																							: ""
 																					}`}
 																				>
+																					{/* X delete button */}
+																					<button
+																						onMouseDown={(e) => e.stopPropagation()}
+																						onPointerDown={(e) => e.stopPropagation()}
+																						onClick={(e) => {
+																							e.stopPropagation();
+																							setConfirmDelete({ open: true, symbol: s.symbol ?? s.name });
+																						}}
+																						className={`absolute top-1.5 right-1.5 p-0.5 rounded-full opacity-30 hover:opacity-100 transition-opacity ${isDark ? "hover:bg-red-500/20" : "hover:bg-red-500/10"}`}
+																					>
+																						<X size={11} />
+																					</button>
 																					<GripVertical
 																						size={11}
-																						className="absolute top-2 right-2 opacity-20 pointer-events-none"
+																						className="absolute bottom-2 right-2 opacity-20 pointer-events-none"
 																					/>
 																					<div className="flex justify-between items-center mb-1 pr-3">
 																						<span
@@ -559,81 +494,16 @@ const StocksWidget = () => {
 				document.body,
 			)}
 
-			{createPortal(
-				<AnimatePresence>
-					{showViewAll && (
-						<>
-							<motion.div
-								className="fixed inset-0 z-[9999] bg-black/50 backdrop-blur-md"
-								onClick={() => setShowViewAll(false)}
-								initial={{ opacity: 0 }}
-								animate={{ opacity: 1 }}
-								exit={{ opacity: 0 }}
-								transition={{ duration: 0.2 }}
-							/>
-							<motion.div
-								className="fixed inset-0 z-[10000] flex items-center justify-center p-4"
-								initial={{ opacity: 0 }}
-								animate={{ opacity: 1 }}
-								exit={{ opacity: 0 }}
-								transition={{ duration: 0.2 }}
-							>
-								<div
-									className={`w-full max-w-2xl max-h-[85vh] rounded-2xl border shadow-2xl flex flex-col overflow-hidden ${
-										isDark
-											? "bg-morning-dark-card border-morning-dark-hover text-morning-dark-text"
-											: "bg-morning-light-card border-morning-light-hover/30 text-morning-light-text"
-									}`}
-									onClick={(e) => e.stopPropagation()}
-								>
-									<div
-										className={`flex-shrink-0 flex items-center justify-between p-4 border-b ${
-											isDark ? "border-morning-dark-hover" : "border-morning-light-hover/30"
-										}`}
-									>
-										<div className="flex items-center gap-3">
-											<TrendingUp size={18} className="text-blue-500" />
-											<h3 className="font-bold text-base">{t("widgets.stocks.title")}</h3>
-										</div>
-										<button
-											onClick={() => setShowViewAll(false)}
-											className={`p-2 rounded-full transition-colors ${
-												isDark ? "hover:bg-morning-dark-hover" : "hover:bg-morning-light-hover/30"
-											}`}
-										>
-											<X size={18} />
-										</button>
-									</div>
-									<div className="flex-1 overflow-y-auto p-4">
-										<div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-											{orderedStocks.map((s, i) => (
-												<div key={i} className={`p-3 rounded-xl ${secondaryBgCls}`}>
-													<div className="flex justify-between items-center mb-1">
-														<span
-															className={isDark ? "text-gray-400" : "text-slate-500"}
-															style={bodyStyle}
-														>
-															{s.name}
-														</span>
-														<span
-															className={s.up ? "text-red-400" : "text-blue-400"}
-															style={bodyStyle}
-														>
-															{s.up ? "▲" : "▼"} {s.change}
-														</span>
-													</div>
-													<p className="text-lg font-bold">{s.value}</p>
-													<p className="opacity-40" style={bodyStyle}>{getCurrency(s)}</p>
-												</div>
-											))}
-										</div>
-									</div>
-								</div>
-							</motion.div>
-						</>
-					)}
-				</AnimatePresence>,
-				document.body,
+			{confirmDelete.open && (
+				<ConfirmDialog
+					title={t("widgets.stocks.confirm_delete_title")}
+					message={t("widgets.stocks.confirm_delete_message", { symbol: confirmDelete.symbol })}
+					onConfirm={async () => {
+						await removeSymbol(confirmDelete.symbol);
+						setConfirmDelete({ open: false, symbol: null });
+					}}
+					onCancel={() => setConfirmDelete({ open: false, symbol: null })}
+				/>
 			)}
 		</>
 	);

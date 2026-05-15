@@ -180,15 +180,13 @@
       "title": "Stocks/Exchange",
       "change": "Change",
       "volume": "Volume",
-      "symbol_settings": "Symbol Settings",
-      "select_symbols": "Select symbols to display",
-      "custom_input": "Custom input (e.g., AAPL)",
+      "custom_input": "Add ticker (e.g., AAPL, VIX, DJI)",
       "loading": "Loading stocks data...",
       "no_data": "No stocks data available.",
-      "invalid_ticker": "\"{{symbol}}\" is not a valid ticker. Try AAPL, TSLA, NVDA...",
-      "remove_symbol": "Remove symbol",
+      "invalid_ticker": "\"{{symbol}}\" is not a valid ticker. Try AAPL, TSLA, VIX...",
       "drag_to_reorder": "Drag to reorder",
-      "manage_order": "Manage order"
+      "confirm_delete_title": "Remove ticker?",
+      "confirm_delete_message": "Remove {{symbol}} from your list?"
     },
     "trends": {
       "title": "Live Trends",
