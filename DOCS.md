@@ -1,6 +1,6 @@
 # MorningBriefing.AI - 통합 프로젝트 문서
 
-> 최종 정리일: 2026-05-15 (5차)
+> 최종 정리일: 2026-05-15
 > 관리 정책: 문서는 DOCS.md 단일 파일로 유지
 
 ---
@@ -202,7 +202,7 @@ Fallback: user.id 지연 시 1200ms 타임아웃 후 fetchAll() 단독 실행
 
 **주요 액션:**
 
-- `login()`: Supabase Google OAuth 호출
+- `login()`: Google OAuth. `queryParams.prompt` = `"select_account"` (not `"consent"`) — 재방문 유저에게 매 로그인마다 전체 동의 화면을 강제하지 않음. `access_type: "offline"`으로 최초 동의 시 refresh token 확보.
 - `logout()`: 로컬 상태 즉시 초기화 → Supabase signOut
 - `handleAuthChange(session)`: 세션 처리, `loadUserSettings()` 호출
 - `ensureProviderToken()`: Google access token 획득 — 메모리 캐시 우선, 없으면 `supabase.auth.getSession()` → `refreshSession()` 순으로 복원. localStorage 저장 없음
@@ -233,6 +233,7 @@ Fallback: user.id 지연 시 1200ms 타임아웃 후 fetchAll() 단독 실행
 | `fixedInterestIds` | string[] | DB (`user_settings.fixed_interests`) |
 | `keywordInterests` | `[{keyword, category, score}]` | DB (`user_settings.keyword_interests`) |
 | `diaryLanguage` | `"app"` \| `"ko"` \| `"en"` | localStorage. `"app"`=i18n 언어 따름, 나머지는 명시 고정 |
+| `pinLockMode` | `"immediate"` \| `"off"` \| `"timed"` | localStorage + DB (`user_settings.pin_lock_mode`). `immediate`=매 진입마다 PIN, `off`=PIN 비활성, `timed`=세션 만료 시각까지 인증 유지 |
 
 **주요 액션:**
 
@@ -278,6 +279,7 @@ Fallback: user.id 지연 시 1200ms 타임아웃 후 fetchAll() 단독 실행
 | `fetchNews(userId, force)` | `tavily` × 2 (병렬) | `news_{location}_{lang}_{interestFingerprint}` |
 | `fetchCalendar(userId, force)` | `calendar` | `calendar_today` |
 | `fetchHealth(userId, force)` | `fitness` | `health_default` |
+| `fetchTomorrowCalendar(userId, force)` | `events` (date 파라미터) | `calendar_{YYYY-MM-DD}` |
 
 **뉴스 fetch 세부:**
 - 지역 뉴스 5개 + 글로벌 뉴스 5개 병렬 호출 후 merged (최대 10개)
@@ -289,6 +291,14 @@ Fallback: user.id 지연 시 1200ms 타임아웃 후 fetchAll() 단독 실행
 - 한국어: `오늘 대한민국 주요 이슈 인공지능 기술 정치 경제 연예 스포츠 최신 뉴스`
 - 영어: `today major trending news worldwide technology AI politics economy entertainment sports latest`
 - 반환: `trendsResults [{title, url, content}]` (Tavily 기사 제목을 트렌드 키워드로 사용)
+
+**뉴스 언어 필터:**
+- `filterByAllowedDomains(items, language)`: `lang === "ko"` 시 URL host가 `KO_NEWS_DOMAINS`에 없는 기사를 클라이언트 측 제거 (Tavily `include_domains` 미준수 방어). 결과 0이면 원본 유지.
+
+**트렌드 인메모리 캐시:**
+- `_trendsMemCache` (모듈 레벨 맵): `fetchTrends` 1순위 체크 — hit 시 loading 없이 즉시 표시.
+- `warmupTrendsMemCache(userId)`: `fetchAll` 시 `fetchTrends`와 병렬 실행. 양 언어(`ko`/`en`) DB 캐시를 메모리로 미리 적재. `_trendsWarmupPromise` 게이트로 부팅당 1회 보장. ko 캐시에 한국어 결과 0개면 warm-up 생략(stale 영어 캐시 방지).
+- 언어 불일치 stale 캐시 감지: `fetchTrends`에서 DB 캐시 read 후 `lang === "ko"` && 한국어 결과 0개이면 캐시 무시 후 fresh fetch.
 
 **외부 리스너 (모듈 레벨):**
 
@@ -423,7 +433,7 @@ payload     jsonb -- { text, summary, sections }
 
 ---
 
-### 5.8 useTodoStore
+### 5.7 useTodoStore
 
 **상태:** `todos: [{id, text, completed, isFixed}]` (localStorage + DB)
 
@@ -437,7 +447,7 @@ payload     jsonb -- { text, summary, sections }
 
 ---
 
-### 5.9 useGoogleCalendarStore
+### 5.8 useGoogleCalendarStore
 
 **상태:** `events`, `tasks`, `taskLists`, `selectedTaskListFilter`, `selectedDate`, `loading`, `error`
 
@@ -451,7 +461,7 @@ payload     jsonb -- { text, summary, sections }
 
 ---
 
-### 5.10 useQuickLinksStore
+### 5.9 useQuickLinksStore
 
 **상태:** `links: [{id, name, url, icon, color}]` (localStorage)
 
@@ -531,6 +541,7 @@ payload     jsonb -- { text, summary, sections }
   - 전환 애니메이션: `width/max-width/opacity` 0.38s cubic-bezier
 - Col C 내부: `custom-scrollbar`, `overflow-y-auto`, `max-height: DASHBOARD_VIEWPORT_H`
 - Col C 패널 토글: TopNav 햄버거 → `toggle-widget-panel` 커스텀 이벤트 → DashboardLayout handler
+- **스크롤 정책**: 전역 `wheel` 이벤트 캡처는 기본 스크롤 동작을 깨뜨리므로 금지. 스크롤 동작 변경은 각 컬럼의 `overflow`/`height` CSS만으로 처리.
 
 ### 7.2 WidgetCard 공통 기능
 
@@ -634,9 +645,10 @@ payload     jsonb -- { text, summary, sections }
 - 반환: `{ summary, detail, sections, timeMode }`. `sections` 는 `[{ id, title, lines, subBlocks? }]`. `detail` 은 후방호환용 평문.
 - 모달 렌더링: `divide-y` 섹션 블록 + 굵은 카테고리 제목 + `subBlocks` 하위 헤더(작은 글자, 들여쓰기).
 - 언어 일치: 모든 섹션 제목·내용·Groq 프롬프트가 `getLangConfig()` 기반으로 ko/en 분기.
+- `i18n.language` watch `useEffect`: 언어 변경 시 `briefingVersions` 캐시 비우고 즉시 재생성. 사용자가 언어를 바꾸면 모달·대시보드 미리보기 모두 현재 언어로 즉시 반영.
 - `useDataStore.fetchTomorrowCalendar`: 오후·저녁 모드의 "내일 일정"용. `events` Edge Function의 `date` 파라미터 활용, `calendar_{YYYY-MM-DD}` DB 캐시.
 
-**갱신 및 저장 정책 (5차 신규):**
+**갱신 및 저장 정책:**
 
 - **1시간 자동 갱신**: 초기 생성 완료 후 `setInterval(60min)` 로 자동 regenerate
 - **스냅샷 저장**: 생성 완료 후 `useBriefingHistoryStore.shouldSave()` 판단 → true면 `addSnapshot()` 호출
@@ -648,10 +660,15 @@ payload     jsonb -- { text, summary, sections }
 #### SmartWidgetContent
 
 - ID 형식: `smart_{keyword}`
-- `smartWidgetData[keyword]`에서 콘텐츠 읽기
+- `smartWidgetData[keyword]`에서 콘텐츠 읽기; 캐시 키: `${keyword}_${lang}` (언어별 독립 저장)
 - aiService로 키워드 기반 개인화 콘텐츠 생성
 - 섹션/불릿/태그 형태로 렌더링
 - 새로고침/삭제/외부 링크 지원
+- Tavily 2단계 fetch: 한국어 결과 < 2개이면 `include_domains: KO_NEWS_DOMAINS`로 재호출 후 dedupe 머지
+- `filterSmartResults(items, isKo)`: Hangul/Latin 정규식으로 언어 감지, 일치 결과 ≥1개면 해당 언어만, 0개면 전체 fallback
+- Groq bullets에 한글 없으면 번역 재요청(추가 1회), 한글 검증된 항목만 채택
+- 두 섹션만 렌더: `type === "summary"` (Groq bullet 3-4개) + `type === "news"` (관련 뉴스 2-3개, 새 탭 이동)
+- Tavily `r.content` 스니펫을 `[제목]\n본문` 형식으로 Groq에 전달 → 제목 나열 금지 프롬프트
 
 #### DiaryCard
 
@@ -659,19 +676,20 @@ payload     jsonb -- { text, summary, sections }
 - PIN 인증 후 접근
 - 질문 응답 입력 → `user_qa` 테이블 저장
 - `fixedInterestIds` 구독 → `generatePersonalizedQuestion()` 에 전달 → `INTEREST_TOPIC_MAP` 기반 관심사 주제 1개 + 일반 주제 1개 혼합 질문 생성
-- **관심사 bump (5차 신규)**: 답변 저장 시 단순 키워드 추출 → `useSettingsStore.bumpKeyword(kw, "qa", 5)` 자동 호출 (score +5/키워드)
+- **관심사 bump**: 답변 저장 시 단순 키워드 추출 → `useSettingsStore.bumpKeyword(kw, "qa", 5)` 자동 호출 (score +5/키워드)
+- `questionCacheRef = useRef({})`: 언어별 질문 캐시(`{ko: "질문", en: "question"}`). 언어 전환 시 캐시에 해당 언어 질문이 있으면 API 호출 없이 즉시 복원.
 
 #### DiaryPanel
 
 - 일기 표시 + 직접 편집 + 메모 편집
-- **Feedback UI (5차 신규)**:
+- **Feedback UI**:
   - 일기가 존재할 때 패널 하단에 Like / Dislike 버튼 노출
   - Dislike 클릭 → 피드백 텍스트 입력 + "재작성" 버튼
   - 재작성 → `useDiaryStore.applyFeedbackRewrite()` → Groq → `pendingRewrite` 미리보기 렌더링
   - 미리보기 상태에서 "다시 재작성" 가능 (baseline은 항상 `aiGeneratedDiary`)
   - "확정" 클릭 → `ConfirmDialog` 경고("되돌릴 수 없습니다") → `confirmRewrite()` → DB 동기화
   - "취소" → `discardPendingRewrite()` → 미리보기 제거
-- **메모 → 관심사 (5차 신규)**: 메모 저장 시 단순 키워드 추출 → `bumpKeyword(kw, "note", 10)` 자동 호출
+- **메모 → 관심사**: 메모 저장 시 단순 키워드 추출 → `bumpKeyword(kw, "note", 10)` 자동 호출
 
 ---
 
@@ -718,6 +736,8 @@ payload     jsonb -- { text, summary, sections }
 
 ## 10) DB 스키마
 
+> **2026-05-30 Supabase 변경 대비:** 2026-05-30부터 신규 테이블에 자동 GRANT가 중단되므로, 각 테이블 생성 직후 명시적 GRANT 블록이 `schema.sql`·`migrations/*.sql`에 포함돼 있음 (규칙 7 참고).
+
 ### 기본 테이블 (schema.sql)
 
 #### user_settings (PK: id = auth.users.id)
@@ -739,6 +759,7 @@ keyword_interests         jsonb default '[]'   -- [{keyword, category, score}]
 keyword_interests_updated date
 fixed_interests           jsonb default '[]'   -- 온보딩 고정 관심사 id 배열
 onboarding_perms          jsonb default '{"fit": false, "cal": false}'
+pin_lock_mode             text default 'immediate'  -- "immediate" | "off" | "timed"
 created_at / updated_at   timestamptz
 ```
 
@@ -884,7 +905,7 @@ $$score = \sum \left(base\_weight \times \frac{30 - elapsed\_days}{30}\right), \
 | **Q&A 답변 → score bump** | 답변 저장 시 단순 토큰화 → `bumpKeyword(kw, "qa", 5)` | `DiaryCard.jsx` |
 | **메모(note) → score bump** | 메모 저장 시 단순 토큰화 → `bumpKeyword(kw, "note", 10)` | `DiaryPanel.jsx` |
 
-### 11.7 일기 생성 흐름 (5차 개편)
+### 11.7 일기 생성 흐름
 
 ```
 새로운 날 첫 로그인
@@ -902,7 +923,7 @@ $$score = \sum \left(base\_weight \times \frac{30 - elapsed\_days}{30}\right), \
               └─ useBriefingHistoryStore.clearDate(date) ← 스냅샷 정리
 ```
 
-### 11.8 일기 재작성 흐름 (5차 신규)
+### 11.8 일기 재작성 흐름
 
 ```
 DiaryPanel → Dislike 클릭
@@ -1019,6 +1040,28 @@ https://www.googleapis.com/auth/fitness.activity.read
 4. Google OAuth token은 메모리(Zustand)에만 보관 — localStorage 저장 금지
 5. 사용자 개인 데이터에 접근하는 Edge Function(events/tasks/fitness/smart-widget)은 Supabase JWT 필수 검증
 6. Diary PIN은 SHA-256 해시 후 저장 — 평문 저장 금지
+7. Data API GRANT는 SQL 파일에 명시적으로 기재 (2026-05-30부터 Supabase 자동 GRANT 중단)
+
+### 14.4 Cloudflare Workers 배포
+
+`wrangler.jsonc` (레포 루트) 필수:
+```jsonc
+{
+  "name": "morningbriefing",
+  "compatibility_date": "2026-05-13",
+  "assets": {
+    "directory": "./dist",
+    "not_found_handling": "single-page-application"
+  }
+}
+```
+- `not_found_handling: "single-page-application"`: OAuth 콜백(`/?code=xxx`) 및 딥링크가 404 대신 `index.html`을 받도록 — SPA 라우팅 필수.
+- 이 파일 없이 `npx wrangler versions upload` 실행 시 `Missing entry-point to Worker script or to assets directory` 오류로 배포 실패.
+
+**GCP OAuth 앱 검증 (개발자 액션 필요):**
+- 앱이 "Testing" 상태이면 비-테스트 유저에게 "확인하지 않은 앱" 경고 노출.
+- Calendar/Tasks(sensitive) + Fitness(restricted) 스코프 요청 → Google 검증 필수. restricted Fitness 스코프는 연 1회 CASA 보안 평가 추가.
+- 대안: `useAuthStore.js`에서 `fitness.*` 스코프 3종 제거 → sensitive-only로 검증 난이도 감소.
 
 ---
 
@@ -1083,304 +1126,3 @@ https://www.googleapis.com/auth/fitness.activity.read
 4. 코드 변경 시 관련 섹션(위젯/스토어/스키마) 동시 업데이트
 
 ---
-
-## 18) 최근 반영 사항
-
-### 2026-05-14 — Cloudflare 배포 실패 수정 (`wrangler.jsonc` 추가)
-
-**증상:** 고객이 "로그인 이슈"를 제보 → Cloudflare 빌드 로그 분석 결과 **로그인이 아니라 배포 자체가 실패**하고 있었음.
-
-**진단 — 빌드 파이프라인 로그:**
-
-| 단계 | 명령 | 결과 |
-| --- | --- | --- |
-| 1. 의존성 설치 | `bun install` | ✅ 183 packages |
-| 2. 빌드 | `npm run build` (`vite build`) | ✅ `dist/` 생성 |
-| 3. 배포 | `npx wrangler versions upload` | ❌ `Missing entry-point to Worker script or to assets directory` |
-
-**근본 원인:** 레포에 `wrangler.jsonc`/`wrangler.toml` 설정 파일이 없고 배포 명령에 `--assets` 플래그도 없어, wrangler가 무엇을 업로드할지 모르는 상태. 빌드는 성공하지만 배포 단계에서 매번 실패 → **새 빌드가 한 번도 라이브에 반영된 적 없음.** 그래서 직전 OAuth 코드 수정(`prompt: "select_account"`)도, Supabase URL 설정 변경도 고객에게 적용되지 않았고, 이것이 "로그인 이슈"의 실제 원인.
-
-**수정 (`wrangler.jsonc` 신규 생성, 레포 루트):**
-```jsonc
-{
-	"name": "morningbriefing",
-	"compatibility_date": "2026-05-13",
-	"assets": {
-		"directory": "./dist",
-		"not_found_handling": "single-page-application"
-	}
-}
-```
-- `name`: 기존 Worker 이름 `morningbriefing` (도메인 `morningbriefing.dksalstn0621.workers.dev`와 일치).
-- `assets.directory`: Vite 출력 폴더 `./dist`.
-- `not_found_handling: "single-page-application"`: OAuth 콜백(`…/?code=xxx`) 및 딥링크가 404 대신 `index.html`을 받도록 — Workers SPA 라우팅 문제도 함께 해결.
-
-**검증 필요:** 다음 배포에서 `wrangler versions upload`가 `./dist`를 정상 업로드하는지 빌드 로그로 확인. 배포 성공 후에야 OAuth 코드 수정이 라이브에 반영됨.
-
-### 2026-05-14 — 로그인 진입 단계 축소 (Google OAuth)
-
-**사용자 불만:** 로그인 시 대시보드 진입까지 거치는 화면이 너무 많음.
-
-**진단 — 4단계 화면의 원인 구분:**
-
-| 사용자가 보는 화면 | 원인 | 코드로 수정 가능? |
-| --- | --- | --- |
-| 1. Google 계정 선택 | 정상 OAuth 흐름 | — |
-| 2. "Google에서 확인하지 않은 앱" 경고 | GCP OAuth 앱이 **미검증** 상태 + sensitive/restricted 스코프 요청 | ❌ GCP Console 설정 |
-| 3. "고급 → 이동(안전하지 않음)" 링크 | 동일 (미검증 앱은 진행 버튼을 숨김) | ❌ GCP Console 설정 |
-| 4. Calendar/Tasks/Fitness 동의 화면 | sensitive/restricted 스코프는 최초 1회 동의 필수 — 단 `prompt: "consent"`가 **매 로그인마다** 강제로 재노출 중이었음 | ✅ 부분 수정 |
-
-**코드 수정 (`src/store/useAuthStore.js > login`):**
-- `queryParams.prompt`를 `"consent"` → `"select_account"`로 변경. 이전에는 이미 권한을 허용한 재방문 유저에게도 매 로그인마다 전체 동의 화면이 다시 떴음. 변경 후 재방문 유저는 계정만 선택하고 바로 대시보드 진입.
-- provider_token 경로 영향 없음: 최초 동의가 `access_type: "offline"`로 이뤄져 refresh token이 저장돼 있으므로 `ensureProviderToken()`의 `refreshSession()`이 계속 동작.
-- 스코프는 사용자 요청에 따라 5종(Calendar, Tasks, Fitness ×3) 전부 로그인 시점 요청 유지.
-
-**코드로 해결 불가 — 다음 개발자가 GCP Console에서 처리해야 할 작업 (화면 2·3):**
-1. **게시 상태 확인** — GCP Console → APIs & Services → OAuth consent screen. "Testing"이면 비-테스트 유저 전원이 미검증 경고를 봄. 임시방편으로 "Test users"에 유저 추가, 또는 "In production" 전환.
-2. **앱 검증 제출** — sensitive(Calendar, Tasks) + restricted(Fitness ×3) 스코프 요청 때문에 필수. 검증된 도메인·개인정보처리방침 URL·데모 영상 필요. **restricted Fitness 스코프는 연 1회 third-party CASA 보안 평가**가 추가로 필요(가장 느리고 비용이 큰 단계).
-3. **대안** — Fitness 검증이 지연되면 `useAuthStore.js`의 `fitness.*` 스코프 3종을 제거. restricted 스코프가 빠지면 검증 난이도가 크게 낮아짐(sensitive-only).
-
-**요약:** 매 로그인 재동의(화면 4 반복)는 코드 버그였고 수정 완료. "미검증 앱" 경고(화면 2·3)는 코드 버그가 아니라 Google 검증 상태 문제로, 검증 완료 전까지 신규 유저에게는 계속 노출됨.
-
-**남은 작업(선택):** 로그인 *이후* 인앱 단계(2-step `OnboardingModal`, `FirstLoginBriefingModal`의 강제 10초 카운트다운)도 "화면이 많다"는 체감에 기여 — 코드로 전부 정리 가능, 미착수.
-
-### 2026-05-13 — 위젯 API 최적화 & 언어/UI 개선 (2차)
-
-#### 반영 완료
-
-**1. 언어 전환 시 불필요한 Tavily 재호출 제거**
-
-- **근본 원인**: `App.jsx`에 `i18n.language`를 dependency로 가진 `useEffect`가 있어 언어 전환 시마다 `fetchNews(userId, true)` + `fetchTrends(userId, true)` (force=true)를 직접 호출 → 언어별 DB 캐시가 존재해도 무시하고 API 재호출
-- **수정**: `App.jsx`의 해당 useEffect 전체 삭제. `useDataStore.js` 모듈 레벨 `i18n.on("languageChanged")` 리스너만 남기고, 이 리스너에서 `force` 없이 호출 (`fetchNews(userId)`, `fetchTrends(userId)`) → DB 캐시 있으면 재사용
-- **효과**: 4시간 이내 재방문 시 언어 전환해도 Tavily API 호출 없음
-
-**2. 트렌드 인메모리 캐시 (`_trendsMemCache`)**
-
-- **추가 위치**: `useDataStore.js` 모듈 레벨 `const _trendsMemCache = {}`
-- **동작**: `fetchTrends` 1순위 체크 → 메모리 캐시 hit 시 `set()`만 호출, loading 상태 없이 즉시 표시
-- **캐시 갱신 시점**: DB 캐시 hit 후 / API 성공 후 → `_trendsMemCache[lang]` 저장
-- **효과**: 언어 전환 시 이미 로드한 언어 데이터는 로딩 없이 즉시 복원
-
-**3. Smart Widget 언어 대응**
-
-파일: `src/services/aiService.js`, `src/store/useWidgetStore.js`, `src/components/widgets/SmartWidgetContent.jsx`
-
-- **캐시 키 언어화**: `loadSmartWidget`에서 캐시 키를 `kw` → `` `${kw}_${lang}` ``로 변경. `SmartWidgetContent`도 `const cacheKey = \`${keyword}_${lang}\``로 읽기
-- **Tavily 쿼리 언어화**: 한국어 → `` `${keyword} 최신 정보 동향 뉴스` ``, 영어 → `` `${keyword} latest news trends updates` ``
-- **결과 언어 필터링**: `filterSmartResults(items, isKo)` 추가 — Hangul(`/[가-힣]/`) / Latin(`/[a-zA-Z]/`) 정규식으로 기사 제목의 언어를 감지해 필터링. 언어 일치 결과가 2개 미만이면 전체 결과를 fallback으로 사용
-- **include_domains 제거**: Smart Widget Tavily 호출에서 도메인 제한 제거 → 넓게 검색 후 post-filter 방식으로 전환 (도메인 제한 시 키워드 따라 결과 부족 문제 해소)
-- **언어 전환 시 자동 재로드**: `useWidgetStore.js` 모듈 레벨 `i18n.on("languageChanged")` → `loadSmartWidget(kw, false)` 호출 (캐시 있으면 재사용, 없으면 새 fetch)
-
-**4. Smart Widget → "Personalized Search" UI 리디자인**
-
-파일: `src/components/widgets/SmartWidgetContent.jsx`, `src/services/aiService.js`
-
-- **헤더 badge 제거**: 키워드 옆 "관심 검색" / "Personal Search" badge span 완전 삭제
-- **섹션 구조 변경**: `type === "summary"` (Groq 분석) + `type === "news"` (관련 뉴스) 두 섹션만 렌더
-- **summary 섹션**: 제목 `"Personalized Search"`, bullet 형태 (`• 내용`) 3-4개
-- **news 섹션**: 관련 뉴스 2-3개, 클릭 시 새 탭으로 URL 이동
-- **Groq 요약 품질 개선**: Tavily `r.content` 스니펫(본문 발췌)을 `[제목]\n본문` 형식으로 Groq에 전달 → "제목만 나열" 대신 실제 내용 기반 요약 생성. 프롬프트: "뉴스 내용을 읽고 핵심 정보를 요약, 단순 제목 나열 금지"
-- **Groq fallback 다단계**: Groq JSON 파싱 성공 → 실패 시 Tavily answer 문장 분리 → 뉴스 제목 리스트 순서로 fallback
-
-**5. Live Trend 표시 개수 축소**
-
-파일: `src/components/widgets/TrendsWidget.jsx`
-
-- `MAX_ITEMS: { small: 2, medium: 3, large: 3 }`, `MAX_EXPANDED: 6`
-- 더보기 클릭 후 "접기" 버튼 추가 (`t("common.show_less")`)
-- `common.show_less` i18n 키 추가 (ko: "접기", en: "Show less")
-
-**6. Daily Question 언어별 캐시**
-
-파일: `src/components/widgets/DiaryCard.jsx`
-
-- `questionCacheRef = useRef({})` 컴포넌트 내부에 추가 (`{ ko: "질문", en: "question" }` 형태)
-- 언어 변경 시 캐시에 해당 언어 질문이 있으면 API 호출 없이 즉시 복원
-- `fetchNextQuestion` 성공 후 `questionCacheRef.current[lang] = q`로 저장
-
-**7. 대시보드 레이아웃 30 / 50 / 20 비율**
-
-파일: `src/components/layout/DashboardLayout.jsx`
-
-- Col A (브리핑+일기): `flex: 3` (30%)
-- Col B (달력): `flex: 5` (50%)
-- Col C (추가 위젯 패널): `width: "20%"`, `shrink-0`, transition으로 접기
-- 패널 닫기 시 Col A/B가 3:5 비율로 자동 확장 (37.5% / 62.5%)
-
-**8. 주식/환율 언어 전환 재호출 없음 확인**
-
-- `i18n.on("languageChanged")` 핸들러에 `fetchStocks` 없음 → 언어 전환 시 주식 API 재호출 안 됨
-- 탭 복귀 / 5분 폴링은 `useExistingCache: true` → 1시간 TTL 내에는 재호출 없음
-
----
-
-#### 미해결 언어 문제 (상세)
-
-> **2026-05-13 업데이트**: 아래 문제 1~5 모두 코드 수준에서 해결 완료. 각 항목 끝의 "✅ 해결" 블록 참고.
-
-**문제 1. Live Trend 영어 데이터 잔존**
-
-- **현상**: 한국어 모드임에도 Live Trend에 영어 기사 제목이 표시됨
-- **근본 원인**: DB 캐시 테이블(`api_cache`)에 `trends_full_ko` 키로 저장된 이전 영어 데이터가 4시간 TTL 동안 그대로 사용됨. 코드는 한국어 쿼리 + `KO_NEWS_DOMAINS` 필터를 올바르게 구현했지만, 낡은 캐시가 새 fetch를 막음
-- **임시 해결**: TrendsWidget 우측 상단 새로고침(↻) 아이콘 클릭 → `force=true`로 DB 캐시 우회 후 한국어 쿼리 재호출
-- **✅ 해결 (2026-05-13)** — `src/store/useDataStore.js` `fetchTrends` (line ~1244):
-  - DB 캐시 read 직후 `lang === "ko" && localizedResults.length === 0 && fallbackResults.length > 0` 조건을 검사하여 **언어 불일치 stale 캐시를 감지**.
-  - 불일치 시 캐시를 무시하고 fresh fetch 경로로 폴백 → 영어 데이터를 한글로 무리하게 번역해 보여주는 어색한 결과 제거.
-  - DB row 직접 수정/TTL 단축 없이 코드 read 경로에서만 처리하므로 영향 범위 최소.
-
-**문제 2. Smart Widget 언어 필터 한계**
-
-- **현상**: 일부 키워드(예: "카레")는 한국어 모드에서도 영어 뉴스를 보여줌
-- **근본 원인**: Tavily가 해당 키워드에 대해 한국어 제목 기사를 2개 미만으로 반환할 경우 `filterSmartResults`가 전체 결과로 fallback → 영어 기사가 섞여 들어옴
-- **✅ 해결 (2026-05-13)** — `src/services/aiService.js` `generateSmartWidgetData` + `filterSmartResults`:
-  - **2단계 fetch**: 1차 Tavily 응답의 한국어 제목 수가 2개 미만이면 `include_domains: KO_NEWS_DOMAINS` (naver/yna/chosun/joins/hani/news1)로 **재호출**. 결과를 dedupe로 머지한 뒤 다시 언어 필터링.
-  - **fallback 임계값 인하**: `filterSmartResults`의 fallback 기준을 `>= 2` → `>= 1`로 변경. 한국어 결과가 1개라도 있으면 한국어만 표시.
-  - `KO_NEWS_DOMAINS`는 aiService.js 내부 상수로 추가 (useDataStore와 동기화 필요 시 양쪽 갱신).
-
-**문제 3. Smart Widget Groq 응답이 영어로 나올 때**
-
-- **현상**: Groq가 한국어 프롬프트를 받아도 간헐적으로 영어 bullets를 반환함
-- **원인**: Tavily context(기사 본문)가 영어이면 Groq가 context 언어를 따르는 경향
-- **✅ 해결 (2026-05-13)** — `src/services/aiService.js` `generateSmartWidgetData`:
-  - bullets 파싱 후 `isKo && bullets에 한글 없음`이면 **Groq에 번역 재요청** (전용 system prompt로 영어→한국어 JSON 배열 변환).
-  - 번역 응답에서 한글이 검증된 항목만 채택, 실패 시 원본(영어) bullets 유지 → 위젯이 비는 일은 없음.
-  - 추가 호출 1회뿐이므로 비용 영향 미미.
-
-**문제 4. 뉴스 한국어 출처 검증 미완료**
-
-- **현상**: 한국어 모드에서 뉴스가 `include_domains: KO_NEWS_DOMAINS`로 호출되지만, 실제 표시 기사의 출처가 한국 언론사인지 E2E 검증 안 됨
-- **✅ 해결 (2026-05-13)** — `src/store/useDataStore.js` `filterByAllowedDomains` + `filterLocalizedArticles`:
-  - 새 헬퍼 `filterByAllowedDomains(items, language)` 추가. `language === "ko"`일 때 URL host가 `KO_NEWS_DOMAINS`에 포함되지 않는 기사를 **클라이언트 측에서 직접 제거** (Tavily의 `include_domains` 미준수 케이스에 대한 방어).
-  - `filterLocalizedArticles`의 마지막 단계에 적용. 화이트리스트 후 결과가 0이면 원본을 유지하여 빈 위젯 방지.
-  - 영어 모드(`lang === "en"`)에는 영향 없음.
-
-**문제 5. `_trendsMemCache` 초기화 시점**
-
-- **현상**: 앱 새로고침(F5) 시 `_trendsMemCache`는 빈 상태 → 첫 언어 전환마다 DB 캐시 또는 API 재호출 발생
-- **✅ 해결 (2026-05-13)** — `src/store/useDataStore.js` `warmupTrendsMemCache`:
-  - `fetchAll`에서 userId 확보 후 `warmupTrendsMemCache(userId)`를 **fetchTrends와 병렬로 호출** (await 안 함, fire-and-forget).
-  - 두 언어(`trends_full_ko`, `trends_full_en`)를 DB에서 동시 read해서 `_trendsMemCache.ko`/`.en`에 적재. **추가 API 호출 없음** (DB read만).
-  - 부팅당 1회 보장: `_trendsWarmupPromise` 게이트로 중복 실행 차단.
-  - 안전장치: ko 캐시에 한국어 결과가 0개면 warm-up 생략(문제 1과 동일한 stale 영어 캐시 방지). `_trendsMemCache[lang]`에 이미 값이 있으면 덮어쓰지 않음(race 방지).
-  - 결과: F5 직후 첫 언어 전환도 로딩 없이 즉시 표시.
-
----
-
-### 2026-05-13 — AI 브리핑 결정론적 섹션 + 좁은 AI 보강 리팩토링 (todo.md item 26)
-
-**문제 (briefing.png 사용자 보고):**
-- 새로고침마다 형식·순서가 달라지고 백과사전형 군더더기(노트북은 개인용 컴퓨터..., 한국 음식 배달 서비스를 통해...)가 섞임 — 26-1, 26-2.
-- 모달 배치가 평면적이라 카테고리 구분 약함 — 26-3.
-
-**아키텍처 변경 (`src/services/aiService.js > generateDetailedBriefing`):**
-- 기존: 단일 Groq 호출이 뉴스 제목+관심사 키워드를 받아 "자연스럽게 녹여내" → temperature 0.4 → 백과사전형 paraphrase 빈발.
-- 변경: **결정론적 섹션 셸 (JS 100%) + 좁은 범위 Groq 호출 3개 (temperature 0.1, JSON 또는 1–2문장 한정)**.
-  - Groq #1 `rewriteYesterdayDiary` — 어제 일기 → 1–2문장 과거형 사실. 의견·조언·새 정보 추가 금지.
-  - Groq #2 `generateInterestSentences` — 고정 관심사별 1문장. JSON `{news, tech, finance, health, food, entertainment}`. 데이터 부족이면 빈 문자열.
-  - Groq #3 `summarizeSmartWidgets` — 스마트 위젯 bullets → 1–2문장 자연어 요약.
-- 세 호출을 `Promise.all` 병렬 실행.
-
-**섹션 구조 (lock된 순서):**
-1. `header` — 날짜 + 날씨 한 줄 결합. `getWeatherEmoji(condition)` 정규식 기반 매핑(☀️/⛅/☁️/🌧️/⛈️/❄️/🌫️).
-2. `schedule` — 시간대 분기. `getBriefingTimeMode(now)` (morning 5–12 / afternoon 12–18 / evening 18–5). 오후·저녁이면 두 섹션(`schedule_today_remaining` + `schedule_tomorrow`).
-3. `yesterday` — Groq #1 결과, 실패 시 `toSentenceSummary` fallback.
-4. `interests` — `SUPPORTED_INTEREST_IDS = [news, tech, finance, health, food, entertainment]`에 한해 `{label}: {sentence}` 라인. 미지원 fixed id는 "기타: ..."로 묶음.
-5. `latest_info` — `subBlocks: [관심 키워드, 주요 뉴스 Top 3]`. 키워드는 Groq #3 결과, 뉴스는 `newsResults[0..2]` + `hostFromUrl(url)` 출처 라벨.
-6. `market` — `fixedInterestIds.includes("finance")` && `stocks.length > 0`일 때만 추가. stocks Top 4.
-
-**반환 스키마 변경:**
-- 기존: `{ summary, detail }`.
-- 신규: `{ summary, detail, sections, timeMode }`. `sections = [{ id, title, lines, subBlocks? }]`. `subBlocks = [{ id, title, lines }]`. `detail`은 후방호환용 평문(`FirstLoginBriefingModal` 등 기존 소비자 보호).
-
-**`useDataStore.js` — 내일 일정 지원:**
-- 새 상태 `tomorrowEvents: []`.
-- 새 액션 `fetchTomorrowCalendar(userId, force)` — `events` Edge Function의 `date` 파라미터(`shiftDateString(formatLocalDate(), 1)`) 호출, `calendar_{YYYY-MM-DD}` 키로 DB 캐시. 401·미연동 시 `[]`.
-- `fetchAll`에서 calendar 위젯 활성 시 `fetchCalendar` + `fetchTomorrowCalendar` 병렬 push.
-- Edge Function 변경 없음 — 기존 `events`가 이미 `date` 파라미터 지원.
-
-**`BriefingWidget.jsx` — 모달 UI 재구성:**
-- 컨텍스트에 `tomorrowEvents` + `fixedInterestIds` 추가, `useSettingsStore` 구독.
-- `divide-y` 컨테이너로 섹션 블록 분리. 카테고리 제목: `text-[11px] font-bold uppercase tracking-widest` (파란 액센트).
-- `section.subBlocks` 감지 시 하위 헤더(`text-[10px] font-semibold uppercase tracking-wider`) + 들여쓰기.
-- 대시보드 미리보기(`dashboardDetailText`)도 subBlock lines 평탄화해 `·` 구분자 join.
-
-**언어 일치:**
-- 모든 섹션 제목·내용·3개 Groq 시스템 프롬프트 모두 `getLangConfig()` 분기(`isKo` / `langInstruction`). ko 설정 → 한국어 출력, en 설정 → 영어 출력.
-
-**파일:**
-- `src/services/aiService.js` — `getWeatherEmoji`, `getBriefingTimeMode`, `eventStartTime`, `formatEventLine`, `rewriteYesterdayDiary`, `summarizeSmartWidgets`, `generateInterestSentences`, `hostFromUrl`, `FIXED_INTEREST_LABELS_LOCALIZED`, `SUPPORTED_INTEREST_IDS` 추가. `generateDetailedBriefing` 전면 재작성.
-- `src/store/useDataStore.js` — `tomorrowEvents` state, `fetchTomorrowCalendar` action.
-- `src/components/widgets/BriefingWidget.jsx` — context 확장, 모달 `subBlocks` 렌더링.
-
-**검증:**
-- `npm run build` (vite v6.4.2) — 2105 modules transformed, no errors.
-- 수동 검증 대기: 오전/오후 분기, 날씨 이모지, 관심사 1문장, 언어 전환.
-
-**Round 3 후속 수정:**
-- **언어 자동 추종** (`BriefingWidget.jsx`): `i18n.language`를 watch하는 `useEffect` 추가. 변경 감지 시 `briefingVersions` 캐시 전체(`short/medium/long`)를 null 초기화하고 `generateBriefingVersion(BRIEFING_LENGTH, true)` 강제 실행 → 사용자가 새로고침 버튼을 누르지 않아도 모달·대시보드 미리보기 모두 현재 언어로 즉시 재생성. `generateDetailedBriefing`이 매 호출마다 `getLangConfig()`를 다시 읽으므로 섹션 제목·라벨·Groq 프롬프트가 모두 신규 언어로 일치.
-- **모달 본문 가독성** (`BriefingWidget.jsx`): 새 상수 `modalBodyText = isDark ? "text-morning-dark-text/90" : "text-morning-light-text/85"` 도입. 모달 내 section lines · sub-block lines · `detailLines` fallback 3곳에 적용. 다크 모드 글자가 기존 `muted`(50% 불투명) 대비 더 밝고, 라이트 모드는 기존 42% 대비 더 진해 가독성 향상. 대시보드 미리보기 / "last updated" 푸터는 `muted` 유지(시각적 위계 보존).
-
----
-
-### 2026-05-13 — 미해결 언어 문제 1~5 해결
-
-- **문제 1 (Trends ko 영어 잔존 캐시 무효화)** `useDataStore.js > fetchTrends`: DB 캐시 read 후 `lang === "ko"`인데 `localizedResults`가 0이면 stale 영어 캐시로 간주, 캐시 무시하고 fresh fetch.
-- **문제 2 (Smart Widget 2단계 한국어 fetch)** `aiService.js > generateSmartWidgetData`: 1차 응답 한국어 결과 < 2개면 `include_domains: KO_NEWS_DOMAINS` 재호출 후 머지. `filterSmartResults` fallback 임계값 `>= 2` → `>= 1`.
-- **문제 3 (Groq 영어 응답 → 한국어 번역)** `aiService.js > generateSmartWidgetData`: bullets에 한글이 전혀 없으면 Groq에 번역 재요청, 한글 검증된 항목만 채택.
-- **문제 4 (뉴스 출처 엄격 화이트리스트)** `useDataStore.js > filterByAllowedDomains`: `lang === "ko"`일 때 `KO_NEWS_DOMAINS` 외 도메인 기사를 클라이언트 측에서 제거 (Tavily `include_domains` 미준수 방어). 결과 0이면 원본 유지.
-- **문제 5 (`_trendsMemCache` warm-up)** `useDataStore.js > warmupTrendsMemCache`: `fetchAll`에서 양 언어 DB 캐시를 메모리로 미리 적재. 부팅당 1회 보장(`_trendsWarmupPromise` 게이트). F5 직후 첫 언어 전환도 즉시 표시.
-- 상세 설명: 위 "미해결 언어 문제 (상세)" 섹션의 각 항목 "✅ 해결" 블록 참고.
-
-### 2026-05-13 — 보안 취약점 수정
-
-- **Edge Function JWT 인증 추가** (`events`, `tasks`, `fitness`, `smart-widget`): 기존에는 누구나 호출 가능했던 Google API 연동 함수에 Supabase JWT 검증 추가. `supabase.auth.getUser(jwt)`로 미인증 요청은 401 반환. 클라이언트 3곳(`invokeEdgeDetailed`, `invokeGoogleFunction`, `diaryGenerationService`)도 anon key 대신 user `access_token`을 Bearer로 전송하도록 변경.
-- **Google OAuth token localStorage 제거** (`useAuthStore.js`): `mb_provider_token` localStorage 키 완전 삭제. token은 Zustand 메모리에만 보관, 재로드 시 `supabase.auth.getSession()` / `refreshSession()`으로 복원. XSS 발생 시에도 Google token 탈취 불가.
-- **Diary PIN SHA-256 해싱** (`useDiaryStore.js`, `PINModal.jsx`): 평문 4자리 PIN → Web Crypto API `crypto.subtle.digest('SHA-256', ...)` 해시로 저장. `setPIN`/`verifyPIN` async 전환. 기존에 평문으로 저장된 PIN은 `verifyPIN` 첫 호출 시 자동 감지 후 해시로 마이그레이션.
-
-### 2026-05-11 — 대시보드 레이아웃·설정 정리·브리핑 카드 개선
-
-- **대시보드 레이아웃 안정화** (`DashboardLayout.jsx`): 좌우 컬럼 gap 및 상단 간격 조정, 공통 viewport height 계산값으로 통일 → 스크롤 시 전체 컬럼이 같이 밀리는 버그 수정. 롤백 사항: 어디를 스크롤해도 오른쪽 위젯이 스크롤되게 하던 wheel 라우팅 로직은 문제 발생으로 원상복구(제거).
-- **좌측 2카드 비율 레이아웃** (`DashboardLayout.jsx`): AI Briefing : Diary Daily Card = 세로 기준 3/5 : 2/5 분할. 두 카드 모두 `h-full / min-h-0` 기반으로 할당 높이 채움.
-- **설정 모달 단순화** (`SettingsModal.jsx`): 시계 스타일(clockStyle) 설정 섹션 제거, 테마 설정 섹션 제거, 관련 탭/아이콘/상태 참조 정리.
-- **브리핑 길이 설정 전역 제거**: `BriefingWidget.jsx`의 1/3/5줄 선택 UI·로직 삭제, 길이는 `medium` 고정. `App.jsx`에서 `BriefSettingsModal` 연결 제거. `BriefSettingsModal.jsx` 파일 삭제. `useSettingsStore`의 `bLen`, `showBriefSettings` 및 setter 제거. `FirstLoginBriefingModal.jsx`의 길이 설정 의존성 제거. l10n 관련 번역 키 정리.
-- **브리핑 카드 미리보기 방식 변경** (`BriefingWidget.jsx`): 대시보드 카드에서 요약 대신 상세 브리핑 내용 미리보기 표시. 컨테이너 실제 높이 기준으로 텍스트 계산 → 넘치는 내용 `...` 처리, 하단 "클릭하여 상세 브리핑 보기" 문구가 가려지지 않도록 레이아웃 보정.
-- **버그 수정**: `useCallback is not defined` 에러 → React import에 `useCallback` 추가. 오른쪽 위젯 컬럼 내부 스크롤 유지, 브리핑/다이어리 본문 스크롤 제거 방향으로 정리.
-
-### 2026-05-11 — Stocks 위젯 DnD 재정렬 + 지수 fetch 수정
-
-- **Stocks 모달 drag-and-drop 재정렬**: `@hello-pangea/dnd` 추가, compact 3열 카드 레이아웃, 순서 변경 시 `useSettingsStore.stockSymbols` 갱신
-- **드래그 중 카드 사라짐 수정**: Framer Motion transform context 탈출을 위해 `createPortal(card, document.body)` 적용 + backdrop(z-9999) 위에 노출되도록 `zIndex: 10001` override
-- **커스텀 심볼 추가/삭제**: 직접 입력 → Edge Function 유효성 검증(`validateStockSymbol`) → 추가. X 버튼으로 개별 삭제
-- **Stocks 지수 0 표시 3중 수정** (`supabase/functions/stocks/index.ts`):
-  1. `symbolMap`: ETF 대리 심볼(EWY/QQQ/SPY) → 실 지수 심볼(KS11/IXIC/SPX) 교체
-  2. TwelveData `price <= 0` 시 Stooq fallback 발동 조건 추가 (기존엔 에러 코드 있을 때만 발동)
-  3. Stooq 심볼 맵 복원: `KS11→^ks11`, `IXIC→^ndq`, `SPX→^spx`
-- **Stooq fallback 개선**: 커스텀 심볼에 대해 `sym.us` 시도 후 0이면 bare `sym` 재시도 (단일 URL → candidates 순차 loop)
-- **i18n 키 추가**: `widgets.stocks.drag_to_reorder`, `invalid_ticker`, `remove_symbol`, `common.view_more`
-- ⚠️ **배포 대기**: `stocks` Edge Function 로컬 수정 완료, Supabase Dashboard에서 수동 배포 후 KOSPI/NASDAQ/SP500 정상값 확인 필요
-
-### 2026-05-11 — 스크롤 이벤트 변경 가이드
-
-- 대시보드 전역 `wheel` 캡처 방식은 기본 스크롤 동작을 깨뜨릴 수 있으므로 기본 금지.
-- 스크롤 동작 변경은 각 컬럼의 `overflow`/`height`만으로 해결하고, 전역 이벤트 라우팅은 사용자 확인 후 제한적으로 적용.
-
-### 2026-05-09 (2차) — 관심사 전체 적용 + 자동일기 일관성
-
-### 2026-05-09 (2차) — 관심사 전체 적용 + 자동일기 일관성
-
-- **관심사 기반 Q&A 질문 생성**: `DiaryCard`가 `fixedInterestIds`를 `generatePersonalizedQuestion()`에 전달. `INTEREST_TOPIC_MAP`(ko/en × 8 카테고리)으로 관심사 주제 1개 + 일반 주제 1개 혼합 선택; 관심사 없으면 기존 랜덤 fallback 유지.
-- **단순 AI 브리핑 관심사 반영**: `generateBriefing()`(3줄 버전)에 `Interest guidance:` 줄 추가 — 기존 상세 브리핑과 동일 패턴으로 통일.
-- **자동일기 관심사 포함**: `generateDiary()`에 `interests` 파라미터 추가 → `promptContext`에 포함 → AI가 관련 트렌드/뉴스/주식 데이터와 연결해 언급.
-- **일기 생성 컨텍스트 보강**: `buildDiaryGenerationContext()`에서 `mergeInterestLists(fixedInterestIds, keywordInterests)` 포함 → 자정 자동일기(`useMidnightTrigger`)도 자동 수혜.
-- **아침 자동일기 언어 수정**: `ensureYesterdayDiaryForMorning()`이 이전엔 `language` 미전달(기본값 "ko" 고정)이었으나, 이제 `resolveDiaryGenerationLanguage()` 호출로 사용자 설정 언어 반영.
-- **페르소나 컨텍스트 통합**: `personaContext.buildPersonaContext()` — `fixedInterestIds`만 사용하던 것을 `mergeInterestLists(fixedInterestIds, keywordInterests)`로 변경, 브리핑 스코어러에 동적 키워드까지 전달.
-- **`resolveDiaryGenerationLanguage` export**: `diaryGenerationService.js`에서 export로 변경 → `BriefingWidget` 등 외부 모듈에서 일관된 언어 해결 함수 공유.
-
-### 2026-05-09 (1차)
-
-- 뉴스/트렌드는 언어 변경 시 강제 재요청되고, 한국어 모드에서는 영어 응답이 와도 기사 제목/요약을 한국어로 후처리 번역해 표시
-- 온보딩 관심사는 `user_settings.fixed_interests`, 연동 권한 선택은 `user_settings.onboarding_perms`로 서버 저장/복원
-- Date Details는 `Events` / `Tasks`를 동시에 보여주지 않고 탭처럼 하나씩만 전체 폭으로 표시
-- 위젯 deck은 마우스 엣지 호버 전환을 제거했고, 트랙패드 가로 스와이프는 위젯 섹션 안에서만 소비
-- 전역 글자 크기 조절은 `설정 > 위젯 관리`로 이동했고, 위젯 제목줄의 숨김 설정 진입점은 제거
-- Diary 질문 카드는 깨진 다국어 출력 방지 검증/fallback과 현재 언어 기반 질문 생성을 적용
