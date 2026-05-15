@@ -57,17 +57,8 @@
     - 파일: `src/store/useDataStore.js`
     - 수정: `_trendsMemCache` 모듈 레벨 맵 추가 → 언어 전환 시 즉시 반영
 
-13. [ ] News 한국어 모드에서 한국어 출처만 표시 확인
-    - 파일: `src/store/useDataStore.js`
-    - 내용: include_domains + filterLocalizedArticles 동작 검증
-
 14. [x] 주식/환율 위젯 언어 전환 시 변경 없음 확인
     - 내용: i18n.on("languageChanged") 핸들러에 fetchStocks 없음 → 언어 전환 시 호출 안 됨 확인
-
-## To Fix
-14. 달력: 월/년 헤더("May 2026") 클릭 시 드롭다운 날짜 이동 (Windows 작업표시줄 달력 방식)
-24. 설정에서 글씨 크기 전체 위젯에 적용 (현재는 trends 에만 적용됨)
-25. 설정 모달 크기 고정(현재는 widget management, smart widgets 등과 같은 왼쪽 패널을 클릭할 때마다 오른쪽 패널의 길이가 들쭉날쭉해서 크기도 같이 변동되지만, 지향하는 디자인은 오른쪽 패널의 길이가 특정 설정 모달 박스를 넘어간다면 스크롤할 수 있게)
 
 26. [x] **해결 (2026-05-13)** ai briefing 전면 리팩토링 — 자세한 설명: DOCS.md "2026-05-13 — AI 브리핑 결정론적 섹션 + 좁은 AI 보강 리팩토링" 참조.
    - **결정론적 섹션** (`aiService.js > generateDetailedBriefing`): 날짜+날씨(결합, 한 줄, 날씨 이모지) → 일정(오전: 오늘 / 오후·저녁: 오늘 남은 + 내일) → 어제 → 관심사 → 오늘 최신 정보 → (조건부)시장. JS로 구조 고정, Groq 호출은 3개로 한정·temperature 0.1.
@@ -78,7 +69,14 @@
    - **언어 자동 추종 (round 3)**: `BriefingWidget.jsx`에서 `i18n.language` watch `useEffect` 추가 → 변경 시 `briefingVersions` 캐시 비우고 강제 재생성. 사용자가 언어를 바꾸면 새로고침 없이도 모달·대시보드 미리보기 모두 현재 언어로 즉시 반영.
    - **모달 본문 가독성 (round 3)**: `modalBodyText` 상수(`text-morning-dark-text/90` / `text-morning-light-text/85`)로 모달 본문 라인 색 교체 — 다크 모드 더 밝게, 라이트 모드 더 진하게. 대시보드 미리보기·푸터는 `muted` 유지.
    - 26-1 (시간대별 정보), 26-2 (변동성 제거), 26-3 (모달 배치) 모두 해결.
+
+
+## To Fix
+
+13. ews 한국어 모드에서 한국어 출처만 표시 확인
+    - 파일: `src/store/useDataStore.js`
+    - 내용: include_domains + filterLocalizedArticles 동작 검증
+
 28. Stocks 통화 단위 표시: 미장이면 $, 국장이면 ₩ 표시 (StocksWidget.jsx normalizeStockItem 수정 필요)
-31. 일일 질문카드 글자깨짐 버그 수정: "금요일이แล서 주말을 기다리게 되는 것 같아요, 주말에 가장 자주 가는 곳이 혹시 카페거나 공원일까요?"
 
 100. (마무리 단계) i18n En/Ko 설정 적용. dashboard, user settings, briefing에서도 설정한 언어로 display.
