@@ -1,19 +1,20 @@
 import { useState } from "react";
-import { Newspaper, RefreshCw } from "lucide-react";
+import { createPortal } from "react-dom";
+import { motion, AnimatePresence } from "framer-motion";
+import { Newspaper, RefreshCw, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useTheme } from "../../hooks/useTheme";
 import { useDataStore } from "../../store/useDataStore";
 import { useWidgetStore } from "../../store/useWidgetStore";
+import { useFontSize } from "../../hooks/useFontSize";
 import WidgetCard from "../common/WidgetCard";
 import { cleanContent } from "../../utils/contentUtils";
 
-// 기본 표시 수 / 더보기 후 최대 수
 const MAX_ITEMS = {
 	small: { text: 5, news: 5, grid: 9 },
 	medium: { text: 4, news: 4, grid: 6 },
 	large: { text: 3, news: 3, grid: 3 },
 };
-const MAX_EXPANDED = 10;
 
 const NewsWidget = () => {
 	const { isDark, listItemBgCls, secondaryBgCls, muted } = useTheme();
@@ -26,25 +27,12 @@ const NewsWidget = () => {
 	const getLastUpdatedMinutes = useDataStore((s) => s.getLastUpdatedMinutes);
 
 	const widgetSettings = useWidgetStore((s) => s.widgetSettings);
-	const globalFontSize = useWidgetStore((s) => s.globalFontSize);
 
+	const { body: bodyStyle, title: titleStyle, key: fontKey } = useFontSize();
 	const viewType = widgetSettings.news?.viewType ?? "news";
-	const fontKey = globalFontSize in MAX_ITEMS ? globalFontSize : "medium";
-	const maxShow = MAX_ITEMS[fontKey][viewType] ?? 3;
-	const fontCls =
-		fontKey === "small"
-			? "text-[10px]"
-			: fontKey === "large"
-				? "text-sm"
-				: "text-xs";
-	const titleFontCls =
-		fontKey === "small"
-			? "text-xs"
-			: fontKey === "large"
-				? "text-base"
-				: "text-sm";
+	const maxShow = MAX_ITEMS[fontKey]?.[viewType] ?? 3;
 
-	const [expanded, setExpanded] = useState(false);
+	const [showAllModal, setShowAllModal] = useState(false);
 
 	const formatLastUpdated = (minutes) => {
 		if (minutes == null) return t("common.before_refresh");
@@ -53,9 +41,8 @@ const NewsWidget = () => {
 	};
 
 	const allItems = newsResults || [];
-	const limit = expanded ? MAX_EXPANDED : maxShow;
-	const displayItems = allItems.slice(0, limit);
-	const hasMore = !expanded && allItems.length > maxShow;
+	const displayItems = allItems.slice(0, maxShow);
+	const hasMore = allItems.length > maxShow;
 
 	const linkProps = (item) => ({
 		href: item.url || "#",
@@ -64,15 +51,21 @@ const NewsWidget = () => {
 		onClick: (e) => !item.url && e.preventDefault(),
 	});
 
+	const modalCls = isDark
+		? "bg-morning-dark-card border-morning-dark-hover text-morning-dark-text"
+		: "bg-morning-light-card border-morning-light-hover/30 text-morning-light-text";
+	const dividerCls = isDark ? "border-morning-dark-hover" : "border-morning-light-hover/30";
+	const hoverBtnCls = isDark ? "hover:bg-morning-dark-hover" : "hover:bg-morning-light-hover/30";
+
 	const renderContent = () => {
 		if (loading)
 			return (
-				<p className={`${fontCls} opacity-60`}>{t("widgets.news.loading")}</p>
+				<p className="opacity-60" style={bodyStyle}>{t("widgets.news.loading")}</p>
 			);
-		if (error) return <p className={`${fontCls} text-red-400`}>{error}</p>;
+		if (error) return <p className="text-red-400" style={bodyStyle}>{error}</p>;
 		if (!allItems.length)
 			return (
-				<p className={`${fontCls} text-red-400`}>{t("widgets.news.no_data")}</p>
+				<p className="text-red-400" style={bodyStyle}>{t("widgets.news.no_data")}</p>
 			);
 
 		// ── TEXT 뷰 ──────────────────────────────────────────────
@@ -86,13 +79,15 @@ const NewsWidget = () => {
 							className={`w-full text-left flex flex-col px-3 py-2.5 rounded-xl transition-colors ${listItemBgCls}`}
 						>
 							<span
-								className={`${titleFontCls} font-semibold leading-snug ${isDark ? "text-slate-100" : "text-slate-800"}`}
+								className={`font-semibold leading-snug ${isDark ? "text-slate-100" : "text-slate-800"}`}
+							style={titleStyle}
 							>
 								{item.title || item.url}
 							</span>
 							{item.content && (
 								<span
-									className={`${fontCls} leading-relaxed line-clamp-2 mt-1.5 ${muted}`}
+									className={`leading-relaxed line-clamp-2 mt-1.5 ${muted}`}
+									style={bodyStyle}
 								>
 									{cleanContent(item.content)}
 								</span>
@@ -101,8 +96,9 @@ const NewsWidget = () => {
 					))}
 					{hasMore && (
 						<button
-							onClick={() => setExpanded(true)}
-							className={`${fontCls} text-blue-400 hover:underline w-full text-center pt-1`}
+							onClick={() => setShowAllModal(true)}
+							className="text-blue-400 hover:underline w-full text-center pt-1"
+							style={bodyStyle}
 						>
 							{t("common.show_more_plain")}
 						</button>
@@ -152,8 +148,9 @@ const NewsWidget = () => {
 					</div>
 					{hasMore && (
 						<button
-							onClick={() => setExpanded(true)}
-							className={`${fontCls} text-blue-400 hover:underline w-full text-center`}
+							onClick={() => setShowAllModal(true)}
+							className="text-blue-400 hover:underline w-full text-center"
+							style={bodyStyle}
 						>
 							{t("common.show_more_plain")}
 						</button>
@@ -193,13 +190,15 @@ const NewsWidget = () => {
 						</div>
 						<div className="flex-1 min-w-0 py-0.5">
 							<p
-								className={`${titleFontCls} font-semibold line-clamp-2 leading-snug ${isDark ? "text-slate-100" : "text-slate-800"}`}
+								className={`font-semibold line-clamp-2 leading-snug ${isDark ? "text-slate-100" : "text-slate-800"}`}
+								style={titleStyle}
 							>
 								{item.title || item.url}
 							</p>
 							{item.content && (
 								<p
-									className={`${fontCls} line-clamp-2 mt-1.5 leading-relaxed ${muted}`}
+									className={`line-clamp-2 mt-1.5 leading-relaxed ${muted}`}
+									style={bodyStyle}
 								>
 									{cleanContent(item.content)}
 								</p>
@@ -209,8 +208,9 @@ const NewsWidget = () => {
 				))}
 				{hasMore && (
 					<button
-						onClick={() => setExpanded(true)}
-						className={`${fontCls} text-blue-400 hover:underline w-full text-center pt-1`}
+						onClick={() => setShowAllModal(true)}
+						className="text-blue-400 hover:underline w-full text-center pt-1"
+						style={bodyStyle}
 					>
 						{t("common.show_more_plain")}
 					</button>
@@ -220,20 +220,99 @@ const NewsWidget = () => {
 	};
 
 	return (
-		<WidgetCard
-			title={t("widgets.news.title")}
-			icon={Newspaper}
-			widgetId="news"
-			headerMeta={formatLastUpdated(getLastUpdatedMinutes("news"))}
-			onRefresh={() => {
-				setExpanded(false);
-				fetchNews(undefined, true);
-			}}
-			refreshing={!!loading}
-			refreshIcon={RefreshCw}
-		>
-			{renderContent()}
-		</WidgetCard>
+		<>
+			<WidgetCard
+				title={t("widgets.news.title")}
+				icon={Newspaper}
+				widgetId="news"
+				headerMeta={formatLastUpdated(getLastUpdatedMinutes("news"))}
+				onRefresh={() => fetchNews(undefined, true)}
+				refreshing={!!loading}
+				refreshIcon={RefreshCw}
+			>
+				{renderContent()}
+			</WidgetCard>
+
+			{createPortal(
+				<AnimatePresence>
+					{showAllModal && (
+						<>
+							<motion.div
+								className="fixed inset-0 z-[9999] bg-black/50 backdrop-blur-md"
+								onClick={() => setShowAllModal(false)}
+								initial={{ opacity: 0 }}
+								animate={{ opacity: 1 }}
+								exit={{ opacity: 0 }}
+								transition={{ duration: 0.2 }}
+							/>
+							<motion.div
+								className="fixed inset-0 z-[10000] flex items-center justify-center p-4"
+								initial={{ opacity: 0 }}
+								animate={{ opacity: 1 }}
+								exit={{ opacity: 0 }}
+								transition={{ duration: 0.2 }}
+							>
+								<div
+									className={`w-full max-w-2xl max-h-[85vh] rounded-2xl border shadow-2xl flex flex-col overflow-hidden ${modalCls}`}
+									onClick={(e) => e.stopPropagation()}
+								>
+									<div className={`flex-shrink-0 flex items-center justify-between p-4 border-b ${dividerCls}`}>
+										<div className="flex items-center gap-3">
+											<Newspaper size={18} className="text-blue-500" />
+											<h3 className="font-bold text-base">{t("widgets.news.title")}</h3>
+										</div>
+										<button
+											onClick={() => setShowAllModal(false)}
+											className={`p-2 rounded-full transition-colors ${hoverBtnCls}`}
+										>
+											<X size={18} />
+										</button>
+									</div>
+									<div className="flex-1 overflow-y-auto p-4">
+										<div className="grid grid-cols-3 gap-2">
+											{allItems.map((item, i) => (
+												<a
+													key={i}
+													{...linkProps(item)}
+													className="overflow-hidden rounded-xl group aspect-square relative block"
+												>
+													{item.image ? (
+														<img
+															src={item.image}
+															alt=""
+															className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
+															onError={(e) => {
+																e.currentTarget.style.display = "none";
+																e.currentTarget.parentElement
+																	.querySelector(".modal-grid-fallback")
+																	?.classList.remove("hidden");
+															}}
+														/>
+													) : null}
+													<div
+														className={`modal-grid-fallback ${item.image ? "hidden" : ""} w-full h-full flex items-center justify-center ${secondaryBgCls}`}
+													>
+														<Newspaper size={24} className="opacity-20" />
+													</div>
+													{item.title && (
+														<div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent px-2 pb-2 pt-6">
+															<p className="text-[10px] text-white font-medium line-clamp-2 leading-tight">
+																{item.title}
+															</p>
+														</div>
+													)}
+												</a>
+											))}
+										</div>
+									</div>
+								</div>
+							</motion.div>
+						</>
+					)}
+				</AnimatePresence>,
+				document.body,
+			)}
+		</>
 	);
 };
 

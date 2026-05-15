@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Sparkles, RefreshCw, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useTheme } from "../../hooks/useTheme";
+import { useFontSize } from "../../hooks/useFontSize";
 import { useSettingsStore } from "../../store/useSettingsStore";
 import { useDataStore } from "../../store/useDataStore";
 import { useTodoStore } from "../../store/useTodoStore";
@@ -374,6 +375,7 @@ const BriefingWidget = () => {
 	const modalBodyText = isDark
 		? "text-morning-dark-text/90"
 		: "text-morning-light-text/85";
+	const { body: modalBodyFontStyle } = useFontSize(1.2);
 
 	const handleRefresh = (e) => {
 		e.stopPropagation();
@@ -634,7 +636,8 @@ const BriefingWidget = () => {
 																				{(sb.lines ?? []).map((line, idx) => (
 																					<p
 																						key={idx}
-																						className={`text-sm leading-relaxed ${modalBodyText}`}
+																						className={`leading-relaxed ${modalBodyText}`}
+																						style={modalBodyFontStyle}
 																					>
 																						{line}
 																					</p>
@@ -648,7 +651,8 @@ const BriefingWidget = () => {
 																	{(section.lines ?? []).map((line, idx) => (
 																		<p
 																			key={idx}
-																			className={`text-sm leading-relaxed ${modalBodyText}`}
+																			className={`leading-relaxed ${modalBodyText}`}
+																			style={modalBodyFontStyle}
 																		>
 																			{line}
 																		</p>
@@ -662,7 +666,8 @@ const BriefingWidget = () => {
 														{detailLines.map((line, idx) => (
 															<p
 																key={idx}
-																className={`text-sm leading-relaxed ${modalBodyText}`}
+																className={`leading-relaxed ${modalBodyText}`}
+																style={modalBodyFontStyle}
 															>
 																{line}
 															</p>

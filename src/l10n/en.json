@@ -187,7 +187,8 @@
       "no_data": "No stocks data available.",
       "invalid_ticker": "\"{{symbol}}\" is not a valid ticker. Try AAPL, TSLA, NVDA...",
       "remove_symbol": "Remove symbol",
-      "drag_to_reorder": "Drag to reorder"
+      "drag_to_reorder": "Drag to reorder",
+      "manage_order": "Manage order"
     },
     "trends": {
       "title": "Live Trends",

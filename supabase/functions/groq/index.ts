@@ -44,7 +44,7 @@ serve(async (req) => {
 		const text = data.choices?.[0]?.message?.content ?? "";
 
 		return new Response(JSON.stringify({ text }), {
-			headers: { ...corsHeaders, "Content-Type": "application/json" },
+			headers: { ...corsHeaders, "Content-Type": "application/json; charset=utf-8" },
 		});
 	} catch (e) {
 		return new Response(JSON.stringify({ error: e.message }), {

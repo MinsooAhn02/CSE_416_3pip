@@ -187,7 +187,8 @@
       "no_data": "표시할 주식/환율 데이터가 없습니다.",
       "invalid_ticker": "\"{{symbol}}\"은 유효하지 않은 티커입니다. AAPL, TSLA, NVDA 등을 시도해 보세요.",
       "remove_symbol": "심볼 삭제",
-      "drag_to_reorder": "드래그하여 순서 변경"
+      "drag_to_reorder": "드래그하여 순서 변경",
+      "manage_order": "순서 관리"
     },
     "trends": {
       "title": "실시간 트렌드",

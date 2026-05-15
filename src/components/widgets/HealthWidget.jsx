@@ -2,10 +2,12 @@ import { Activity, RefreshCw } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useTheme } from "../../hooks/useTheme";
 import { useDataStore } from "../../store/useDataStore";
+import { useFontSize } from "../../hooks/useFontSize";
 import WidgetCard from "../common/WidgetCard";
 
 const HealthWidget = () => {
 	const { isDark, muted, secondaryBgCls } = useTheme();
+	const { body: bodyStyle } = useFontSize();
 	const { t } = useTranslation();
 	const healthData = useDataStore((s) => s.healthData);
 	const loading = useDataStore((s) => s.loading.health);
@@ -40,8 +42,8 @@ const HealthWidget = () => {
 			) : healthData ? (
 				<div className="space-y-3">
 					<div className="flex justify-between items-center">
-						<span className="text-xs">🚶 {t("widgets.health.steps")}</span>
-						<span className="text-xs font-bold">
+						<span style={bodyStyle}>🚶 {t("widgets.health.steps")}</span>
+						<span className="font-bold" style={bodyStyle}>
 							{healthData.steps.toLocaleString()} /{" "}
 							{healthData.stepsGoal.toLocaleString()}
 						</span>
@@ -55,8 +57,8 @@ const HealthWidget = () => {
 						/>
 					</div>
 					<div className="flex justify-between items-center">
-						<span className="text-xs">😴 {t("widgets.health.sleep")}</span>
-						<span className="text-xs font-bold">
+						<span style={bodyStyle}>😴 {t("widgets.health.sleep")}</span>
+						<span className="font-bold" style={bodyStyle}>
 							{healthData.sleep}h / {healthData.sleepGoal}h
 						</span>
 					</div>
@@ -71,23 +73,23 @@ const HealthWidget = () => {
 					<div className="grid grid-cols-2 gap-2 mt-2">
 						<div className={`text-center p-2 rounded-lg ${secondaryBgCls}`}>
 							<p className="text-lg font-bold">❤️ {healthData.heartRate}</p>
-							<p className={`text-[10px] ${muted}`}>BPM</p>
+							<p className={muted} style={bodyStyle}>BPM</p>
 						</div>
 						<div className={`text-center p-2 rounded-lg ${secondaryBgCls}`}>
 							<p className="text-lg font-bold">🔥 {healthData.calories}</p>
-							<p className={`text-[10px] ${muted}`}>kcal</p>
+							<p className={muted} style={bodyStyle}>kcal</p>
 						</div>
 						<div className={`text-center p-2 rounded-lg ${secondaryBgCls}`}>
 							<p className="text-lg font-bold">
 								💧 {healthData.water}/{healthData.waterGoal}
 							</p>
-							<p className={`text-[10px] ${muted}`}>
+							<p className={muted} style={bodyStyle}>
 								{t("widgets.health.cups")}
 							</p>
 						</div>
 					</div>
 					{!isRealData && (
-						<p className={`text-[10px] text-center mt-1 ${muted}`}>
+						<p className={`text-center mt-1 ${muted}`} style={bodyStyle}>
 							{t("widgets.health.google_fit_notice")}
 						</p>
 					)}

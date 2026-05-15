@@ -4,12 +4,14 @@ import { useState } from "react";
 import { useTheme } from "../../hooks/useTheme";
 import { useDataStore } from "../../store/useDataStore";
 import { useSettingsStore } from "../../store/useSettingsStore";
+import { useFontSize } from "../../hooks/useFontSize";
 import WidgetCard from "../common/WidgetCard";
 
 const toFahrenheit = (celsius) => Math.round((celsius * 9) / 5 + 32);
 
 const WeatherWidget = () => {
 	const { isDark, secondaryBgCls } = useTheme();
+	const { body: bodyStyle } = useFontSize();
 	const { t } = useTranslation();
 	const weather = useDataStore((s) => s.weather);
 	const loading = useDataStore((s) => s.loading.weather);
@@ -95,7 +97,8 @@ const WeatherWidget = () => {
 									{unitLabel}
 								</p>
 								<p
-									className={`text-xs ${isDark ? "text-gray-400" : "text-slate-500"}`}
+									className={isDark ? "text-gray-400" : "text-slate-500"}
+									style={bodyStyle}
 								>
 									{weather.city} · {weather.condition}
 								</p>
@@ -185,27 +188,30 @@ const WeatherWidget = () => {
 					<div className="grid grid-cols-3 gap-2">
 						<div className={`p-2 rounded-lg text-center ${secondaryBgCls}`}>
 							<Droplets size={14} className="mx-auto mb-1 text-blue-400" />
-							<p className="text-xs font-medium">{weather.humidity}%</p>
+							<p className="font-medium" style={bodyStyle}>{weather.humidity}%</p>
 							<p
-								className={`text-[10px] ${isDark ? "text-gray-400" : "text-slate-400"}`}
+								className={isDark ? "text-gray-400" : "text-slate-400"}
+								style={bodyStyle}
 							>
 								{t("widgets.weather.humidity")}
 							</p>
 						</div>
 						<div className={`p-2 rounded-lg text-center ${secondaryBgCls}`}>
 							<Cloud size={14} className="mx-auto mb-1 text-gray-400" />
-							<p className="text-xs font-medium">{weather.precipitation}%</p>
+							<p className="font-medium" style={bodyStyle}>{weather.precipitation}%</p>
 							<p
-								className={`text-[10px] ${isDark ? "text-gray-400" : "text-slate-400"}`}
+								className={isDark ? "text-gray-400" : "text-slate-400"}
+								style={bodyStyle}
 							>
 								{t("widgets.weather.precipitation")}
 							</p>
 						</div>
 						<div className={`p-2 rounded-lg text-center ${secondaryBgCls}`}>
 							<Wind size={14} className="mx-auto mb-1 text-green-400" />
-							<p className="text-xs font-medium">{weather.airQuality}</p>
+							<p className="font-medium" style={bodyStyle}>{weather.airQuality}</p>
 							<p
-								className={`text-[10px] ${isDark ? "text-gray-400" : "text-slate-400"}`}
+								className={isDark ? "text-gray-400" : "text-slate-400"}
+								style={bodyStyle}
 							>
 								{t("widgets.weather.air_quality")}
 							</p>

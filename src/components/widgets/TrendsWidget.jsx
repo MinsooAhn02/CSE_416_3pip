@@ -3,7 +3,7 @@ import { TrendingUp, RefreshCw } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useTheme } from "../../hooks/useTheme";
 import { useDataStore } from "../../store/useDataStore";
-import { useWidgetStore } from "../../store/useWidgetStore";
+import { useFontSize } from "../../hooks/useFontSize";
 import WidgetCard from "../common/WidgetCard";
 
 const MAX_ITEMS = {
@@ -23,11 +23,8 @@ const TrendsWidget = () => {
 	const fetchTrends   = useDataStore((s) => s.fetchTrends);
 	const getLastUpdatedMinutes = useDataStore((s) => s.getLastUpdatedMinutes);
 
-	const globalFontSize = useWidgetStore((s) => s.globalFontSize);
-
-	const fontKey = globalFontSize in MAX_ITEMS ? globalFontSize : "medium";
-	const maxShow = MAX_ITEMS[fontKey];
-	const fontCls = fontKey === "small" ? "text-[10px]" : fontKey === "large" ? "text-sm" : "text-xs";
+	const { body: bodyStyle, key: fontKey } = useFontSize();
+	const maxShow = MAX_ITEMS[fontKey] ?? MAX_ITEMS.medium;
 
 	const [expanded, setExpanded] = useState(false);
 
@@ -43,10 +40,10 @@ const TrendsWidget = () => {
 	const hasMore      = !expanded && allItems.length > maxShow;
 
 	const renderContent = () => {
-		if (loading) return <p className={`${fontCls} opacity-60`}>{t("widgets.trends.loading")}</p>;
-		if (error)   return <p className={`${fontCls} text-red-400`}>{error}</p>;
+		if (loading) return <p className="opacity-60" style={bodyStyle}>{t("widgets.trends.loading")}</p>;
+		if (error)   return <p className="text-red-400" style={bodyStyle}>{error}</p>;
 		if (!allItems.length)
-			return <p className={`${fontCls} text-red-400`}>{t("widgets.trends.no_data")}</p>;
+			return <p className="text-red-400" style={bodyStyle}>{t("widgets.trends.no_data")}</p>;
 
 		return (
 			<div className="space-y-2">
@@ -58,7 +55,8 @@ const TrendsWidget = () => {
 							target="_blank"
 							rel="noopener noreferrer"
 							onClick={(e) => !item.url && e.preventDefault()}
-							className={`${fontCls} px-3 py-1.5 rounded-lg border transition-colors hover:opacity-80 ${secondaryBgCls} ${borderCls}`}
+							className={`px-3 py-1.5 rounded-lg border transition-colors hover:opacity-80 ${secondaryBgCls} ${borderCls}`}
+							style={bodyStyle}
 						>
 							<span className={`block line-clamp-2 leading-snug ${isDark ? "text-slate-100" : "text-slate-800"}`}>
 								{item.title}
@@ -69,7 +67,8 @@ const TrendsWidget = () => {
 				{hasMore && (
 					<button
 						onClick={() => setExpanded(true)}
-						className={`${fontCls} ${muted} hover:opacity-100 transition-opacity`}
+						className={`${muted} hover:opacity-100 transition-opacity`}
+						style={bodyStyle}
 					>
 						{t("common.show_more_plain")}
 					</button>
@@ -77,7 +76,8 @@ const TrendsWidget = () => {
 				{expanded && (
 					<button
 						onClick={() => setExpanded(false)}
-						className={`${fontCls} ${muted} hover:opacity-100 transition-opacity`}
+						className={`${muted} hover:opacity-100 transition-opacity`}
+						style={bodyStyle}
 					>
 						{t("common.show_less")}
 					</button>

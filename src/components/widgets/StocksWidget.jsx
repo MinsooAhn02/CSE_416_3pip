@@ -6,6 +6,7 @@ import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 import { useTranslation } from "react-i18next";
 import { useTheme } from "../../hooks/useTheme";
 import { useDataStore } from "../../store/useDataStore";
+import { useFontSize } from "../../hooks/useFontSize";
 import { useSettingsStore } from "../../store/useSettingsStore";
 import WidgetCard from "../common/WidgetCard";
 
@@ -65,16 +66,18 @@ const STOCK_OPTIONS = [
 	{ id: "USDKRW", label: "USD/KRW" },
 ];
 
-const StockCard = ({ s, isDark, secondaryBgCls }) => (
+const StockCard = ({ s, isDark, secondaryBgCls, bodyStyle }) => (
 	<div className={`p-3 rounded-xl ${secondaryBgCls}`}>
 		<div className="flex justify-between items-center mb-1">
 			<span
-				className={`text-[10px] ${isDark ? "text-gray-400" : "text-slate-500"}`}
+				className={isDark ? "text-gray-400" : "text-slate-500"}
+				style={bodyStyle}
 			>
 				{s.name}
 			</span>
 			<span
-				className={`text-[10px] ${s.up ? "text-red-400" : "text-blue-400"}`}
+				className={s.up ? "text-red-400" : "text-blue-400"}
+				style={bodyStyle}
 			>
 				{s.up ? "▲" : "▼"} {s.change}
 			</span>
@@ -83,13 +86,24 @@ const StockCard = ({ s, isDark, secondaryBgCls }) => (
 	</div>
 );
 
+const CURRENCY_MAP = {
+	KOSPI: "KRW",
+	NASDAQ: "USD",
+	SP500: "USD",
+	USDKRW: "Rate",
+};
+const getCurrency = (s) =>
+	CURRENCY_MAP[s.symbol] ?? (String(s.name ?? "").includes("KRW") ? "KRW" : "USD");
+
 const presetIds = new Set(STOCK_OPTIONS.map((o) => o.id));
 
 const StocksWidget = () => {
 	const { isDark, hoverCls, secondaryBgCls, borderCls } = useTheme();
+	const { body: bodyStyle } = useFontSize();
 	const { t } = useTranslation();
 	const [showSettings, setShowSettings] = useState(false);
 	const [showModal, setShowModal] = useState(false);
+	const [showViewAll, setShowViewAll] = useState(false);
 	const [customSymbol, setCustomSymbol] = useState("");
 	const [validating, setValidating] = useState(false);
 	const [validationError, setValidationError] = useState(null);
@@ -165,9 +179,9 @@ const StocksWidget = () => {
 		void fetchStocks(normalizedStockSymbols, undefined, true);
 	}, [normalizedStockSymbols, stockSymbols, setStockSymbols, fetchStocks]);
 
-	// Prevent body scroll when modal is open
+	// Prevent body scroll when any modal is open
 	useEffect(() => {
-		if (showModal) {
+		if (showModal || showViewAll) {
 			const scrollbarWidth =
 				window.innerWidth - document.documentElement.clientWidth;
 			document.body.style.overflow = "hidden";
@@ -177,7 +191,7 @@ const StocksWidget = () => {
 			document.body.style.overflow = "";
 			document.body.style.paddingRight = "";
 		};
-	}, [showModal]);
+	}, [showModal, showViewAll]);
 
 	const onDragEnd = (result) => {
 		if (!result.destination) return;
@@ -350,6 +364,12 @@ const StocksWidget = () => {
 								<p className="text-[10px] text-red-400">{validationError}</p>
 							)}
 						</div>
+						<button
+							onClick={() => { setShowSettings(false); setShowModal(true); }}
+							className={`mt-2 w-full text-[11px] py-1.5 rounded-lg ${hoverCls} opacity-60 border ${borderCls}`}
+						>
+							{t("widgets.stocks.manage_order")}
+						</button>
 					</div>
 				)}
 
@@ -364,12 +384,13 @@ const StocksWidget = () => {
 									s={s}
 									isDark={isDark}
 									secondaryBgCls={secondaryBgCls}
+									bodyStyle={bodyStyle}
 								/>
 							))}
 						</div>
 						{hasMore && (
 							<button
-								onClick={() => setShowModal(true)}
+								onClick={() => setShowViewAll(true)}
 								className={`mt-2 w-full text-xs py-1.5 rounded-lg ${hoverCls} opacity-70`}
 							>
 								{t("common.view_more", {
@@ -529,6 +550,83 @@ const StocksWidget = () => {
 												</div>
 											</div>
 										</DragDropContext>
+									</div>
+								</div>
+							</motion.div>
+						</>
+					)}
+				</AnimatePresence>,
+				document.body,
+			)}
+
+			{createPortal(
+				<AnimatePresence>
+					{showViewAll && (
+						<>
+							<motion.div
+								className="fixed inset-0 z-[9999] bg-black/50 backdrop-blur-md"
+								onClick={() => setShowViewAll(false)}
+								initial={{ opacity: 0 }}
+								animate={{ opacity: 1 }}
+								exit={{ opacity: 0 }}
+								transition={{ duration: 0.2 }}
+							/>
+							<motion.div
+								className="fixed inset-0 z-[10000] flex items-center justify-center p-4"
+								initial={{ opacity: 0 }}
+								animate={{ opacity: 1 }}
+								exit={{ opacity: 0 }}
+								transition={{ duration: 0.2 }}
+							>
+								<div
+									className={`w-full max-w-2xl max-h-[85vh] rounded-2xl border shadow-2xl flex flex-col overflow-hidden ${
+										isDark
+											? "bg-morning-dark-card border-morning-dark-hover text-morning-dark-text"
+											: "bg-morning-light-card border-morning-light-hover/30 text-morning-light-text"
+									}`}
+									onClick={(e) => e.stopPropagation()}
+								>
+									<div
+										className={`flex-shrink-0 flex items-center justify-between p-4 border-b ${
+											isDark ? "border-morning-dark-hover" : "border-morning-light-hover/30"
+										}`}
+									>
+										<div className="flex items-center gap-3">
+											<TrendingUp size={18} className="text-blue-500" />
+											<h3 className="font-bold text-base">{t("widgets.stocks.title")}</h3>
+										</div>
+										<button
+											onClick={() => setShowViewAll(false)}
+											className={`p-2 rounded-full transition-colors ${
+												isDark ? "hover:bg-morning-dark-hover" : "hover:bg-morning-light-hover/30"
+											}`}
+										>
+											<X size={18} />
+										</button>
+									</div>
+									<div className="flex-1 overflow-y-auto p-4">
+										<div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+											{orderedStocks.map((s, i) => (
+												<div key={i} className={`p-3 rounded-xl ${secondaryBgCls}`}>
+													<div className="flex justify-between items-center mb-1">
+														<span
+															className={isDark ? "text-gray-400" : "text-slate-500"}
+															style={bodyStyle}
+														>
+															{s.name}
+														</span>
+														<span
+															className={s.up ? "text-red-400" : "text-blue-400"}
+															style={bodyStyle}
+														>
+															{s.up ? "▲" : "▼"} {s.change}
+														</span>
+													</div>
+													<p className="text-lg font-bold">{s.value}</p>
+													<p className="opacity-40" style={bodyStyle}>{getCurrency(s)}</p>
+												</div>
+											))}
+										</div>
 									</div>
 								</div>
 							</motion.div>

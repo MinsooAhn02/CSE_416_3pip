@@ -18,6 +18,7 @@ import {
 	isTaskCompletedOnDate,
 } from "../../utils/taskRecurrence";
 import DatePanelContainer from "../layout/DatePanelContainer";
+import { useFontSize } from "../../hooks/useFontSize";
 
 const sameDay = (a, b) =>
 	a.getFullYear() === b.getFullYear() &&
@@ -27,10 +28,15 @@ const sameDay = (a, b) =>
 const CalendarWidget = () => {
 	const { isDark, cardCls, cardShadowCls, muted, hoverCls, borderCls } =
 		useTheme();
+	const { body: bodyStyle } = useFontSize();
 	const { t, i18n } = useTranslation();
 	const [calView, setCalView] = useState("month");
 	const [currentDate, setCurrentDate] = useState(new Date());
 	const [selectedDateForPanels, setSelectedDateForPanels] = useState(null);
+	const [headerView, setHeaderView] = useState("month"); // "month" | "year" | "decade"
+	const [decadeStart, setDecadeStart] = useState(
+		() => Math.floor(new Date().getFullYear() / 10) * 10,
+	);
 
 	const DAYS = t("calendar.days", { returnObjects: true });
 
@@ -83,6 +89,7 @@ const CalendarWidget = () => {
 		setSelectedDateForPanels(null);
 		setSelectedDate(null);
 		setCalView(views[nextIndex]);
+		setHeaderView("month");
 	};
 
 	const selectDate = (dateStr) => {
@@ -91,15 +98,20 @@ const CalendarWidget = () => {
 	};
 
 	const goToPrev = () => {
-		setCurrentDate(new Date(viewYear, viewMonth - 1, 1));
+		if (headerView === "decade") setDecadeStart((s) => s - 10);
+		else if (headerView === "year") setCurrentDate(new Date(viewYear - 1, viewMonth, 1));
+		else setCurrentDate(new Date(viewYear, viewMonth - 1, 1));
 	};
 	const goToNext = () => {
-		setCurrentDate(new Date(viewYear, viewMonth + 1, 1));
+		if (headerView === "decade") setDecadeStart((s) => s + 10);
+		else if (headerView === "year") setCurrentDate(new Date(viewYear + 1, viewMonth, 1));
+		else setCurrentDate(new Date(viewYear, viewMonth + 1, 1));
 	};
 	const goToToday = () => {
 		const nextDate = new Date();
 		const nextTodayStr = formatLocalDate(nextDate);
 		setCurrentDate(nextDate);
+		setHeaderView("month");
 		setSelectedDate(nextTodayStr);
 		if (selectedDateForPanels) {
 			setSelectedDateForPanels(nextTodayStr);
@@ -140,6 +152,22 @@ const CalendarWidget = () => {
 		},
 	);
 
+	const locale = i18n.language === "ko" ? "ko-KR" : "en-US";
+
+	const shortMonths = useMemo(
+		() =>
+			Array.from({ length: 12 }, (_, i) =>
+				new Date(viewYear, i, 1).toLocaleDateString(locale, { month: "short" }),
+			),
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+		[viewYear, locale],
+	);
+
+	const decadeYears = useMemo(
+		() => Array.from({ length: 12 }, (_, i) => decadeStart - 1 + i),
+		[decadeStart],
+	);
+
 	const dayFullNames = t("calendar.days_full", { returnObjects: true });
 
 	return (
@@ -154,7 +182,7 @@ const CalendarWidget = () => {
 				</div>
 
 				<div className="flex items-center gap-2">
-					{/* Month navigation */}
+					{/* Month/Year/Decade navigation */}
 					{calView === "month" && (
 						<>
 							<button
@@ -163,30 +191,55 @@ const CalendarWidget = () => {
 							>
 								<ChevronLeft size={16} />
 							</button>
-							<span className="text-sm font-medium min-w-[100px] text-center">
-								{monthLabel}
-							</span>
+
+							{headerView === "month" && (
+								<button
+									type="button"
+									onClick={() => setHeaderView("year")}
+									className={`text-sm font-medium min-w-[100px] text-center px-1 rounded-md transition-colors ${hoverCls}`}
+								>
+									{monthLabel} ▾
+								</button>
+							)}
+							{headerView === "year" && (
+								<button
+									type="button"
+									onClick={() => { setDecadeStart(Math.floor(viewYear / 10) * 10); setHeaderView("decade"); }}
+									className={`text-sm font-medium min-w-[100px] text-center px-1 rounded-md transition-colors ${hoverCls}`}
+								>
+									{viewYear} ▾
+								</button>
+							)}
+							{headerView === "decade" && (
+								<span className="text-sm font-medium min-w-[100px] text-center">
+									{decadeStart}–{decadeStart + 9}
+								</span>
+							)}
+
 							<button
 								onClick={goToNext}
 								className={`p-1 rounded-full transition-colors ${hoverCls}`}
 							>
 								<ChevronRight size={16} />
 							</button>
-							<button
-								type="button"
-								onClick={goToToday}
-								disabled={isTodayButtonDisabled}
-								className={`rounded-full border px-2.5 py-1 text-xs font-medium transition-colors ${
-									isTodayButtonDisabled
-										? isDark
-											? "cursor-default border-slate-700 text-slate-500"
-											: "cursor-default border-slate-200 text-slate-400"
-										: `${borderCls} ${hoverCls}`
-								}`}
-								title={t("calendar.go_to_today")}
-							>
-								{t("calendar.today")}
-							</button>
+
+							{headerView === "month" && (
+								<button
+									type="button"
+									onClick={goToToday}
+									disabled={isTodayButtonDisabled}
+									className={`rounded-full border px-2.5 py-1 text-xs font-medium transition-colors ${
+										isTodayButtonDisabled
+											? isDark
+												? "cursor-default border-slate-700 text-slate-500"
+												: "cursor-default border-slate-200 text-slate-400"
+											: `${borderCls} ${hoverCls}`
+									}`}
+									title={t("calendar.go_to_today")}
+								>
+									{t("calendar.today")}
+								</button>
+							)}
 						</>
 					)}
 
@@ -200,13 +253,66 @@ const CalendarWidget = () => {
 				</div>
 			</div>
 
+			{/* Year picker (12 months grid) */}
+			{calView === "month" && headerView === "year" && (
+				<div className="grid grid-cols-3 gap-2 mt-1">
+					{shortMonths.map((m, idx) => (
+						<button
+							key={idx}
+							type="button"
+							onClick={() => {
+								setCurrentDate(new Date(viewYear, idx, 1));
+								setHeaderView("month");
+							}}
+							className={`py-3 rounded-xl text-sm font-medium transition-colors ${
+								viewMonth === idx && viewYear === currentDate.getFullYear()
+									? "bg-blue-500 text-white"
+									: hoverCls
+							}`}
+						>
+							{m}
+						</button>
+					))}
+				</div>
+			)}
+
+			{/* Decade picker (12 years grid) */}
+			{calView === "month" && headerView === "decade" && (
+				<div className="grid grid-cols-3 gap-2 mt-1">
+					{decadeYears.map((yr) => {
+						const inDecade = yr >= decadeStart && yr <= decadeStart + 9;
+						return (
+							<button
+								key={yr}
+								type="button"
+								onClick={() => {
+									setCurrentDate(new Date(yr, viewMonth, 1));
+									setDecadeStart(Math.floor(yr / 10) * 10);
+									setHeaderView("year");
+								}}
+								className={`py-3 rounded-xl text-sm font-medium transition-colors ${
+									yr === viewYear
+										? "bg-blue-500 text-white"
+										: inDecade
+											? hoverCls
+											: `${hoverCls} opacity-30`
+								}`}
+							>
+								{yr}
+							</button>
+						);
+					})}
+				</div>
+			)}
+
 			{/* Month View */}
-			{calView === "month" && (
+			{calView === "month" && headerView === "month" && (
 				<div className="grid grid-cols-7 gap-1">
 					{DAYS.map((d) => (
 						<div
 							key={d}
-							className={`text-center text-xs font-medium py-2 ${muted}`}
+							className={`text-center font-medium py-2 ${muted}`}
+							style={bodyStyle}
 						>
 							{d}
 						</div>
@@ -277,7 +383,7 @@ const CalendarWidget = () => {
 											: `${borderCls} ${hoverCls}`
 								}`}
 							>
-								<p className="text-xs">{DAYS[d.getDay()]}</p>
+								<p style={bodyStyle}>{DAYS[d.getDay()]}</p>
 								<p className="text-lg font-bold">{d.getDate()}</p>
 								<div className="absolute bottom-1 left-1/2 -translate-x-1/2 flex gap-0.5">
 									{hasEventsOnDate(dateStr) && (

@@ -339,7 +339,7 @@ useSettingsStore.subscribe((state) => {
 - `addSmartWidget/removeSmartWidget/refreshSmartWidget`: 스마트 위젯 CRUD. 삭제 시 `kw`, `kw_ko`, `kw_en` 세 키 모두 정리
 - 언어 변경 시: 모듈 레벨 `i18n.on("languageChanged")` → 모든 smartKeywords에 `loadSmartWidget(kw, false)` 호출 (캐시 우선)
 - `setWidgetSetting(widgetId, key, value)`: 위젯별 설정 변경
-- `setGlobalFontSize(size)`: 전체 글자 크기 변경
+- `setGlobalFontSize(size)`: 전체 글자 크기 변경 — 변경 시 `useFontSize()` 훅을 사용하는 모든 위젯(NewsWidget, TrendsWidget, WeatherWidget, HealthWidget, SmartWidgetContent, DiaryCard, CalendarWidget, StocksWidget, BriefingWidget 모달)에 즉시 반영
 - `openWidgetSettings(widgetId)/closeWidgetSettings()`: 설정 모달 제어
 
 **DB sync:** vis → `user_settings`, layouts → `widget_layouts`, smartKeywords → `smart_keywords` (전체 삭제 후 재삽입)
@@ -564,7 +564,7 @@ payload     jsonb -- { text, summary, sections }
   | medium  | 4    | 4    | 6    |
   | large   | 3    | 3    | 3    |
 
-- 더보기 클릭 시 인라인 확장, 최대 10개
+- 더보기 클릭 시 **grid 고정 모달**(`NewsAllModal`) 진입 — 전체 기사 스크롤 가능, 인라인 확장 없음
 - 클릭 → 해당 기사 URL 직접 이동 (`<a target="_blank">`)
 - `cleanContent()` 로 마크다운/SNS 잡문구 제거 후 표시
 
@@ -599,12 +599,13 @@ payload     jsonb -- { text, summary, sections }
 #### StocksWidget
 
 - 데이터: `stocks [{symbol, name, value, change, up}]` (`symbol` 필드는 drag 재정렬 시 순서 저장에 사용)
-- 위젯 본체 최대 표시 `WIDGET_LIMIT = 6`, 초과 시 "전체 보기" 버튼 → 모달 진입
+- 위젯 본체 최대 표시 `WIDGET_LIMIT = 6`, 초과 시 "전체 보기" 버튼 → 읽기 전용 `StocksViewAllModal` 진입 (종목명 + 가격 + 변동률 + 통화(`CURRENCY_MAP` 기반))
 - 심볼 선택/추가/삭제:
   - 기본 4종(KOSPI, NASDAQ, S&P 500, USD/KRW) 토글
   - 커스텀 티커 직접 입력 → Edge Function으로 유효성 검증 후 추가 (`validateStockSymbol`)
   - 순서는 `useSettingsStore.stockSymbols` 배열로 영구 저장
-- Drag-and-drop 재정렬 (모달):
+- 관리 모달(DnD 재정렬): 기어 아이콘 → 인라인 설정 패널 → "순서 관리" 버튼으로 진입
+- Drag-and-drop 재정렬 (관리 모달):
   - `@hello-pangea/dnd` 사용, compact 3열 카드 레이아웃 (`flex flex-wrap`, `calc(33.333% - 5.5px)`)
   - Framer Motion `style={{ x: "-50%", y: "-50%" }}` 이 CSS transform containing block을 만들어 `position: fixed` 드래그 좌표를 망가뜨림 → `createPortal(card, document.body)`로 탈출
   - 드래그 중 카드가 backdrop(`z-9999`) 뒤에 숨는 문제 → `zIndex: 10001` 강제 override
@@ -626,6 +627,12 @@ payload     jsonb -- { text, summary, sections }
 
 - 데이터: `calEvents` (오늘 일정)
 - 달력 그리드 + 이벤트 인디케이터
+- **헤더 3단 드릴다운** (인플레이스 교체):
+  - `"month"` 레벨: "May 2026 ▾" 클릭 → `"year"` 레벨 (12개월 3×4 grid)
+  - `"year"` 레벨: "2026 ▾" 클릭 → `"decade"` 레벨 (decade±1 ~ decade+10, 12년 3×4 grid)
+  - 월/연도 선택 시 한 단계 아래로 복귀; `Today` 버튼은 month 레벨에서만 표시
+  - 좌우 화살표: 레벨에 따라 달/연/10년 단위 이동
+  - 뷰 전환(`handleCycleView`) 시 헤더 레벨 자동 리셋
 - `Today` 버튼으로 현재 달 즉시 복귀
 - 월/주/일 뷰 전환 시 열려 있던 `Date Details` 자동 닫힘
 
@@ -643,7 +650,7 @@ payload     jsonb -- { text, summary, sections }
   5. `latest_info` — `subBlocks: [관심 키워드, 주요 뉴스 Top 3]`. 관심 키워드는 스마트 위젯 bullets 요약(Groq #3), 뉴스는 `newsResults[0..2]` + URL 호스트명 출처.
   6. `market` (조건부) — `fixedInterestIds` 에 `finance` 포함 시 stocks Top 4.
 - 반환: `{ summary, detail, sections, timeMode }`. `sections` 는 `[{ id, title, lines, subBlocks? }]`. `detail` 은 후방호환용 평문.
-- 모달 렌더링: `divide-y` 섹션 블록 + 굵은 카테고리 제목 + `subBlocks` 하위 헤더(작은 글자, 들여쓰기).
+- 모달 렌더링: `divide-y` 섹션 블록 + 굵은 카테고리 제목 + `subBlocks` 하위 헤더(작은 글자, 들여쓰기). 본문 라인(`sb.lines`, `section.lines`, `detailLines`)에 `useFontSize(1.2).body` 적용 — 다른 위젯 대비 1.2× 크기.
 - 언어 일치: 모든 섹션 제목·내용·Groq 프롬프트가 `getLangConfig()` 기반으로 ko/en 분기.
 - `i18n.language` watch `useEffect`: 언어 변경 시 `briefingVersions` 캐시 비우고 즉시 재생성. 사용자가 언어를 바꾸면 모달·대시보드 미리보기 모두 현재 언어로 즉시 반영.
 - `useDataStore.fetchTomorrowCalendar`: 오후·저녁 모드의 "내일 일정"용. `events` Edge Function의 `date` 파라미터 활용, `calendar_{YYYY-MM-DD}` DB 캐시.
@@ -675,6 +682,7 @@ payload     jsonb -- { text, summary, sections }
 - 데이터: 오늘의 질문 + `diaryAnswers[today]`
 - PIN 인증 후 접근
 - 질문 응답 입력 → `user_qa` 테이블 저장
+- **레이아웃 정책**: 카드 전체 `flex flex-col`. 질문 영역은 `flex-shrink-0 max-h-[40%] overflow-y-auto` (길어지면 내부 스크롤, textarea 침범 방지). textarea는 `flex-1 min-h-[3rem]` (남은 공간 차지, 최소 3rem 보장).
 - `fixedInterestIds` 구독 → `generatePersonalizedQuestion()` 에 전달 → `INTEREST_TOPIC_MAP` 기반 관심사 주제 1개 + 일반 주제 1개 혼합 질문 생성
 - **관심사 bump**: 답변 저장 시 단순 키워드 추출 → `useSettingsStore.bumpKeyword(kw, "qa", 5)` 자동 호출 (score +5/키워드)
 - `questionCacheRef = useRef({})`: 언어별 질문 캐시(`{ko: "질문", en: "question"}`). 언어 전환 시 캐시에 해당 언어 질문이 있으면 API 호출 없이 즉시 복원.
@@ -705,6 +713,8 @@ payload     jsonb -- { text, summary, sections }
 | `PINModal` | 일기 접근 PIN 입력/확인 |
 | `DiaryListModal` | 날짜별 일기 목록 조회 |
 | `NewsDetailModal` | **현재 미사용** — 직접 URL 이동으로 대체됨 |
+| `NewsAllModal` (인라인) | NewsWidget "더보기" 클릭 시 전체 뉴스 grid 표시 — `createPortal` + `AnimatePresence`, 별도 파일 없이 NewsWidget.jsx 내부에 정의 |
+| `StocksViewAllModal` (인라인) | StocksWidget "View more" 클릭 시 읽기 전용 전체 종목 grid — 종목명 + 가격 + 변동률 + 통화 표시, StocksWidget.jsx 내부에 정의 |
 
 ---
 
@@ -717,7 +727,7 @@ payload     jsonb -- { text, summary, sections }
 | `weather` | `/functions/v1/weather` | — | `{lat, lon}` | `{temp, city, condition, humidity, precipitation, airQuality}` |
 | `stocks` | `/functions/v1/stocks` | — | `{symbols: string[]}` | `[{symbol, price, change, changePercent}]` |
 | `tavily` | `/functions/v1/tavily` | — | `{query, mode, max_results, location, include_domains}` | 뉴스: `{answer, results, location}` / 트렌드: `{trends, answer, results}` |
-| `groq` | `/functions/v1/groq` | — | `{system, prompt}` | `{text}` |
+| `groq` | `/functions/v1/groq` | — | `{system, prompt, model?, temperature?}` | `{text}` — 응답 `Content-Type: application/json; charset=utf-8` 명시 (UTF-8 글자깨짐 방지) |
 | `events` 🔒 | `/functions/v1/events` | JWT | `{token, action?, ...}` | Google Calendar 이벤트 CRUD. action: list(기본)/create/update/delete/read |
 | `tasks` 🔒 | `/functions/v1/tasks` | JWT | `{token, action?, taskListId?}` | Google Tasks CRUD. action: list(기본)/create/update/delete/move/clearCompleted |
 | `fitness` 🔒 | `/functions/v1/fitness` | JWT | `{token}` | `{steps, sleep, calories, heartRate}` |
@@ -974,6 +984,7 @@ resolveDiaryGenerationLanguage()  [diaryGenerationService.js, exported]
 |----|------|
 | `useMidnightTrigger` | 로그인 시 1회 실행. 전날(들) 브리핑 스냅샷이 있으면 일기 lazy 합성 → 스냅샷 정리. 새 날이면 todo 리셋. 자정 60초 polling 없음 |
 | `useTheme` | `isDark, cardCls, listItemBgCls, secondaryBgCls, muted, hoverCls, borderCls` 등 테마 CSS 클래스 반환 |
+| `useFontSize(multiplier?)` | `useWidgetStore.globalFontSize` 구독 → `{ body: {fontSize}, title: {fontSize}, key }` 반환. `body`: small=10/medium=12/large=14px, `title`: small=12/medium=14/large=16px. `multiplier`(기본 1.0) 로 배율 조정 가능 (BriefingWidget 모달: 1.2). 인라인 `style` 반환으로 Tailwind arbitrary value 없이 적용. |
 
 ### 12.3 src/constants/
 
@@ -1105,15 +1116,11 @@ https://www.googleapis.com/auth/fitness.activity.read
 | 음성 기능 (voiceOn) | 상태는 존재, UI/TTS 구현 없음 |
 | keyword_score_log 자동 집계 | runPersonalizationBatch 호출됨, 내부 상세 로직 미확인 |
 | NewsDetailModal | 파일 존재하나 미사용 (직접 URL 이동으로 대체) |
-| 위젯 상세 팝업 모달 | news/trends/stocks 상세보기 좌우 버튼 넘기기 미구현 |
-| 달력 헤더 클릭 날짜 이동 | "May 2026" 클릭 시 드롭다운 이동 미구현 |
+| 위젯 상세 팝업 모달 | news/stocks "전체 보기" 모달 구현됨; trends 상세보기(좌우 버튼 넘기기)는 미구현 |
 | 스마트 위젯 포맷 정의 | 일반 위젯 양식 기반 포맷 미확정 |
 | Diary PIN 설정 기능 | 설정 내 PIN 저장/수정, 본인 확인 질문 authenticate 미구현 |
-| 글씨 크기 전체 위젯 적용 | 현재 trends 위젯에만 적용됨 |
-| 설정 모달 크기 고정 | 왼쪽 패널 클릭 시 오른쪽 패널 높이 변동 → 스크롤 처리 필요 |
-| AI 브리핑 품질 개선 | 형식 고정 (날짜→날씨→일정→diary→관심사 순서), 새로고침 시 내용 변동성 제거, 모달 레이아웃 정갈화 |
-| Stocks 통화 단위 표시 | 미장 $, 국장 ₩ 표시 (normalizeStockItem 수정 필요) |
 | Stocks Edge Function 배포 | 로컬 수정 완료, Supabase Dashboard 수동 배포 후 KOSPI/NASDAQ/SP500 정상값 확인 필요 |
+| groq Edge Function 배포 | charset=utf-8 헤더 추가, Supabase Dashboard 수동 배포 필요 |
 | i18n 전체 적용 완료 | 대시보드, 설정, 브리핑 전 영역에 언어 설정 반영 마무리 |
 
 ---

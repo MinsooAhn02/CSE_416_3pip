@@ -3,10 +3,12 @@ import { Search, X, RefreshCw } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useTheme } from "../../hooks/useTheme";
 import { useWidgetStore } from "../../store/useWidgetStore";
+import { useFontSize } from "../../hooks/useFontSize";
 import DragHandle from "../common/DragHandle";
 
 const SmartWidgetContent = ({ keyword }) => {
 	const { isDark, cardCls, muted, hoverCls, secondaryBgCls } = useTheme();
+	const { body: bodyStyle, title: titleStyle } = useFontSize();
 	const { i18n } = useTranslation();
 	const isKo = i18n.language?.startsWith("ko");
 
@@ -63,8 +65,8 @@ const SmartWidgetContent = ({ keyword }) => {
 					className={`text-center py-8 rounded-xl flex flex-col items-center justify-center ${secondaryBgCls}`}
 				>
 					<div className="text-3xl mb-3 animate-pulse">🔍</div>
-					<p className={`text-sm font-medium mb-1 ${muted}`}>{loadingMsg}</p>
-					{error && <p className="text-xs text-red-400 mt-2">{error}</p>}
+					<p className={`font-medium mb-1 ${muted}`} style={bodyStyle}>{loadingMsg}</p>
+					{error && <p className="text-red-400 mt-2" style={bodyStyle}>{error}</p>}
 				</div>
 			</div>
 		);
@@ -122,7 +124,8 @@ const SmartWidgetContent = ({ keyword }) => {
 							.map((section, i) => (
 								<div key={i} className="mb-3">
 									<p
-										className={`text-[10px] font-bold uppercase tracking-wider mb-2 ${muted}`}
+										className={`font-bold uppercase tracking-wider mb-2 ${muted}`}
+									style={titleStyle}
 									>
 										{section.title}
 									</p>
@@ -132,7 +135,8 @@ const SmartWidgetContent = ({ keyword }) => {
 										{section.bullets?.map((bullet, j) => (
 											<p
 												key={j}
-												className="text-xs leading-relaxed flex gap-1.5"
+												className="leading-relaxed flex gap-1.5"
+									style={bodyStyle}
 											>
 												<span className={`${muted} shrink-0`}>•</span>
 												<span>{bullet}</span>
@@ -146,7 +150,8 @@ const SmartWidgetContent = ({ keyword }) => {
 							.map((section, i) => (
 								<div key={i}>
 									<p
-										className={`text-[10px] font-bold uppercase tracking-wider mb-1.5 ${muted}`}
+										className={`font-bold uppercase tracking-wider mb-1.5 ${muted}`}
+									style={titleStyle}
 									>
 										{section.title}
 									</p>
@@ -160,8 +165,8 @@ const SmartWidgetContent = ({ keyword }) => {
 													window.open(item.url, "_blank", "noopener,noreferrer")
 												}
 											>
-												<p className="text-xs">{item.title}</p>
-												<p className={`text-[10px] ${muted}`}>
+												<p style={bodyStyle}>{item.title}</p>
+												<p className={muted} style={bodyStyle}>
 													{item.source} · {item.time}
 												</p>
 											</div>
@@ -170,7 +175,7 @@ const SmartWidgetContent = ({ keyword }) => {
 								</div>
 							))}
 						{error && (
-							<p className="text-[10px] text-center mt-2 text-red-400">
+							<p className="text-center mt-2 text-red-400" style={bodyStyle}>
 								{error}
 							</p>
 						)}

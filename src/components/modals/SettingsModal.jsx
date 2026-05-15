@@ -365,23 +365,23 @@ const SettingsModal = () => {
 	return (
 		<div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[20500] p-4">
 			<div
-				className={`w-full max-w-2xl rounded-3xl shadow-2xl border overflow-hidden ${
+				className={`w-full max-w-2xl rounded-3xl shadow-2xl border overflow-hidden flex flex-col h-[640px] max-h-[85vh] ${
 					isDark
 						? "bg-slate-800 border-white/20 text-white"
 						: "bg-white border-gray-200 text-slate-800"
 				}`}
 			>
 				<div
-					className={`flex items-center justify-between p-6 border-b ${isDark ? "border-white/10" : "border-gray-200"}`}
+					className={`flex-shrink-0 flex items-center justify-between p-6 border-b ${isDark ? "border-white/10" : "border-gray-200"}`}
 				>
 					<h2 className="text-lg font-bold">{settingsCopy.title}</h2>
 					<button onClick={() => setShowSettings(false)}>
 						<X size={20} className="opacity-60 hover:opacity-100" />
 					</button>
 				</div>
-				<div className="flex min-h-[400px]">
+				<div className="flex flex-1 min-h-0 overflow-hidden">
 					<div
-						className={`w-44 border-r p-4 space-y-1 ${isDark ? "border-white/10" : "border-gray-200"}`}
+						className={`w-44 flex-shrink-0 border-r p-4 space-y-1 overflow-y-auto ${isDark ? "border-white/10" : "border-gray-200"}`}
 					>
 						{[
 							{ id: "widgets", label: settingsCopy.tabs.widgets },
@@ -409,7 +409,7 @@ const SettingsModal = () => {
 							</button>
 						))}
 					</div>
-					<div className="flex-1 p-6 overflow-y-auto max-h-[500px]">
+					<div className="flex-1 p-6 overflow-y-auto min-h-0">
 						{settingsTab === "widgets" && (
 							<div className="space-y-3">
 								<div

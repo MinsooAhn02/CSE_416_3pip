@@ -6,6 +6,7 @@ import { useDiaryStore } from "../../store/useDiaryStore";
 import { useAuthStore } from "../../store/useAuthStore";
 import { useDataStore } from "../../store/useDataStore";
 import { useSettingsStore } from "../../store/useSettingsStore";
+import { useFontSize } from "../../hooks/useFontSize";
 import { generatePersonalizedQuestion } from "../../services/aiService";
 import { formatLocalDate } from "../../utils/date";
 
@@ -20,6 +21,7 @@ const todayStr = () => formatLocalDate();
 
 const DiaryCard = () => {
 	const { cardCls, cardShadowCls, isDark, inputCls, muted } = useTheme();
+	const { body: bodyStyle } = useFontSize();
 	const { t, i18n } = useTranslation();
 
 	const addAnswer = useDiaryStore((s) => s.addAnswer);
@@ -112,13 +114,13 @@ const DiaryCard = () => {
 			className={`rounded-2xl border p-5 ${cardShadowCls} transition-colors duration-300 ${cardCls} h-full min-h-0 flex flex-col overflow-hidden`}
 		>
 			{/* 헤더 */}
-			<div className="flex items-center gap-2 mb-4">
+			<div className="flex-shrink-0 flex items-center gap-2 mb-4">
 				<MessageCircle size={16} className="text-blue-400" />
 				<h2 className="font-bold text-sm">{t("diary.daily_question_title")}</h2>
 			</div>
 
-			{/* 질문 영역 */}
-			<div className="min-h-[44px] mb-4">
+			{/* 질문 영역 — 질문이 길어질 경우 max-h 40%에서 내부 스크롤, textarea 침범 방지 */}
+			<div className="flex-shrink-0 max-h-[40%] overflow-y-auto mb-4 min-h-[1.5rem]">
 				{isLoadingQ ? (
 					<div className="flex items-center gap-2">
 						<Loader2 size={14} className={`animate-spin ${muted}`} />
@@ -127,13 +129,13 @@ const DiaryCard = () => {
 						</span>
 					</div>
 				) : (
-					<p className="text-sm font-medium leading-relaxed">{question}</p>
+					<p className="font-medium leading-relaxed" style={bodyStyle}>{question}</p>
 				)}
 			</div>
 
 			{/* 답변 입력 */}
 			<textarea
-				className={`w-full flex-1 min-h-[5.5rem] border rounded-xl p-3 text-sm resize-none overflow-hidden outline-none focus:ring-2 focus:ring-blue-500/30 transition-all ${inputCls} ${
+				className={`w-full flex-1 min-h-[3rem] border rounded-xl p-3 resize-none overflow-hidden outline-none focus:ring-2 focus:ring-blue-500/30 transition-all ${inputCls} ${
 					saved ? "opacity-50" : ""
 				}`}
 				value={answerText}
@@ -141,10 +143,11 @@ const DiaryCard = () => {
 				onKeyDown={handleKeyDown}
 				placeholder={t("diary.daily_question_placeholder")}
 				disabled={isLoadingQ || isSaving || saved}
+				style={bodyStyle}
 			/>
 
 			{/* 하단: 저장 상태 + 버튼 */}
-			<div className="mt-3 flex items-center justify-between">
+			<div className="flex-shrink-0 mt-3 flex items-center justify-between">
 				{/* 저장 상태 표시 */}
 				<div className="h-5">
 					{saved && (
