@@ -77,27 +77,20 @@
     - 파일: `src/store/useDataStore.js`
     - 내용: include_domains + filterLocalizedArticles 동작 검증
 
-101. 일기장에 diary card에 답변한 내용이 적혀있지 않을 뿐더러, ai briefing의 내용이 들어가 있지 않음
-
-**중요!!**
-102. stocks widget: 아직도 ticker 를 입력하면 값이 0이여서 --가 되는 버그가 있음. vix, aapl 등 몇개의 주식이나 지수도 입력이 안됌. 주식과 지수를 동시에 입력하는 로직이 잘못되었나 점검을 해야할 듯.
-103. 뉴스 - 한국어 왜 안됨? tavily
-원인 & 수정 요약
-
-  ┌───────────────────────────────────┬─────────────────────────────┬─────────────────────────────────────┐
-  │               원인                │            증상             │                수정                 │
-  ├───────────────────────────────────┼─────────────────────────────┼─────────────────────────────────────┤
-  │ include_domains: KO_NEWS_DOMAINS  │ Tavily가 그 도메인들을 잘   │ Korean 모드에서 include_domains     │
-  │ Tavily에서 hard filter처럼 작동   │ 인덱싱 못해서 결과 0개 반환 │ 제거. 한국어 쿼리 텍스트 +          │
-  │                                   │                             │ 클라이언트 필터로 대체              │
-  ├───────────────────────────────────┼─────────────────────────────┼─────────────────────────────────────┤
-  │ scoreArticleForLanguage 과도한    │ 한국 도메인(yna.co.kr 등)   │ KO_NEWS_DOMAINS 기사는 영어         │
-  │ 엄격성                            │ 기사도 영어 제목이면        │ 제목이어도 최소 점수로 통과         │
-  │                                   │ score=-1 탈락               │                                     │
-  ├───────────────────────────────────┼─────────────────────────────┼─────────────────────────────────────┤
-  │                                   │ Edge function이             │                                     │
-  │ location Tavily API 미전달        │ geolocation을 받아도 Tavily │ tavilyBody.location 추가            │
-  │                                   │  body에 안 넣음             │                                     │
-  └───────────────────────────────────┴─────────────────────────────┴─────────────────────────────────────┘
+101. 자동 생성된 일기장 내용에서 브리핑의 내용이 없음. 오류 수정 시급. 
 
 100. (마무리 단계) i18n En/Ko 설정 적용. dashboard, user settings, briefing에서도 설정한 언어로 display.
+
+smart widgets(난이도: 상):
+   스마트 키워드도 이상함. Super Mario Galaxy Movie를 입력했는데, English language settings로는 관련 내용이 요약되어서 잘 나오지만 Korean language settings는 관련없는 내용이 나옴(e.g. Law Firms' Misleading Ads, Privacy Breaches Spark Outcry - 조선일보). 로직 분석 후 확인 필요. 원인 발견 필요.
+
+user settings ui 수정(난이도: 하):
+   user settings에서 smart keywords의 입력창이 키워드 rows위 하단에 있는데, 그게 아니라 관심사 키워드 설정에서 입력창처럼 항시 상단 고정이어야 함.
+
+calendar(난이도: 중):
+   calendar에서 일기장이 생성된 날에는 파란색 동그라미 표시가 있어야 되는데, 그 표시가 사라짐. 분석 후 코드 작업 전 확인 받을 것.
+
+stocks widgets(난이도: 중):
+   주식 위젯: 지수이면 $나 Won symbol이 필요 없음. 주식만 필요함. 이 로직을 구현할 수 있는 코드를 생각해봐야 함.
+
+plan with opus, execute work with sonnet(swtich model required). ask questions if unclear. After the entire execution, update in @DOCS.md

@@ -7,7 +7,6 @@ import { getInterestFingerprint, getTopInterestKeywords } from "../utils/interes
 import { useSettingsStore } from "./useSettingsStore";
 import { useAuthStore } from "./useAuthStore";
 import i18n from "../l10n/i18n";
-import { fetchCalendarEvents as mockFetchCalendarEvents } from "../mock/data";
 
 const DEBUG_FLOW = import.meta.env.VITE_DEBUG_FLOW === "1";
 const EDGE_TIMEOUT_MS = 25000;
@@ -478,16 +477,18 @@ const scoreLocalizedText = (text, language) => {
 
 const scoreArticleForLanguage = (item, language) => {
 	const title = normalizeReadableText(item?.title);
+	const content = normalizeReadableText(item?.content);
 	const host = getUrlHost(item?.url);
 
 	const titleScore = scoreLocalizedText(title, language);
+	const contentScore = scoreLocalizedText(content, language);
 	const isKoHost = KO_NEWS_DOMAINS.some((domain) => host.includes(domain));
 	const isEnHost = EN_NEWS_DOMAINS.some((domain) => host.includes(domain));
 	const hostBonus = language === "ko" ? (isKoHost ? 2 : 0) : (isEnHost ? 2 : 0);
 
 	if (language === "ko") {
 		if (titleScore > 0) return titleScore * 4 + hostBonus;
-		// 신뢰할 수 있는 한국 도메인 기사는 영어 제목이어도 수용 (낮은 우선순위)
+		if (contentScore > 0) return contentScore * 2 + hostBonus;
 		if (isKoHost) return hostBonus;
 		return -1;
 	}
@@ -660,33 +661,47 @@ const dedupeArticles = (items = []) => {
 	});
 };
 
-// lang=ko 모드에서 KO_NEWS_DOMAINS 화이트리스트를 우선 적용.
-// 이 함수는 filterLocalizedArticles가 language score > 0 (한국어 기사)만 추린 뒤 호출되므로,
-// 도메인 필터 후 0개면 items(이미 한국어 기사들)를 그대로 반환해도 안전.
-// → 1차: 한국 신뢰 도메인 기사, 2차: 한국어 기사(도메인 무관), 3차: 빈 상태 (영어 기사 불가)
+// ko 모드: KO_NEWS_DOMAINS를 hard-filter 대신 sort 우선순위로 활용.
+// 이미 scoreArticleForLanguage로 한국어 기사만 통과했으므로 도메인 필터로 추가 탈락 없이
+// 신뢰 도메인 기사를 앞으로 정렬만 한다.
 const filterByAllowedDomains = (items, language) => {
 	if (language !== "ko" || !Array.isArray(items) || items.length === 0) {
 		return items;
 	}
-	const filtered = items.filter((item) =>
-		KO_NEWS_DOMAINS.some((domain) => getUrlHost(item?.url).includes(domain)),
-	);
-	// filtered가 비어도 items는 이미 언어 점수 양수 = 한국어 기사들만 → 안전한 fallback
-	return filtered.length > 0 ? filtered : items;
+	return items.slice().sort((a, b) => {
+		const aKo = KO_NEWS_DOMAINS.some((d) => getUrlHost(a?.url).includes(d)) ? 1 : 0;
+		const bKo = KO_NEWS_DOMAINS.some((d) => getUrlHost(b?.url).includes(d)) ? 1 : 0;
+		return bKo - aKo;
+	});
 };
 
 const filterLocalizedArticles = (items, language, limit = 10) => {
-	const localized = dedupeArticles(
+	const scored = dedupeArticles(
 		(Array.isArray(items) ? items : [])
 			.map((item) => {
 				const normalized = normalizeArticleItem(item);
+				if (!normalized.title && !normalized.url) return null;
 				const score = scoreArticleForLanguage(normalized, language);
-				return score > 0 ? { ...normalized, __score: score } : null;
+				return { ...normalized, __score: score };
 			})
 			.filter(Boolean)
 			.sort((a, b) => b.__score - a.__score),
-	).map(({ __score, ...rest }) => rest);
-	return filterByAllowedDomains(localized, language).slice(0, limit);
+	);
+
+	if (language === "ko") {
+		// Korean mode: accept all articles (Tavily often returns English-about-Korea results);
+		// translateArticlesToKorean downstream handles the English ones.
+		// Korean-language articles bubble to the top via score sort.
+		return filterByAllowedDomains(
+			scored.map(({ __score, ...rest }) => rest),
+			language,
+		).slice(0, limit);
+	}
+
+	const localized = scored
+		.filter((item) => item.__score > 0)
+		.map(({ __score, ...rest }) => rest);
+	return filterByAllowedDomains(dedupeArticles(localized), language).slice(0, limit);
 };
 
 const buildTrendTitlesFromResults = (items, limit = 8) =>
@@ -1277,7 +1292,11 @@ export const useDataStore = create((set, get) => ({
 		try {
 			const edge = await invokeEdgeDetailed("stocks", { symbols: [symbol] });
 			if (!edge?.ok || !Array.isArray(edge.data) || edge.data.length === 0) return false;
-			return Number(edge.data[0]?.price ?? 0) > 0;
+			const row = edge.data[0];
+			if (!row || typeof row !== "object") return false;
+			if (Number(row.price ?? 0) > 0) return true;
+			// Upstream temporarily returning 0 — accept if the symbol round-trips correctly.
+			return String(row.symbol ?? "").toUpperCase() === String(symbol).toUpperCase();
 		} catch {
 			return false;
 		}
@@ -1472,18 +1491,7 @@ export const useDataStore = create((set, get) => ({
 				5,
 			);
 
-		// 위치 정보로 지역 뉴스 캐시 키 결정
-		let locationLabel = "KR";
-		let locationObj = null;
-		const geo = await getGeoPosition();
-		if (geo) {
-			const lat = Math.round(geo.lat * 10) / 10;
-			const lon = Math.round(geo.lon * 10) / 10;
-			locationLabel = `${lat}_${lon}`;
-			locationObj = { lat, lon };
-		}
-
-		const cacheKey = `news_${locationLabel}_${lang}_${interestFingerprint}`;
+		const cacheKey = `news_${lang}_${interestFingerprint}`;
 
 		// ✅ 캐시 우선 확인 (cacheKey에 언어가 포함되어 있으므로 언어별로 독립 캐시됨)
 		if (!force) {
@@ -1517,32 +1525,27 @@ export const useDataStore = create((set, get) => ({
 			errors: { ...s.errors, news: null },
 		}));
 		try {
-			// 지역 뉴스 5개 + 글로벌 뉴스 5개 병렬 호출
+			// 로컬 뉴스 5개 + 글로벌 뉴스 5개 병렬 호출 (geolocation 제거 — 언어별 쿼리로 대체)
 			const interestClause = topKeywords.length > 0
-				? (isEn ? ` topics: ${topKeywords.join(", ")}` : ` 관심사: ${topKeywords.join(", ")}`)
+				? (isEn ? ` Focus topics: ${topKeywords.join(", ")}.` : ` 관심 주제: ${topKeywords.join(", ")}.`)
 				: "";
 			const localQuery = isEn
-				? (locationObj
-					? `latest English-language local breaking news today near latitude ${locationObj.lat} longitude ${locationObj.lon}${interestClause}`
-					: `latest English-language South Korea breaking news today${interestClause}`)
-				: (locationObj
-					? `반드시 한국어 기사 제목만 사용하고 영어/외국어 기사 제목은 제외. 현재 위치(위도 ${locationObj.lat}, 경도 ${locationObj.lon}) 주변 지역의 한국어 최신 뉴스 속보${interestClause}`
-					: `반드시 한국어 기사 제목만 사용하고 영어/외국어 기사 제목은 제외. 대한민국 한국어 최신 뉴스 속보${interestClause}`);
+				? `Top 10 live issues in America: politics, tech, economy, lifestyle trends today.${interestClause}`
+				: `대한민국 실시간 주요 뉴스: 정치, 경제, IT, 라이프스타일, 사회 트렌드 오늘.${interestClause}`;
 
 			// ko 모드: include_domains 없이 Tavily에 한국어 쿼리만 전달.
 			// include_domains: KO_NEWS_DOMAINS를 쓰면 Tavily 인덱스가 빈약한 한국 도메인에서
 			// 결과 0개가 나오는 경우가 많음. 언어 필터링은 클라이언트 scoreArticleForLanguage에서 수행.
 			const includeDomains = isEn ? EN_NEWS_DOMAINS : [];
 			const globalNewsQuery = isEn
-				? "top English-language world breaking news headlines today"
-				: "반드시 한국어 기사 제목만 사용하고 영어/외국어 기사 제목은 제외. 한국어 기사 기준 세계 주요 뉴스 속보 오늘";
+				? "Top world breaking news today: international politics, business, technology, science."
+				: "오늘의 세계 주요 뉴스 속보: 국제 정치, 경제, 기술, 과학.";
 
 			const [localEdge, globalEdge] = await Promise.all([
 				invokeEdgeDetailed("tavily", {
 					query: localQuery,
 					mode: "news",
 					max_results: 5,
-					location: locationObj,
 					...(includeDomains.length > 0 ? { include_domains: includeDomains } : {}),
 				}),
 				invokeEdgeDetailed("tavily", {
@@ -1648,8 +1651,7 @@ export const useDataStore = create((set, get) => ({
 	   ══════════════════════════════════════════ */
 	fetchCalendar: async (userId, force = false) => {
 		if (!supabase) {
-			const mock = await mockFetchCalendarEvents();
-			set({ calEvents: mock });
+			set({ calEvents: [] });
 			get().markFetched("calendar");
 			return;
 		}
@@ -1672,8 +1674,7 @@ export const useDataStore = create((set, get) => ({
 			} = await supabase.auth.getSession();
 			const token = session?.provider_token;
 			if (!token) {
-				const mock = await mockFetchCalendarEvents();
-				set({ calEvents: mock });
+				set({ calEvents: [] });
 				get().markFetched("calendar");
 				return;
 			}
@@ -1692,18 +1693,12 @@ export const useDataStore = create((set, get) => ({
 				await writeApiCache(cacheKey, todayEvents, userId);
 				get().markFetched("calendar");
 			} else {
-				const mock = await mockFetchCalendarEvents();
-				set({ calEvents: cached("calendar", mock) });
+				set({ calEvents: cached("calendar", []) });
 				get().markFetched("calendar");
 			}
 		} catch (e) {
 			console.warn("fetchCalendar failed:", e?.message || e);
-			try {
-				const mock = await mockFetchCalendarEvents();
-				set({ calEvents: cached("calendar", mock) });
-			} catch {
-				/* mock 실패 무시 */
-			}
+			set({ calEvents: cached("calendar", []) });
 			get().markFetched("calendar");
 		}
 	},

@@ -1,11 +1,12 @@
 import { create } from "zustand";
 import { load, save } from "../utils/storage";
 import { supabase } from "../lib/supabase";
+import { formatLocalDate } from "../utils/date";
 
 const STORAGE_KEY = "mb_briefing_history";
 const SAVE_INTERVAL_MS = 3 * 60 * 60 * 1000; // 3시간
 
-const todayStr = () => new Date().toISOString().slice(0, 10);
+const todayStr = () => formatLocalDate();
 
 const loadLocal = () => load(STORAGE_KEY, {});
 const saveLocal = (byDate) => save(STORAGE_KEY, byDate);

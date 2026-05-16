@@ -60,25 +60,34 @@ const getStockNumericValue = (stock) => {
 	return Number.isFinite(parsed) ? parsed : 0;
 };
 
-const StockCard = ({ s, isDark, secondaryBgCls, bodyStyle }) => (
-	<div className={`p-3 rounded-xl ${secondaryBgCls}`}>
-		<div className="flex justify-between items-center mb-1">
-			<span
-				className={isDark ? "text-gray-400" : "text-slate-500"}
-				style={bodyStyle}
-			>
-				{s.name}
-			</span>
-			<span
-				className={s.up ? "text-red-400" : "text-blue-400"}
-				style={bodyStyle}
-			>
-				{s.up ? "▲" : "▼"} {s.change}
-			</span>
+const StockCard = ({ s, isDark, secondaryBgCls, bodyStyle }) => {
+	const cur = getCurrency(s);
+	const curSymbol = cur === "KRW" ? "₩" : cur === "USD" ? "$" : "";
+	return (
+		<div className={`p-3 rounded-xl ${secondaryBgCls}`}>
+			<div className="flex justify-between items-center mb-1">
+				<span
+					className={isDark ? "text-gray-400" : "text-slate-500"}
+					style={bodyStyle}
+				>
+					{s.name}
+				</span>
+				<span
+					className={s.up ? "text-red-400" : "text-blue-400"}
+					style={bodyStyle}
+				>
+					{s.up ? "▲" : "▼"} {s.change}
+				</span>
+			</div>
+			<p className="text-lg font-bold">
+				{curSymbol && (
+					<span className="text-xs font-normal opacity-50 mr-0.5">{curSymbol}</span>
+				)}
+				{s.value}
+			</p>
 		</div>
-		<p className="text-lg font-bold">{s.value}</p>
-	</div>
-);
+	);
+};
 
 const CURRENCY_MAP = {
 	KOSPI: "KRW",
@@ -232,7 +241,7 @@ const StocksWidget = () => {
 		const next = [...normalizedStockSymbols, symbol];
 		setStockSymbols(next);
 		setCustomSymbol("");
-		await fetchStocks(next);
+		await fetchStocks(next, undefined, true);
 	};
 
 	return (
@@ -470,7 +479,13 @@ const StocksWidget = () => {
 																						</span>
 																					</div>
 																					<p className="text-lg font-bold">
-																						{s.value}
+																						{(() => {
+																							const cur = getCurrency(s);
+																							const sym = cur === "KRW" ? "₩" : cur === "USD" ? "$" : "";
+																							return sym ? (
+																								<><span className="text-[9px] font-normal opacity-50 mr-0.5">{sym}</span>{s.value}</>
+																							) : s.value;
+																						})()}
 																					</p>
 																				</div>
 																			)}

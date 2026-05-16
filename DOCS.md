@@ -283,17 +283,34 @@ Fallback: user.id 지연 시 1200ms 타임아웃 후 fetchAll() 단독 실행
 
 **뉴스 fetch 세부:**
 - 지역 뉴스 5개 + 글로벌 뉴스 5개 병렬 호출 후 merged (최대 10개)
-- 관심사 상위 5개를 쿼리에 삽입: 한국어 `관심: kw1, kw2`, 영어 `topics: kw1, kw2`
-- 한국어 모드: `include_domains: ["news.naver.com", "yna.co.kr", "chosun.com", "joins.com", "hani.co.kr", "news1.kr"]`
+- 캐시 키: `news_${lang}_${interestFingerprint}` (언어별/관심사별 독립 캐시)
+- 관심사 상위 5개를 쿼리에 삽입:
+  - 영어: `Top 10 live issues in America: politics, tech, economy, lifestyle trends today. Focus topics: kw1, kw2, ...`
+  - 한국어: `대한민국 실시간 주요 뉴스: 정치, 경제, IT, 라이프스타일, 사회 트렌드 오늘. 관심 주제: kw1, kw2, ...`
+- 글로벌 쿼리:
+  - 영어: `Top world breaking news today: international politics, business, technology, science.`
+  - 한국어: `오늘의 세계 주요 뉴스 속보: 국제 정치, 경제, 기술, 과학.`
+- `include_domains`: **영어 모드만** `EN_NEWS_DOMAINS` 전달. 한국어 모드는 빈 배열 — Tavily의 한국 도메인 인덱스가 빈약해 화이트리스트를 강제하면 결과 0개가 빈번하던 문제(News #103) 우회. 한국어 필터링은 클라이언트 측 `scoreArticleForLanguage`로 수행.
+- `location`(geolocation) 전달 안 함 — 언어별 쿼리로 지역성 표현 대체.
 
 **트렌드 fetch 세부:**
 - 관심사 무관 — 세계/국내 실시간 트렌드 전용 쿼리
-- 한국어: `오늘 대한민국 주요 이슈 인공지능 기술 정치 경제 연예 스포츠 최신 뉴스`
-- 영어: `today major trending news worldwide technology AI politics economy entertainment sports latest`
+- 캐시 키: `trends_full_${lang}`
+- 한국어: `반드시 한국어 기사 제목만 사용. 영어/일본어/중국어/러시아어 등 외국어 제목 제외. 오늘 대한민국 주요 이슈 인공지능 기술 정치 경제 연예 스포츠 최신 뉴스`
+- 영어: `English-language major trending news headlines today worldwide technology AI politics economy entertainment sports latest`
+- `include_domains`: 양 언어 모두 `EN_NEWS_DOMAINS` / `KO_NEWS_DOMAINS` 전달 (`fetchTrends` L1395) — 트렌드는 신뢰 도메인 위주가 유리.
 - 반환: `trendsResults [{title, url, content}]` (Tavily 기사 제목을 트렌드 키워드로 사용)
 
-**뉴스 언어 필터:**
-- `filterByAllowedDomains(items, language)`: `lang === "ko"` 시 URL host가 `KO_NEWS_DOMAINS`에 없는 기사를 클라이언트 측 제거 (Tavily `include_domains` 미준수 방어). 결과 0이면 원본 유지.
+**뉴스 언어 필터 (클라이언트 측, `useDataStore.js`):**
+- `scoreArticleForLanguage(item, "ko")` (L478–498):
+  - title에 한글 점수 > 0 → `titleScore * 4 + hostBonus`
+  - content에 한글 점수 > 0 → `contentScore * 2 + hostBonus` (영어 제목이라도 본문 한글이면 통과)
+  - KO_NEWS_DOMAINS host → `hostBonus` (2)
+  - 위 모두 미달 → `-1` (탈락)
+- `filterLocalizedArticles(items, "ko", limit)` (L678–705):
+  - 한국어 모드: 점수 음수 탈락 없이 **모두 통과** (Tavily가 영어-한국 기사를 자주 반환 → 다운스트림 `translateArticlesToKorean`이 한글 번역). KO 도메인 기사는 정렬로 앞에 배치.
+  - 영어 모드: 점수 > 0 통과, hostBonus≥2(EN_NEWS_DOMAINS)도 통과.
+- `filterByAllowedDomains(items, "ko")` (L664–676): **정렬 전용**. KO_NEWS_DOMAINS 매칭 기사를 앞으로 정렬할 뿐 누락시키지 않음 (이전 하드 필터 → sort-only 변경, 신뢰 도메인 외 한국어 기사 누락 방지).
 
 **트렌드 인메모리 캐시:**
 - `_trendsMemCache` (모듈 레벨 맵): `fetchTrends` 1순위 체크 — hit 시 loading 없이 즉시 표시.
@@ -303,7 +320,7 @@ Fallback: user.id 지연 시 1200ms 타임아웃 후 fetchAll() 단독 실행
 **외부 리스너 (모듈 레벨):**
 
 ```js
-// 언어 변경 → 뉴스 + 트렌드 강제 재호출
+// 언어 변경 → 뉴스 + 트렌드 재호출 (캐시 우선, 언어별 독립 키)
 i18n.on("languageChanged", () => { ... });
 
 // 관심사 변경 → 뉴스만 강제 재호출 (트렌드는 관심사 무관)
@@ -312,6 +329,9 @@ useSettingsStore.subscribe((state) => {
   if (fingerprint !== _prevInterestFingerprint) fetchNews(userId, true);
 });
 ```
+
+- 언어 변경 리스너는 `force=true` 미사용. 캐시 키가 `news_${lang}_*` / `trends_full_${lang}` 로 언어별 독립이라 신규 언어 캐시가 hit이면 그대로 사용, miss이면 자연스러운 fresh fetch. "강제 재호출"이라는 표현 대신 "재호출 (캐시 우선)" 으로 이해해야 정확.
+- 관심사 변경 리스너만 `force=true` 사용 — fingerprint가 바뀌면 즉시 새 쿼리로 fresh fetch가 필요하므로.
 
 ---
 
@@ -1198,3 +1218,146 @@ https://www.googleapis.com/auth/fitness.activity.read
 - 모달 뷰는 변경 없음 (기존 divide-y 섹션 구조 그대로).
 
 ---
+
+## 19) 2026-05-16 — Briefing/Diary 자동화 버그 수정 (Fix A–E)
+
+### Fix A: BriefingWidget `ensureYesterdayDiaryForMorning` 제거
+
+- **파일**: `src/components/widgets/BriefingWidget.jsx`
+- **문제**: 브리핑 생성 시 전날 일기가 없으면 자동으로 일기를 생성하고 `saveDiary`로 저장했으나,
+  이 경로는 `saveGeneratedDiary` 대신 `saveDiary`를 사용해 `aiGeneratedDiary` baseline이 세팅되지 않았다.
+  결과적으로 사용자 피드백 반영 재작성(rewrite) 흐름이 깨졌다.
+- **해결**: `ensureYesterdayDiaryForMorning` 함수 전체 삭제, `autoDiaryStatusRef` 삭제, `saveDiary` 셀렉터 삭제.
+  전날 일기는 `diaryEntries[yesterdayDateStr]?.diary`에서 그대로 읽어 context에 주입.
+  자동 일기 생성은 `useMidnightTrigger`의 전담 경로(Fix B/C 참조)로만 수행.
+
+### Fix B: `useMidnightTrigger` hydrate 완료 후 실행
+
+- **파일**: `src/App.jsx`
+- **문제**: `useMidnightTrigger(isLoggedIn)`가 로그인 직후 store hydrate(DB 조회)가 끝나기 전에 발화해
+  빈 데이터로 일기 생성을 시도하거나 중복 시도가 발생했다.
+- **해결**: `hydrateComplete` boolean state 추가.
+  `Promise.all([...hydrateFromDB])` 완료 직후 `setHydrateComplete(true)`, 로그아웃 시 `false` 리셋.
+  `useMidnightTrigger(isLoggedIn && hydrateComplete)`로 게이팅.
+
+### Fix C: `useBriefingHistoryStore` 날짜 UTC→로컬 수정
+
+- **파일**: `src/store/useBriefingHistoryStore.js`
+- **문제**: `const todayStr = () => new Date().toISOString().slice(0, 10)` — UTC 기준 날짜라서
+  KST(UTC+9) 또는 PT(UTC-8) 환경에서 자정 전후 스냅샷이 엉뚱한 날짜 key에 저장됐다.
+- **해결**: `import { formatLocalDate } from "../utils/date"` 추가,
+  `const todayStr = () => formatLocalDate()`로 교체 → 로컬 시간 기준 YYYY-MM-DD.
+
+### Fix D: `BriefingWidget.yesterdayDateStr` UTC→로컬 수정
+
+- **파일**: `src/components/widgets/BriefingWidget.jsx`
+- **문제**: `new Date().toISOString().slice(0, 10)` 기반 useMemo로 "어제" 날짜를 계산해
+  KST 자정 직후 UTC 기준으로 하루 앞선 날짜를 읽어 전날 일기를 찾지 못했다.
+- **해결**: `import { shiftDateString, formatLocalDate } from "../../utils/date"` 추가,
+  `const yesterdayDateStr = shiftDateString(formatLocalDate(), -1)`로 교체.
+
+### Fix E: `initialGenDoneRef` → `useState` 변환
+
+- **파일**: `src/components/widgets/BriefingWidget.jsx`
+- **문제**: `const initialGenDoneRef = useRef(false)`는 변경돼도 리렌더를 트리거하지 않아
+  1시간 interval useEffect의 deps 배열에 `[initialGenDoneRef.current]`를 넣어도
+  ref가 `true`로 바뀌는 시점에 interval이 등록되지 않았다.
+  결과: 초기 생성 완료 후 1시간 자동 재생성이 실행되지 않았다.
+- **해결**: `const [initialGenDone, setInitialGenDone] = useState(false)`로 교체.
+  `setInitialGenDone(true)` 호출 시 리렌더가 발생하고 interval useEffect deps `[initialGenDone]`이
+  정상적으로 interval을 등록한다.
+
+---
+
+## 20) 2026-05-16 — AI Briefing: 가짜 캘린더 일정 노출 버그 수정
+
+### 증상
+
+AI 브리핑 "Today's schedule / 오늘 일정" 섹션에 사용자의 실제 일정과 무관한 항목들이 항상 같은 내용으로 노출됨:
+
+- `CSE 416 팀 미팅`
+- `점심 약속`
+- `라이브러리 스터디`
+- `헬스장 운동`
+
+### 원인
+
+`src/mock/data.js`의 `mockCalendarEvents` 하드코딩 fallback이 AI 브리핑 컨텍스트로 흘러들어감.
+
+- Google OAuth `provider_token`이 없는 사용자(이메일/비번 가입, 토큰 만료 등) → `fetchCalendar()`가 mock 데이터를 `calEvents`로 set.
+- mock 항목은 `time: "09:00"` 같은 문자열만 보유하고 실제 `start`/`endTime` ISO datetime이 없음.
+- `BriefingWidget`의 방어용 `endTime >= now` 필터(L146–156)는 `endTime=undefined`라서 mock 이벤트를 그대로 통과시킴.
+- `aiService.generateDetailedBriefing()`은 빈 배열일 때만 "일정 없음"을 출력하므로 mock 4개가 LLM 프롬프트에 주입.
+
+### 과거 일정 누락 검증
+
+`supabase/functions/events/index.ts`의 `getListRange()` L286 — `todayOnly: true`일 때 `timeMin: now.toISOString()` 사용. Google API 단계에서 이미 과거 일정 제외됨. 위젯도 endTime 기준 추가 필터를 적용. **실제 Google Calendar 데이터에서 과거 일정 누락 경로 없음.** 보고된 가짜 항목은 mock fallback 단일 원인.
+
+### 해결
+
+- **파일**: `src/store/useDataStore.js`
+- L10 `mockFetchCalendarEvents` import 제거.
+- `fetchCalendar`의 4개 mock fallback 분기를 빈 배열로 교체:
+  1. `if (!supabase)` 분기 → `set({ calEvents: [] })`
+  2. `if (!token)` 분기 (Google OAuth 미연결) → `set({ calEvents: [] })`
+  3. edge 응답이 비배열인 else 분기 → `set({ calEvents: cached("calendar", []) })`
+  4. catch 블록 → `set({ calEvents: cached("calendar", []) })`
+- `fetchTomorrowCalendar`는 이미 token 없을 때 빈 배열 반환 — 변경 없음.
+
+### 영향 범위
+
+- AI 브리핑 `calEvents` 컨텍스트만 영향. 진짜 일정이 없으면 "일정 없음 / No events"로 정직하게 표시.
+- Calendar 위젯은 별도 store(`useGoogleCalendarStore`) 사용 — 무영향.
+- Diary 자동 생성(`diaryGenerationService.fetchCalendarEventsForDate`)은 `event.start || event.date` 필터로 mock을 이미 걸러내고 있어 무영향.
+- `mockCalendarEvents` export는 `src/mock/data.js`에 그대로 둠 — 다른 mock 데이터와 단일 파일 일관성 유지 (import만 끊으면 번들에서 빠짐).
+
+### 회귀 위험
+
+낮음. `aiService.generateDetailedBriefing()`의 morning/afternoon 모드 모두 빈 calEvents 배열을 "일정 없음 / No events" 메시지로 graceful 처리. 기존 Google OAuth 연결 사용자는 동일하게 실제 calendar 이벤트만 받음.
+
+---
+
+## 21) 2026-05-16 — News/Trends 로직 문서 정합화
+
+### 배경
+
+`DOCS.md` § 5.3의 "뉴스 fetch 세부 / 트렌드 fetch 세부 / 뉴스 언어 필터 / 외부 리스너" 섹션이 News #103 fix 이전의 옛 동작을 기술하고 있어 실제 코드(`src/store/useDataStore.js`)와 불일치. 코드는 의도된 fix 상태로 정상 작동 중이므로 **문서만** 갱신.
+
+### 발견된 불일치 (Audit 요약)
+
+| DOCS.md 기술 | 실제 코드 |
+|---|---|
+| `관심: kw1, kw2` | `관심 주제: kw1, kw2` / `Focus topics: ...` (`useDataStore.js` L1530) |
+| 한국어 모드 `include_domains: KO_NEWS_DOMAINS` 전달 | 한국어 모드 빈 배열 `[]` 전달 (L1539) — Tavily 한국 도메인 인덱스 빈약 우회 |
+| 트렌드 ko 쿼리 `오늘 대한민국 …` | prefix `반드시 한국어 기사 제목만 사용 …` 추가됨 (L1394) |
+| 트렌드 en 쿼리 `today major trending news …` | `English-language major trending news headlines today …` (L1393) |
+| `filterByAllowedDomains` 하드 필터, 결과 0 → 원본 유지 | **정렬 전용** (L667–676) |
+| (문서 누락) | `scoreArticleForLanguage` ko 분기에 content Hangul 인정 (L489–493) |
+| (문서 누락) | `filterLocalizedArticles` ko 모드 전체 통과 + 정렬 (L691–698) |
+| `// 언어 변경 → 뉴스 + 트렌드 **강제** 재호출` | 리스너가 `force=true` 없이 호출 — 캐시 키가 언어별이라 stale 누락 없음 (L1995–2004) |
+
+### 갱신 내용
+
+- § 5.3 "뉴스 fetch 세부 / 트렌드 fetch 세부 / 뉴스 언어 필터" 블록을 코드와 1:1 매칭되게 재작성.
+- 한국어 모드 `include_domains` 빈 배열 처리 명시 (Tavily 한국 도메인 인덱스 빈약 우회).
+- `filterByAllowedDomains`: 하드 필터 → 정렬 전용으로 변경된 동작 명시.
+- `scoreArticleForLanguage` ko 분기에 content Hangul 인정 추가됨을 명시.
+- `filterLocalizedArticles` ko 모드의 "전체 통과 + translateArticlesToKorean" 흐름 명시.
+- 뉴스/트렌드 캐시 키 포맷 (`news_${lang}_${fingerprint}`, `trends_full_${lang}`) 명시.
+- 뉴스/트렌드 ko/en 쿼리 문자열 실제 값으로 업데이트.
+- 외부 리스너 코멘트의 "강제 재호출" 문구를 "재호출 (캐시 우선, 언어별 독립 키)" 로 정정 — 캐시가 언어별 키잉되어 stale 누락 없음. force=true 미사용 의도를 본문에 한 줄 추가.
+
+### Tavily Edge Function 점검 (`supabase/functions/tavily/index.ts`)
+
+- `include_domains` 조건부 추가 (L46–48) — 빈 배열이면 전달 안 함 ✓
+- `location` 조건부 추가 (L50–55) — lat/lon 모두 있어야 전달 ✓
+- 디폴트 query (L24) — 클라이언트 측에서 항상 query 명시하므로 미사용 (안전망 역할만) ✓
+- 변경 불필요.
+
+### 코드 변경 없음
+
+`src/store/useDataStore.js`, `supabase/functions/tavily/index.ts` 모두 미수정. 본 작업은 순수 문서 정합화.
+
+### 회귀 위험
+
+없음. 문서 외 파일 변경 0건. News #103 fix 이후의 한국어/영어 뉴스 정상 동작은 그대로 유지.

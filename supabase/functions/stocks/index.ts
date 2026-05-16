@@ -46,10 +46,20 @@ const yahooSymbolMap: Record<string, string> = {
 	KS11: "^KS11",
 	IXIC: "^IXIC",
 	SPX: "^GSPC",
+	VIX: "^VIX",
+	DJI: "^DJI",
+	RUT: "^RUT",
+	N225: "^N225",
+	HSI: "^HSI",
+	FTSE: "^FTSE",
+	VXN: "^VXN",
+	STOXX: "^STOXX50E",
 	EWY: "EWY",
 	QQQ: "QQQ",
 	SPY: "SPY",
 	"USD/KRW": "KRW=X",
+	"EUR/USD": "EURUSD=X",
+	"JPY/USD": "JPY=X",
 };
 
 async function fetchYahooQuote(
@@ -88,11 +98,42 @@ async function fetchYahooQuote(
 	return null;
 }
 
+// Yahoo Finance v8 chart endpoint — more reliably accessible than v7 for server-side calls.
+async function fetchYahooChart(
+	symbol: string,
+): Promise<{ price: number; change: number; changePercent: string } | null> {
+	try {
+		const url = `https://query2.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=1d`;
+		const data = await fetchJsonWithTimeout(url, YAHOO_TIMEOUT_MS);
+		const meta = data?.chart?.result?.[0]?.meta;
+		if (!meta) return null;
+		const price = Number(meta.regularMarketPrice ?? 0);
+		if (!Number.isFinite(price) || price <= 0) return null;
+		const prevClose = Number(meta.chartPreviousClose ?? meta.previousClose ?? price);
+		const change = Number.isFinite(price - prevClose) ? price - prevClose : 0;
+		const changePercent = prevClose > 0 ? (change / prevClose) * 100 : 0;
+		return {
+			price,
+			change,
+			changePercent: toPercentString(changePercent),
+		};
+	} catch {
+		return null;
+	}
+}
+
 async function fetchStooqPrice(alphaSymbol: string): Promise<number | null> {
 	const map: Record<string, string[]> = {
-		KS11: ["^kospi", "^ks11", "ks11"], // ^ks11 is often N/D on Stooq; ^kospi is reliable
-		IXIC: ["^ndq"], // NASDAQ Composite
-		SPX: ["^spx"], // S&P 500
+		KS11: ["^kospi", "^ks11", "ks11"],
+		IXIC: ["^ndq"],
+		SPX: ["^spx"],
+		VIX: ["^vix"],
+		DJI: ["^dji"],
+		RUT: ["^rut"],
+		N225: ["^nkx", "^n225"],
+		HSI: ["^hsi"],
+		FTSE: ["^ftm", "^ftse"],
+		VXN: ["^vxn"],
 		EWY: ["ewy.us"],
 		QQQ: ["qqq.us"],
 		SPY: ["spy.us"],
@@ -187,6 +228,10 @@ serve(async (req) => {
 						if (yahooFx) {
 							return { symbol: sym, ...yahooFx };
 						}
+						const fxChart = await fetchYahooChart(tdSymbol).catch(() => null);
+						if (fxChart) {
+							return { symbol: sym, ...fxChart };
+						}
 						const fallback = await fetchUsdKrwFallback().catch(() => null);
 						if (fallback) {
 							return {
@@ -221,6 +266,15 @@ serve(async (req) => {
 					const yahooQuote = await fetchYahooQuote(tdSymbol).catch(() => null);
 					if (yahooQuote) {
 						return { symbol: sym, ...yahooQuote };
+					}
+					// v8 chart — try both the mapped symbol (e.g. "^GSPC") and original (e.g. "SPX")
+					for (const c of [...new Set([tdSymbol, sym])]) {
+						const chart = await fetchYahooChart(c).catch(() => null);
+						if (chart) return { symbol: sym, ...chart };
+						if (!c.startsWith("^")) {
+							const chartCaret = await fetchYahooChart(`^${c}`).catch(() => null);
+							if (chartCaret) return { symbol: sym, ...chartCaret };
+						}
 					}
 					const fallbackPrice = await fetchStooqPrice(tdSymbol).catch(
 						() => null,

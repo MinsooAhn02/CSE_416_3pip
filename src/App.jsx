@@ -36,9 +36,10 @@ const App = () => {
 	const initPhaseRef = useRef("none");
 
 	const [authBootstrapDone, setAuthBootstrapDone] = useState(!supabase);
+	const [hydrateComplete, setHydrateComplete] = useState(false);
 
-	// Use the new midnight trigger hook (REQ-CS-005, REQ-AJ-001)
-	useMidnightTrigger(isLoggedIn);
+	// Gate midnight trigger until stores are hydrated so it never fires on stale/empty data
+	useMidnightTrigger(isLoggedIn && hydrateComplete);
 
 	// Supabase auth listener
 	// onAuthStateChange 단독으로는 INITIAL_SESSION 이벤트가 StrictMode 2중 mount,
@@ -92,6 +93,7 @@ const App = () => {
 
 		if (!isLoggedIn) {
 			initPhaseRef.current = "none";
+			setHydrateComplete(false);
 			return;
 		}
 
@@ -107,6 +109,7 @@ const App = () => {
 			} catch (e) {
 				console.warn("Hydrate failed:", e?.message);
 			}
+			setHydrateComplete(true);
 			// 캐시 우선: 1시간 이내 캐시 있으면 API 호출 없이 즉시 표시
 			await fetchAll({ useExistingCache: true });
 	
