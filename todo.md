@@ -81,6 +81,10 @@
 
 100. (마무리 단계) i18n En/Ko 설정 적용. dashboard, user settings, briefing에서도 설정한 언어로 display.
 
+ai briefing:
+   1. Market snapshot 관심사 설정이 toggled on 되어 있으면 반영인데, 그냥 삭제.
+   2. 대신 뉴스, 트렌드, 관심사를 정확히 반영해서 내용을 상세적으로 표시해야 함. 뉴스는 제목만 가지고 오는 수준임...제목만 가지고 올거면 원문 뉴스 링크도 hyperlink로 가져와야 함. 혹은, 뉴스 원문을 읽고 ai가 요약해서 프롬프트로 전달해서 브리핑으로 띄울 수 있으면 됌.
+
 smart widgets(난이도: 상):
    스마트 키워드도 이상함. Super Mario Galaxy Movie를 입력했는데, English language settings로는 관련 내용이 요약되어서 잘 나오지만 Korean language settings는 관련없는 내용이 나옴(e.g. Law Firms' Misleading Ads, Privacy Breaches Spark Outcry - 조선일보). 로직 분석 후 확인 필요. 원인 발견 필요.
 
