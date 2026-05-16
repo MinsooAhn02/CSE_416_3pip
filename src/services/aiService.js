@@ -880,6 +880,49 @@ const summarizeSmartWidgets = async ({ smartSummaries, tone, lang, langInstructi
 
 
 /**
+ * Groq 호출: 기사 배열을 받아 각 기사에 대한 1문장 요약 반환
+ * Returns: [{ index, summary }] — 실패 시 빈 배열 (UI는 제목+링크만 표시)
+ */
+const summarizeArticlesBatch = async ({ articles, lang, langInstruction }) => {
+	if (!Array.isArray(articles) || articles.length === 0) return [];
+	const isKo = lang === "ko";
+
+	const body = articles
+		.map((a, i) => {
+			const snippet = truncateText(a?.content || a?.title || "", 200);
+			return `[${i}] ${truncateText(a?.title || "", 80)}: ${snippet}`;
+		})
+		.join("\n");
+
+	const prompt = [
+		isKo
+			? "아래 기사 목록에서 각 기사를 [인덱스] 형태로 1문장(최대 120자)으로 요약하세요. 사실만 사용하고 새로운 정보를 만들어내지 마세요. JSON으로 출력: {\"summaries\":[{\"index\":0,\"summary\":\"...\"}]}"
+			: "For each article below, write a 1-sentence summary (max 120 chars). Facts only, no invented info. Output JSON: {\"summaries\":[{\"index\":0,\"summary\":\"...\"}]}",
+		"",
+		body,
+	].join("\n");
+
+	try {
+		const data = await invokeFunction("groq", {
+			prompt,
+			system: [
+				isKo ? "각 기사를 사실 기반 1문장으로 요약. JSON만 출력." : "Summarize each article in 1 fact-based sentence. Output JSON only.",
+				langInstruction,
+			].join("\n"),
+			temperature: 0.1,
+		});
+		const raw = (data?.text || "").trim();
+		const jsonStart = raw.indexOf("{");
+		const jsonEnd = raw.lastIndexOf("}");
+		if (jsonStart === -1 || jsonEnd === -1) return [];
+		const parsed = JSON.parse(raw.slice(jsonStart, jsonEnd + 1));
+		return Array.isArray(parsed?.summaries) ? parsed.summaries : [];
+	} catch {
+		return [];
+	}
+};
+
+/**
  * URL → 호스트명 (출처 라벨용). 실패 시 빈 문자열.
  */
 const hostFromUrl = (url) => {
@@ -901,9 +944,8 @@ const hostFromUrl = (url) => {
  *   detail   - 후방호환용 평문 (섹션을 줄바꿈으로 연결)
  *   sections - [{ id, title, lines }] 형태의 구조화 배열 (BriefingWidget 모달에서 사용)
  *
- * 섹션 순서 (todo.md item 26-1 사양):
- *   1) 날짜  2) 날씨  3) 일정  4) 어제  5) 관심사  6) 오늘 최신 정보
- *   + (조건부) 시장 동향 — fixedInterestIds 에 "finance" 가 포함된 경우만
+ * 섹션 순서:
+ *   1) 날짜+날씨  2) 일정  3) 어제  4) 오늘 최신 정보 (스마트키워드 / 뉴스Top3 / 트렌드Top3)
  */
 export async function generateDetailedBriefing({ tone, length, context }) {
 	const { lang, langInstruction } = getLangConfig();
@@ -991,8 +1033,12 @@ export async function generateDetailedBriefing({ tone, length, context }) {
 		}
 	}
 
-	// ── 4·5) Groq 병렬 호출 — 어제 일기 / 스마트 위젯 요약 ──
-	const [diaryRewrite, smartSummary] = await Promise.all([
+	// ── 4·5) Groq 병렬 호출 — 어제 일기 / 스마트 위젯 요약 / 기사 요약 ──
+	const newsArticles = (Array.isArray(context?.newsResults) ? context.newsResults : []).slice(0, 3);
+	const trendsArticles = (Array.isArray(context?.trendsResults) ? context.trendsResults : []).slice(0, 3);
+	const allArticles = [...newsArticles, ...trendsArticles];
+
+	const [diaryRewrite, smartSummary, articleSummaries] = await Promise.all([
 		rewriteYesterdayDiary({
 			diaryText: context?.yesterdayDiary,
 			memoText: context?.yesterdayMemo,
@@ -1006,7 +1052,21 @@ export async function generateDetailedBriefing({ tone, length, context }) {
 			lang,
 			langInstruction,
 		}),
+		summarizeArticlesBatch({ articles: allArticles, lang, langInstruction }),
 	]);
+
+	// index 0..newsArticles.length-1 → news summaries; rest → trends summaries
+	const newsSummaryMap = {};
+	const trendsSummaryMap = {};
+	if (Array.isArray(articleSummaries)) {
+		articleSummaries.forEach((item) => {
+			const idx = item?.index;
+			const sum = item?.summary;
+			if (typeof idx !== "number" || !sum) return;
+			if (idx < newsArticles.length) newsSummaryMap[idx] = sum;
+			else trendsSummaryMap[idx - newsArticles.length] = sum;
+		});
+	}
 
 	// ── 4) 어제 ────────────────────────────────
 	{
@@ -1023,31 +1083,44 @@ export async function generateDetailedBriefing({ tone, length, context }) {
 		});
 	}
 
-	// ── 5) 오늘 최신 정보 — 스마트 키워드 + 주요 뉴스 3개 (sub-blocks) ─
+	// ── 5) 오늘 최신 정보 — 스마트 키워드 + 주요 뉴스 Top 3 + 트렌드 Top 3 ─
 	{
-		const newsResults = Array.isArray(context?.newsResults) ? context.newsResults : [];
-		const topNewsLines = newsResults
-			.slice(0, 3)
-			.map((n) => {
-				const title = truncateText(n?.title, 140);
-				const src = n?.source || hostFromUrl(n?.url);
-				const sourceLabel = src ? ` — ${truncateText(src, 40)}` : "";
-				return title ? `${title}${sourceLabel}` : "";
-			})
-			.filter(Boolean);
-
 		const smartLine =
 			smartSummary ||
 			(isKo ? "수집된 키워드 정보가 없습니다." : "No keyword info collected yet.");
+
+		// News: structured objects { title, url, summary, source }
 		const newsLines =
-			topNewsLines.length > 0
-				? topNewsLines
+			newsArticles.length > 0
+				? newsArticles.map((n, i) => ({
+					title: truncateText(n?.title, 140) || "",
+					url: n?.url || "",
+					summary: truncateText(newsSummaryMap[i] || "", 200),
+					source: truncateText(n?.source || hostFromUrl(n?.url), 40),
+				  })).filter((o) => o.title && o.url)
 				: [isKo ? "수집된 뉴스가 없습니다." : "No news collected yet."];
+
+		// Trends: same structured shape
+		const trendsLines =
+			trendsArticles.length > 0
+				? trendsArticles.map((t, i) => ({
+					title: truncateText(t?.title, 140) || "",
+					url: t?.url || "",
+					summary: truncateText(trendsSummaryMap[i] || "", 200),
+					source: truncateText(t?.source || hostFromUrl(t?.url), 40),
+				  })).filter((o) => o.title && o.url)
+				: [isKo ? "수집된 트렌드가 없습니다." : "No trends collected yet."];
+
+		// detail 평문용: 객체를 "제목 — 출처: 요약" 형태로 직렬화
+		const toPlainLine = (item) =>
+			typeof item === "string"
+				? item
+				: `${item.title}${item.source ? ` — ${item.source}` : ""}${item.summary ? `: ${item.summary}` : ""}`;
 
 		sections.push({
 			id: "latest_info",
 			title: isKo ? "오늘 최신 정보" : "Today's latest info",
-			lines: [smartLine, ...newsLines],
+			lines: [smartLine, ...newsLines.map(toPlainLine), ...trendsLines.map(toPlainLine)],
 			subBlocks: [
 				{
 					id: "latest_smart",
@@ -1059,28 +1132,13 @@ export async function generateDetailedBriefing({ tone, length, context }) {
 					title: isKo ? "주요 뉴스 Top 3" : "Top 3 news",
 					lines: newsLines,
 				},
+				{
+					id: "latest_trends",
+					title: isKo ? "트렌드 Top 3" : "Trends Top 3",
+					lines: trendsLines,
+				},
 			],
 		});
-	}
-
-	// ── 7) (조건부) 시장 동향 ──────────────────
-	{
-		const fixedInterestIds = Array.isArray(context?.fixedInterestIds)
-			? context.fixedInterestIds
-			: [];
-		const isFinanceUser = fixedInterestIds
-			.map((id) => String(id).toLowerCase())
-			.includes("finance");
-		const stocks = Array.isArray(context?.stocks) ? context.stocks : [];
-		if (isFinanceUser && stocks.length > 0) {
-			sections.push({
-				id: "market",
-				title: isKo ? "시장 동향" : "Market snapshot",
-				lines: stocks
-					.slice(0, 4)
-					.map((st) => `${st.name}: ${st.value} (${st.change})`),
-			});
-		}
 	}
 
 	// ── 출력 빌드 ─────────────────────────────

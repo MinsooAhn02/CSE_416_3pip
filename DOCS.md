@@ -1361,3 +1361,108 @@ AI 브리핑 "Today's schedule / 오늘 일정" 섹션에 사용자의 실제 �
 ### 회귀 위험
 
 없음. 문서 외 파일 변경 0건. News #103 fix 이후의 한국어/영어 뉴스 정상 동작은 그대로 유지.
+
+---
+
+## 22) 2026-05-17 — AI Briefing Round 5: 뉴스 AI 요약+링크 / 트렌드 섹션 / 시장 동향 제거
+
+### 변경 요약
+
+| 항목 | 이전 | 이후 |
+|------|------|------|
+| 시장 동향 섹션 | `finance` 관심사 보유 시 조건부 노출 | **완전 제거** |
+| 뉴스 Top 3 표시 | 제목 + 출처 라벨 (평문) | 제목 (클릭 → 원문 새 탭) + AI 1문장 요약 + 출처 |
+| 트렌드 Top 3 | 없음 | **신규 sub-block** — 뉴스와 동일 구조 |
+
+### `src/services/aiService.js`
+
+#### 시장 동향 블록 제거
+
+`// ── 7) (조건부) 시장 동향 ──` 블록(19줄) 전체 삭제.  
+JSDoc 섹션 순서 코멘트도 최신화.
+
+#### `summarizeArticlesBatch` 헬퍼 추가 (line ~882)
+
+```js
+const summarizeArticlesBatch = async ({ articles, lang, langInstruction }) => { ... }
+```
+
+- 입력: `{title, url, content}` 배열 (최대 6개 — 뉴스 3 + 트렌드 3 합산)
+- 단일 Groq 호출, JSON 출력 `{ summaries: [{ index, summary }] }`
+- 각 요약: 1문장 ≤ 120자, 사실 기반, 언어 일치
+- 실패 시 빈 배열 반환 → UI는 제목+링크만 표시 (graceful)
+
+#### `generateDetailedBriefing` 수정
+
+```
+// 이전: 2개 Groq 병렬 호출
+const [diaryRewrite, smartSummary] = await Promise.all([...])
+
+// 이후: 3개 병렬 (추가 지연 없음 — 기존 2개와 동시에 실행)
+const [diaryRewrite, smartSummary, articleSummaries] = await Promise.all([...])
+```
+
+- `allArticles = [...newsArticles, ...trendsArticles]` (최대 6개) 합산 후 단일 배치 호출
+- 인덱스 분할: `index < newsArticles.length` → `newsSummaryMap`, 나머지 → `trendsSummaryMap`
+- `articleSummaries.forEach` 방어 처리: `item?.index`, `item?.summary` 존재 확인 후 적용
+
+#### `latest_info` 섹션 sub-block 구조 변경
+
+`lines` 항목이 **polymorphic**:
+- `string` — 기존처럼 평문 렌더
+- `{ title, url, summary, source }` — 뉴스·트렌드 기사 (URL 없는 항목은 `.filter((o) => o.title && o.url)`로 배제)
+
+sub-block 3개:
+1. `latest_smart` — Smart keywords (기존 문자열 요약, 변경 없음)
+2. `latest_news` — Top 3 news (객체 배열)
+3. `latest_trends` — Trends Top 3 (객체 배열) ← **신규**
+
+`section.lines` (detail 평문 직렬화용): `toPlainLine` 헬퍼로 객체를 `"제목 — 출처: 요약"` 형태 변환.
+
+### `src/components/widgets/BriefingWidget.jsx`
+
+#### 모달 sub-block 렌더러 업데이트
+
+```jsx
+// 이전: 모든 line을 <p>{line}</p>로 렌더
+// 이후: typeof line === "object" 분기
+line && typeof line === "object" ? (
+  <div className="space-y-0.5">
+    <p>
+      <a href={line.url} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}>
+        {line.title}
+      </a>
+      <span>— {line.source}</span>
+    </p>
+    {line.summary && <p>{line.summary}</p>}
+  </div>
+) : (
+  <p>{line}</p>
+)
+```
+
+- `stopPropagation` → 링크 클릭 시 모달 닫힘 방지
+- `target="_blank"` + `rel="noopener noreferrer"` — 보안 표준
+- 요약 없으면 (Groq 실패 시) 제목+링크만 표시
+
+#### 대시보드 미리보기 직렬화 수정
+
+```jsx
+// 이전: .join(" · ") → [object Object] 노출
+// 이후: .map(l => typeof l === "object" ? `${l.title}${l.source ? ` — ${l.source}` : ""}` : l).join(" · ")
+```
+
+#### `trendsResults` 컨텍스트 확인
+
+`BriefingWidget.jsx` L172에 이미 `trendsResults: (trendsResults ?? []).slice(0, 5)` 포함 → 코드 변경 없음.
+
+### 영향 범위
+
+- `generateBriefing` (FirstLoginBriefingModal 전용) — 변경 없음
+- 뉴스/트렌드 store 로직 — 변경 없음
+- 일기, 일정, 날씨 섹션 — 변경 없음
+- Groq 추가 호출 수: +1 (기존 2 → 3), 단 모두 `Promise.all` 병렬이라 총 대기 시간 증가 없음
+
+### 회귀 위험
+
+낮음. `summarizeArticlesBatch` 실패 → 빈 `articleSummaries` → `newsSummaryMap`/`trendsSummaryMap` 빈 맵 → 객체 lines에서 `summary: ""` → UI에서 `line.summary && ...` 조건으로 요약 줄 숨김. 제목+링크는 항상 표시.

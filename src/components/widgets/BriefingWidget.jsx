@@ -379,7 +379,7 @@ const BriefingWidget = () => {
 									{(Array.isArray(section.subBlocks) && section.subBlocks.length > 0
 										? section.subBlocks.flatMap((sb) => sb.lines ?? [])
 										: section.lines ?? []
-									).join(" · ")}
+									).map((l) => typeof l === "object" ? `${l.title}${l.source ? ` — ${l.source}` : ""}` : l).join(" · ")}
 								</p>
 							</div>
 						))
@@ -524,16 +524,44 @@ const BriefingWidget = () => {
 																			>
 																				{sb.title}
 																			</p>
-																			<div className="space-y-1">
-																				{(sb.lines ?? []).map((line, idx) => (
-																					<p
-																						key={idx}
-																						className={`leading-relaxed ${modalBodyText}`}
-																						style={modalBodyFontStyle}
-																					>
-																						{line}
-																					</p>
-																				))}
+																			<div className="space-y-2">
+																				{(sb.lines ?? []).map((line, idx) =>
+																					line && typeof line === "object" ? (
+																						<div key={idx} className="space-y-0.5">
+																							<p style={modalBodyFontStyle}>
+																								<a
+																									href={line.url}
+																									target="_blank"
+																									rel="noopener noreferrer"
+																									className={`font-medium underline underline-offset-2 ${isDark ? "text-blue-300 hover:text-blue-200" : "text-blue-700 hover:text-blue-900"}`}
+																									style={modalBodyFontStyle}
+																									onClick={(e) => e.stopPropagation()}
+																								>
+																									{line.title}
+																								</a>
+																								{line.source && (
+																									<span className={`ml-1.5 text-[10px] ${muted}`}>— {line.source}</span>
+																								)}
+																							</p>
+																							{line.summary && (
+																								<p
+																									className={`leading-relaxed ${modalBodyText} pl-0`}
+																									style={modalBodyFontStyle}
+																								>
+																									{line.summary}
+																								</p>
+																							)}
+																						</div>
+																					) : (
+																						<p
+																							key={idx}
+																							className={`leading-relaxed ${modalBodyText}`}
+																							style={modalBodyFontStyle}
+																						>
+																							{line}
+																						</p>
+																					)
+																				)}
 																			</div>
 																		</div>
 																	))}
