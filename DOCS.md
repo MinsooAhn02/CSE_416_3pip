@@ -257,8 +257,9 @@ Fallback: user.id 지연 시 1200ms 타임아웃 후 fetchAll() 단독 실행
 |------|------|------|
 | `weather` | `{temp, city, condition, precipitation, airQuality, humidity}` | null |
 | `stocks` | `[{name, value, change, up}]` | 정규화된 주식 데이터 |
-| `trends` | string[] | 미사용 (trendsResults로 대체) |
-| `trendsResults` | `[{title, url, content}]` | 트렌드 실제 데이터 소스 |
+| `trends` | string[] | 화면/브리핑 fallback용 트렌드 제목 배열 |
+| `trendsResults` | `[{title, url, content}]` | 트렌드 위젯과 AI 브리핑의 실제 기사 데이터 |
+| `newsAnswer` | string \| null | Tavily 뉴스 요약. AI 브리핑의 뉴스 fallback 컨텍스트로 사용 |
 | `newsResults` | `[{title, url, content, image, published_date}]` | 뉴스 실제 데이터 소스 |
 | `calEvents` | array | 오늘 일정 |
 | `healthData` | `{steps, stepsGoal, sleep, sleepGoal, calories, caloriesGoal, heartRate, water, waterGoal}` | |
@@ -276,7 +277,7 @@ Fallback: user.id 지연 시 1200ms 타임아웃 후 fetchAll() 단독 실행
 | `fetchWeather(lat, lon, userId, force)` | `weather` | `weather_{rLat}_{rLon}` |
 | `fetchStocks(symbols, userId, force)` | `stocks` | `stocks_{sym1}_{sym2}...` |
 | `fetchTrends(userId, force)` | `tavily` | `trends_full_{lang}` |
-| `fetchNews(userId, force)` | `tavily` × 2 (병렬) | `news_{location}_{lang}_{interestFingerprint}` |
+| `fetchNews(userId, force)` | `tavily` × 2 (병렬) | `news_{lang}_{interestFingerprint}` |
 | `fetchCalendar(userId, force)` | `calendar` | `calendar_today` |
 | `fetchHealth(userId, force)` | `fitness` | `health_default` |
 | `fetchTomorrowCalendar(userId, force)` | `events` (date 파라미터) | `calendar_{YYYY-MM-DD}` |
@@ -290,7 +291,8 @@ Fallback: user.id 지연 시 1200ms 타임아웃 후 fetchAll() 단독 실행
 - 글로벌 쿼리:
   - 영어: `Top world breaking news today: international politics, business, technology, science.`
   - 한국어: `오늘의 세계 주요 뉴스 속보: 국제 정치, 경제, 기술, 과학.`
-- `include_domains`: **영어 모드만** `EN_NEWS_DOMAINS` 전달. 한국어 모드는 빈 배열 — Tavily의 한국 도메인 인덱스가 빈약해 화이트리스트를 강제하면 결과 0개가 빈번하던 문제(News #103) 우회. 한국어 필터링은 클라이언트 측 `scoreArticleForLanguage`로 수행.
+- `include_domains`: 영어 모드는 `EN_NEWS_DOMAINS`, 한국어 모드는 `KO_NEWS_DOMAINS` 전달. 한국어 모드에서는 한국 언론사 도메인만 받아오고, 이후 클라이언트에서 한 번 더 도메인/언어 정규화.
+- 한국어 모드 후처리: Tavily 원본 제목/요약이 영어여도 `translateArticlesToKorean()`으로 `title`/`content`를 한국어화한 뒤 `newsResults`에 반영하고, 같은 번역본 payload를 `api_cache`에 backfill 저장한다. 이후 캐시 hit 시에도 원본 영어가 아니라 번역된 한국어 결과를 표시한다.
 - `location`(geolocation) 전달 안 함 — 언어별 쿼리로 지역성 표현 대체.
 
 **트렌드 fetch 세부:**
@@ -298,23 +300,25 @@ Fallback: user.id 지연 시 1200ms 타임아웃 후 fetchAll() 단독 실행
 - 캐시 키: `trends_full_${lang}`
 - 한국어: `반드시 한국어 기사 제목만 사용. 영어/일본어/중국어/러시아어 등 외국어 제목 제외. 오늘 대한민국 주요 이슈 인공지능 기술 정치 경제 연예 스포츠 최신 뉴스`
 - 영어: `English-language major trending news headlines today worldwide technology AI politics economy entertainment sports latest`
-- `include_domains`: 양 언어 모두 `EN_NEWS_DOMAINS` / `KO_NEWS_DOMAINS` 전달 (`fetchTrends` L1395) — 트렌드는 신뢰 도메인 위주가 유리.
-- 반환: `trendsResults [{title, url, content}]` (Tavily 기사 제목을 트렌드 키워드로 사용)
+- `include_domains`: 양 언어 모두 `EN_NEWS_DOMAINS` / `KO_NEWS_DOMAINS` 전달 — 신뢰 도메인 위주로 수집.
+- 반환: `trendsResults [{title, url, content}]` (Tavily 기사 제목 기반)
+- 한국어 모드 후처리: `trendsResults`의 기사 제목/요약을 한국어로 번역하고, `buildLocalizedTrendTitles()`가 화면/브리핑 fallback용 `trends` 제목도 한국어로 재생성한다. `api_cache` 저장 payload 역시 번역본 `results`/`trends`를 사용한다.
 
 **뉴스 언어 필터 (클라이언트 측, `useDataStore.js`):**
-- `scoreArticleForLanguage(item, "ko")` (L478–498):
+- `scoreArticleForLanguage(item, "ko")`:
   - title에 한글 점수 > 0 → `titleScore * 4 + hostBonus`
   - content에 한글 점수 > 0 → `contentScore * 2 + hostBonus` (영어 제목이라도 본문 한글이면 통과)
   - KO_NEWS_DOMAINS host → `hostBonus` (2)
   - 위 모두 미달 → `-1` (탈락)
-- `filterLocalizedArticles(items, "ko", limit)` (L678–705):
-  - 한국어 모드: 점수 음수 탈락 없이 **모두 통과** (Tavily가 영어-한국 기사를 자주 반환 → 다운스트림 `translateArticlesToKorean`이 한글 번역). KO 도메인 기사는 정렬로 앞에 배치.
+- `filterLocalizedArticles(items, "ko", limit)`:
+  - 한국어 모드: `score > 0`만 통과. KO 도메인이라면 제목/본문이 영어여도 hostBonus로 통과할 수 있고, 다운스트림 `translateArticlesToKorean()`이 한글 번역한다.
   - 영어 모드: 점수 > 0 통과, hostBonus≥2(EN_NEWS_DOMAINS)도 통과.
-- `filterByAllowedDomains(items, "ko")` (L664–676): **정렬 전용**. KO_NEWS_DOMAINS 매칭 기사를 앞으로 정렬할 뿐 누락시키지 않음 (이전 하드 필터 → sort-only 변경, 신뢰 도메인 외 한국어 기사 누락 방지).
+- `filterByAllowedDomains(items, "ko")`: **하드 필터**. 한국어 모드는 `KO_NEWS_DOMAINS`, 영어 모드는 `EN_NEWS_DOMAINS`에 포함된 도메인만 통과한다.
+- `needsKoreanTranslation(text)`: 한글이 일부 포함되어도 라틴 문자가 대부분이면 번역 대상으로 판단한다. 예: `Trump tariff fight - 연합뉴스`처럼 출처명만 한글인 제목도 한국어 제목으로 변환.
 
 **트렌드 인메모리 캐시:**
 - `_trendsMemCache` (모듈 레벨 맵): `fetchTrends` 1순위 체크 — hit 시 loading 없이 즉시 표시.
-- `warmupTrendsMemCache(userId)`: `fetchAll` 시 `fetchTrends`와 병렬 실행. 양 언어(`ko`/`en`) DB 캐시를 메모리로 미리 적재. `_trendsWarmupPromise` 게이트로 부팅당 1회 보장. ko 캐시에 한국어 결과 0개면 warm-up 생략(stale 영어 캐시 방지).
+- `warmupTrendsMemCache(userId)`: `fetchAll` 시 `fetchTrends`와 병렬 실행. 양 언어(`ko`/`en`) DB 캐시를 메모리로 미리 적재. `_trendsWarmupPromise` 게이트로 부팅당 1회 보장. ko 캐시에 한국어 결과가 없거나 backfill이 필요한 원본 영어 payload면 warm-up을 생략해 `fetchTrends`가 번역/캐시 backfill 경로를 타게 한다.
 - 언어 불일치 stale 캐시 감지: `fetchTrends`에서 DB 캐시 read 후 `lang === "ko"` && 한국어 결과 0개이면 캐시 무시 후 fresh fetch.
 
 **외부 리스너 (모듈 레벨):**
@@ -506,7 +510,7 @@ payload     jsonb -- { text, summary, sections }
 | 날씨 | `weather_{rLat}_{rLon}` |
 | 주식 | `stocks_{sym1}_{sym2}_...` |
 | 트렌드 | `trends_full_{lang}` |
-| 뉴스 | `news_{locationLabel}_{lang}_{interestFingerprint}` |
+| 뉴스 | `news_{lang}_{interestFingerprint}` |
 | 캘린더 | `calendar_today` |
 | 건강 | `health_default` |
 
@@ -594,7 +598,7 @@ payload     jsonb -- { text, summary, sections }
 
 #### TrendsWidget
 
-- 데이터: `trendsResults [{title, url, content}]` (string 배열 `trends` 미사용)
+- 데이터: `trendsResults [{title, url, content}]` 중심. `trends` string 배열은 화면/브리핑 fallback용 제목 캐시로만 유지
 - 기본 표시 수:
 
   | fontKey | 기본 |
@@ -1022,11 +1026,11 @@ resolveDiaryGenerationLanguage()  [diaryGenerationService.js, exported]
 
 ## 13) i18n
 
-- **한국어 표시 보정:** 한국어 모드에서 Tavily 결과가 영어로 와도 `useDataStore`가 기사 제목/요약을 한국어로 후처리 번역해 `newsResults`, `trendsResults`에 반영
+- **한국어 표시 보정:** 한국어 모드에서 Tavily 결과가 영어로 와도 `useDataStore`가 기사 제목/요약을 한국어로 후처리 번역해 `newsResults`, `trendsResults`에 반영하고, 번역본을 `api_cache`에 backfill 저장한다. 한국어 모드 캐시 hit 시에도 원본 영어가 아니라 번역된 값을 표시한다.
 
 - **지원 언어:** 영어(en, 기본값), 한국어(ko)
 - **저장:** localStorage에 언어 설정 유지
-- **언어 변경 시:** `i18n.changeLanguage()` → `languageChanged` 이벤트 → useDataStore 리스너가 뉴스/트렌드 force refresh
+- **언어 변경 시:** `i18n.changeLanguage()` → `languageChanged` 이벤트 → useDataStore 리스너가 뉴스/트렌드를 재호출한다. force refresh가 아니라 언어별 캐시 우선이며, 캐시 miss 또는 backfill 필요 시 fresh fetch/번역 경로로 진행한다.
 - **API 연동:** 언어에 따라 Tavily 쿼리 언어 전환 + 한국어 시 한국 뉴스 도메인 필터 적용
 - **Diary 질문 카드:** 현재 앱 언어에 맞춰 질문 생성 언어와 UI 문구를 함께 전환
 
@@ -1643,3 +1647,34 @@ toast.event_time_required 키 추가:
 - KO: 시작 시간과 종료 시간을 입력해주세요
 
 수정 파일: EventPanel.jsx, en.json, ko.json
+
+---
+
+## 24) 2026-05-18 — Tavily 한국어 뉴스/트렌드 출처 + 번역 캐시 정규화
+
+### 문제
+
+한국어 모드에서 Tavily가 한국 언론사 URL은 잘 가져오지만, 기사 원본 제목이 영어인 경우 `NewsWidget`/`TrendsWidget` 제목이 영어로 표시됐다. 또한 기존 캐시가 원문 payload를 보관하면 다음 캐시 hit 때 번역 경로를 다시 타지 않고 영어 제목이 재노출될 수 있었다.
+
+### 해결
+
+- `src/store/useDataStore.js`
+- 한국어 뉴스/트렌드 요청에 `include_domains: KO_NEWS_DOMAINS`를 전달해 한국 언론사 도메인만 수집한다. 영어 모드는 `EN_NEWS_DOMAINS`를 유지한다.
+- `filterByAllowedDomains()`를 정렬 전용이 아니라 도메인 하드 필터로 운용한다.
+- `translateArticlesToKorean()`으로 한국어 모드의 `title`/`content`를 표시 전 한국어로 정규화한다.
+- `buildLocalizedTrendTitles()`를 추가해 실시간 트렌드 표시 제목도 한국어 기사 제목 또는 번역된 fallback 제목으로 구성한다.
+- `needsKoreanTranslation()`을 강화해 `Trump tariff fight - 연합뉴스`처럼 한글 출처명만 붙은 영어 제목도 번역 대상으로 판정한다.
+- DB 캐시 read 시 원본 영어 payload를 발견하면 번역본 `full` payload를 `api_cache`에 backfill 저장한다. 이후 한국어 모드 캐시 hit는 항상 번역된 `results`/`trends`를 사용한다.
+- `warmupTrendsMemCache()`는 한국어 캐시에 backfill이 필요한 원본 payload가 있으면 메모리 캐시에 올리지 않고 `fetchTrends`의 번역/저장 경로가 실행되도록 생략한다.
+
+### 캐시 정책
+
+- 뉴스: `news_${lang}_${interestFingerprint}`
+- 트렌드: `trends_full_${lang}`
+- 한국어 캐시 payload에는 원본 Tavily 제목이 아니라 번역된 `results[].title`, `results[].content`, `trends[]`가 저장된다.
+- 영어 모드는 번역하지 않고 원본 영어 결과를 유지한다.
+
+### 검증
+
+- `npm run build` 통과.
+- 빌드 산출물 `dist/index.html`의 번들 해시 변경은 소스 변경과 무관해 되돌림.

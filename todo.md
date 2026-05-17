@@ -73,9 +73,9 @@
 
 ## To Fix
 
-13. News 한국어 모드에서 한국어 출처만 표시 확인
+13. [x] News/Trends 한국어 모드에서 한국 언론사 출처 + 한국어 제목 표시
     - 파일: `src/store/useDataStore.js`
-    - 내용: include_domains + filterLocalizedArticles 동작 검증
+    - 내용: `KO_NEWS_DOMAINS` include_domains + hard filter 적용. 원본 제목/요약이 영어여도 한국어로 번역한 payload를 `api_cache`/localStorage에 backfill 저장.
 
 101. 자동 생성된 일기장 내용에서 브리핑의 내용이 없음. 오류 수정 시급. 
 

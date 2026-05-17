@@ -17,7 +17,7 @@ const EDGE_TIMEOUT_MS = 25000;
 const CACHE_THRESHOLD_MS = 4 * 60 * 60 * 1000; // 4시간
 
 // 언어별 in-memory 캐시 — 언어 전환 시 로딩 없이 즉시 표시
-const _trendsMemCache = {}; // { ko: { trends, trendsResults, trendsAnswer }, en: {...} }
+const _trendsMemCache = {}; // { ko: { trends, trendsResults }, en: {...} }
 
 // 문제 5 fix: 앱 부팅 시 단일 warm-up을 보장하기 위한 게이트.
 // fetchAll이 여러 번 호출되더라도 DB 읽기는 한 번만 수행.
@@ -311,6 +311,7 @@ const warmupTrendsMemCache = async (userIdArg) => {
 					if (!Array.isArray(results) || results.length === 0) return;
 
 					if (lang === "ko") {
+						if (shouldBackfillKoreanCache(dbCached.data)) return;
 						const hasKorean = results.some((item) =>
 							HANGUL_REGEX.test(String(item?.title || "")),
 						);
@@ -320,7 +321,6 @@ const warmupTrendsMemCache = async (userIdArg) => {
 					if (_trendsMemCache[lang]) return; // race 방지
 					_trendsMemCache[lang] = {
 						trends: dbCached.data.trends ?? [],
-						trendsAnswer: dbCached.data.answer ?? null,
 						trendsResults: results,
 					};
 				} catch {
@@ -338,17 +338,20 @@ const warmupTrendsMemCache = async (userIdArg) => {
 	return null;
 };
 
-const writeApiCache = async (cacheKey, payload, userIdArg) => {
+const writeApiCache = async (cacheKey, payload, userIdArg, fetchedAtArg = null) => {
 	if (!supabase) return;
 	const userId = userIdArg ?? (await getUserId());
 	if (!userId) return;
 
 	const rowId = toCacheRowId(userId, cacheKey);
+	const fetchedAt = fetchedAtArg ? new Date(fetchedAtArg) : new Date();
 	const { error } = await supabase.from("api_cache").upsert({
 		id: rowId,
 		user_id: userId,
 		data: payload,
-		fetched_at: new Date().toISOString(),
+		fetched_at: Number.isFinite(fetchedAt.getTime())
+			? fetchedAt.toISOString()
+			: new Date().toISOString(),
 	});
 
 	if (error) {
@@ -396,6 +399,18 @@ const KO_NEWS_DOMAINS = [
 	"joins.com",
 	"hani.co.kr",
 	"news1.kr",
+	"khan.co.kr",
+	"donga.com",
+	"hankyung.com",
+	"mk.co.kr",
+	"ytn.co.kr",
+	"jtbc.co.kr",
+	"sbs.co.kr",
+	"imnews.imbc.com",
+	"news.kbs.co.kr",
+	"edaily.co.kr",
+	"zdnet.co.kr",
+	"etnews.com",
 ];
 const EN_NEWS_DOMAINS = [
 	"reuters.com",
@@ -511,12 +526,25 @@ const normalizeArticleList = (items = [], limit = 10) =>
 		.filter((item) => item.title || item.url)
 		.slice(0, limit);
 
+const countPatternMatches = (value = "", pattern) =>
+	(normalizeReadableText(value).match(pattern) ?? []).length;
+
 const hasHangulText = (value = "") => HANGUL_REGEX.test(String(value || ""));
 
 const needsKoreanTranslation = (value = "") => {
 	const sample = normalizeReadableText(value);
 	if (!sample) return false;
-	return !hasHangulText(sample);
+	const hangulCount = countPatternMatches(sample, /[\uac00-\ud7a3]/g);
+	const latinCount = countPatternMatches(sample, /[A-Za-z\u00C0-\u024F]/g);
+	const foreignCount = countPatternMatches(
+		sample,
+		/[\u0400-\u04FF\u3040-\u30FF\u3400-\u4DBF\u4E00-\u9FFF\uF900-\uFAFF\u0600-\u06FF\u0E00-\u0E7F\u0900-\u097F]/g,
+	);
+
+	if (hangulCount === 0) return true;
+	if (foreignCount > hangulCount) return true;
+	// Titles like "Trump tariff fight - 연합뉴스" contain Hangul, but are still English.
+	return latinCount >= 12 && latinCount > hangulCount * 2;
 };
 
 const extractJsonArray = (text) => {
@@ -661,17 +689,12 @@ const dedupeArticles = (items = []) => {
 	});
 };
 
-// ko 모드: KO_NEWS_DOMAINS를 hard-filter 대신 sort 우선순위로 활용.
-// 이미 scoreArticleForLanguage로 한국어 기사만 통과했으므로 도메인 필터로 추가 탈락 없이
-// 신뢰 도메인 기사를 앞으로 정렬만 한다.
 const filterByAllowedDomains = (items, language) => {
-	if (language !== "ko" || !Array.isArray(items) || items.length === 0) {
-		return items;
-	}
-	return items.slice().sort((a, b) => {
-		const aKo = KO_NEWS_DOMAINS.some((d) => getUrlHost(a?.url).includes(d)) ? 1 : 0;
-		const bKo = KO_NEWS_DOMAINS.some((d) => getUrlHost(b?.url).includes(d)) ? 1 : 0;
-		return bKo - aKo;
+	if (!Array.isArray(items) || items.length === 0) return items;
+	const allowedDomains = language === "ko" ? KO_NEWS_DOMAINS : EN_NEWS_DOMAINS;
+	return items.filter((item) => {
+		const host = getUrlHost(item?.url);
+		return allowedDomains.some((domain) => host.includes(domain));
 	});
 };
 
@@ -689,13 +712,10 @@ const filterLocalizedArticles = (items, language, limit = 10) => {
 	);
 
 	if (language === "ko") {
-		// Korean mode: accept all articles (Tavily often returns English-about-Korea results);
-		// translateArticlesToKorean downstream handles the English ones.
-		// Korean-language articles bubble to the top via score sort.
-		return filterByAllowedDomains(
-			scored.map(({ __score, ...rest }) => rest),
-			language,
-		).slice(0, limit);
+		const localized = scored
+			.filter((item) => item.__score > 0)
+			.map(({ __score, ...rest }) => rest);
+		return filterByAllowedDomains(dedupeArticles(localized), language).slice(0, limit);
 	}
 
 	const localized = scored
@@ -712,6 +732,53 @@ const buildTrendTitlesFromResults = (items, limit = 8) =>
 				.filter((title) => title.length >= 5 && title.length <= 80),
 		),
 	).slice(0, limit);
+
+const buildLocalizedTrendTitles = async (
+	items,
+	fallbackTitles = [],
+	language,
+	limit = 8,
+) => {
+	const articleTitles = buildTrendTitlesFromResults(items, limit);
+	const sourceTitles = articleTitles.length > 0 ? articleTitles : fallbackTitles;
+	const uniqueTitles = Array.from(
+		new Set(
+			(Array.isArray(sourceTitles) ? sourceTitles : [])
+				.map((title) => cleanTrendTitle(title))
+				.filter((title) => title.length >= 2 && title.length <= 80),
+		),
+	).slice(0, limit);
+
+	if (language !== "ko") return uniqueTitles;
+
+	const translatedTitles = await Promise.all(
+		uniqueTitles.map(async (title) =>
+			needsKoreanTranslation(title) ? translateTextToKorean(title) : title,
+		),
+	);
+
+	return Array.from(
+		new Set(
+			translatedTitles
+				.map((title) => cleanTrendTitle(title))
+				.filter((title) => title.length >= 2 && hasHangulText(title)),
+		),
+	).slice(0, limit);
+};
+
+const shouldBackfillKoreanCache = (payload) => {
+	if (!payload || typeof payload !== "object") return false;
+	const results = Array.isArray(payload.results) ? payload.results : [];
+	const trends = Array.isArray(payload.trends) ? payload.trends : [];
+
+	return (
+		results.some(
+			(item) =>
+				needsKoreanTranslation(item?.title) ||
+				(item?.content && needsKoreanTranslation(item.content)),
+		) || trends.some((title) => needsKoreanTranslation(title))
+	);
+};
 
 const numberFormatter = new Intl.NumberFormat("ko-KR", {
 	maximumFractionDigits: 2,
@@ -941,9 +1008,7 @@ export const useDataStore = create((set, get) => ({
 	weather: null,
 	stocks: [],
 	trends: [],
-	trendsAnswer: null,
 	trendsResults: [],
-	news: [],
 	newsAnswer: null,
 	newsResults: [],
 	calEvents: [],
@@ -952,8 +1017,6 @@ export const useDataStore = create((set, get) => ({
 	rawData: {
 		weather: null,
 		stocks: null,
-		trends: null,
-		news: null,
 	},
 	onboardingProfile: null,
 	activeWidgetIds: [],
@@ -1305,7 +1368,6 @@ export const useDataStore = create((set, get) => ({
 	/* ══════════════════════════════════════════
 	   실시간 트렌드 (Tavily API)
 	   trends: 해시태그 배열
-	   trendsAnswer: AI 요약 문자열
 	   trendsResults: 출처 배열 [{title, url, content}, ...]
 	   ══════════════════════════════════════════ */
 	fetchTrends: async (userId, force = false) => {
@@ -1320,7 +1382,6 @@ export const useDataStore = create((set, get) => ({
 			const mem = _trendsMemCache[lang];
 			set({
 				trends: mem.trends,
-				trendsAnswer: mem.trendsAnswer,
 				trendsResults: mem.trendsResults,
 				fetchedLanguage: { ...get().fetchedLanguage, trends: lang },
 			});
@@ -1358,25 +1419,29 @@ export const useDataStore = create((set, get) => ({
 					: lang === "ko"
 						? await translateArticlesToKorean(rawDisplayResults)
 						: rawDisplayResults;
-			const displayTrends =
-				buildTrendTitlesFromResults(displayResults, 8).length > 0
-					? buildTrendTitlesFromResults(displayResults, 8)
-					: cacheLanguageMismatch
-						? []
-						: dbCached?.data?.trends ?? [];
+			const displayTrends = await buildLocalizedTrendTitles(
+				displayResults,
+				cacheLanguageMismatch ? [] : dbCached?.data?.trends ?? [],
+				lang,
+				8,
+			);
 			if (displayResults.length > 0 || displayTrends.length > 0) {
-				_trendsMemCache[lang] = {
+				const full = {
 					trends: displayTrends,
-					trendsAnswer: dbCached.data.answer ?? null,
-					trendsResults: displayResults,
+					results: displayResults,
+				};
+				_trendsMemCache[lang] = {
+					trends: full.trends,
+					trendsResults: full.results,
 				};
 				set({
-					trends: displayTrends,
-					trendsAnswer: dbCached.data.answer ?? null,
-					trendsResults: displayResults,
+					trends: full.trends,
+					trendsResults: full.results,
 					fetchedLanguage: { ...get().fetchedLanguage, trends: lang },
 				});
-				cacheIt("trends", dbCached.data);
+				if (lang === "ko" && shouldBackfillKoreanCache(dbCached.data)) {
+					await writeApiCache(cacheKey, full, userId, dbCached.fetchedAt);
+				}
 				get().markFetched("trends", dbCached.fetchedAt);
 				get().setApiStatus("trends", "ok");
 				return;
@@ -1398,9 +1463,6 @@ export const useDataStore = create((set, get) => ({
 				query: trendsQuery,
 				include_domains: includeDomains,
 			});
-			if (edge?.data) {
-				set((s) => ({ rawData: { ...s.rawData, trends: edge.data } }));
-			}
 
 			if (edge?.ok && edge.data?.trends) {
 				const localizedResults = filterLocalizedArticles(
@@ -1415,26 +1477,24 @@ export const useDataStore = create((set, get) => ({
 					lang === "ko"
 						? await translateArticlesToKorean(rawDisplayResults)
 						: rawDisplayResults;
-				const displayTrends =
-					buildTrendTitlesFromResults(displayResults, 8).length > 0
-						? buildTrendTitlesFromResults(displayResults, 8)
-						: edge.data.trends ?? [];
+				const displayTrends = await buildLocalizedTrendTitles(
+					displayResults,
+					edge.data.trends ?? [],
+					lang,
+					8,
+				);
 				const full = {
 					trends: displayTrends,
-					answer: edge.data.answer ?? null,
 					results: displayResults,
 				};
 				_trendsMemCache[lang] = {
 					trends: full.trends,
-					trendsAnswer: full.answer,
 					trendsResults: full.results,
 				};
 				set({
 					trends: full.trends,
-					trendsAnswer: full.answer,
 					trendsResults: full.results,
 				});
-				cacheIt("trends", full);
 				await writeApiCache(cacheKey, full, userId);
 				get().markFetched("trends");
 				get().setApiStatus("trends", "ok");
@@ -1469,7 +1529,6 @@ export const useDataStore = create((set, get) => ({
 
 	/* ══════════════════════════════════════════
 	   뉴스 (Tavily API - 별도 호출)
-	   news: 뉴스 키워드 배열
 	   newsAnswer: AI 요약 문자열
 	   newsResults: 뉴스 기사 배열 [{title, url, content}, ...]
 	   ══════════════════════════════════════════ */
@@ -1506,13 +1565,18 @@ export const useDataStore = create((set, get) => ({
 					? await translateArticlesToKorean(rawDisplayResults)
 					: rawDisplayResults;
 			if (displayResults.length > 0) {
+				const full = {
+					answer: dbCached.data.answer ?? null,
+					results: displayResults,
+				};
 				set({
-					news: dbCached.data.news ?? [],
-					newsAnswer: dbCached.data.answer ?? null,
-					newsResults: displayResults,
+					newsAnswer: full.answer,
+					newsResults: full.results,
 					fetchedLanguage: { ...get().fetchedLanguage, news: lang },
 				});
-				cacheIt("news", dbCached.data);
+				if (lang === "ko" && shouldBackfillKoreanCache(dbCached.data)) {
+					await writeApiCache(cacheKey, full, userId, dbCached.fetchedAt);
+				}
 				get().markFetched("news", dbCached.fetchedAt);
 				get().setApiStatus("news", "ok");
 				return;
@@ -1533,10 +1597,7 @@ export const useDataStore = create((set, get) => ({
 				? `Top 10 live issues in America: politics, tech, economy, lifestyle trends today.${interestClause}`
 				: `대한민국 실시간 주요 뉴스: 정치, 경제, IT, 라이프스타일, 사회 트렌드 오늘.${interestClause}`;
 
-			// ko 모드: include_domains 없이 Tavily에 한국어 쿼리만 전달.
-			// include_domains: KO_NEWS_DOMAINS를 쓰면 Tavily 인덱스가 빈약한 한국 도메인에서
-			// 결과 0개가 나오는 경우가 많음. 언어 필터링은 클라이언트 scoreArticleForLanguage에서 수행.
-			const includeDomains = isEn ? EN_NEWS_DOMAINS : [];
+			const includeDomains = isEn ? EN_NEWS_DOMAINS : KO_NEWS_DOMAINS;
 			const globalNewsQuery = isEn
 				? "Top world breaking news today: international politics, business, technology, science."
 				: "오늘의 세계 주요 뉴스 속보: 국제 정치, 경제, 기술, 과학.";
@@ -1556,10 +1617,6 @@ export const useDataStore = create((set, get) => ({
 				}),
 			]);
 
-			if (localEdge?.data) {
-				set((s) => ({ rawData: { ...s.rawData, news: localEdge.data } }));
-			}
-
 			const localResults = localEdge?.ok
 				? filterLocalizedArticles(localEdge.data?.results ?? [], lang, 5)
 				: [];
@@ -1578,16 +1635,13 @@ export const useDataStore = create((set, get) => ({
 						? await translateArticlesToKorean(merged)
 						: merged;
 				const full = {
-					news: [],
 					answer: localEdge?.data?.answer ?? globalEdge?.data?.answer ?? null,
 					results: finalResults,
 				};
 				set({
-					news: full.news,
 					newsAnswer: full.answer,
 					newsResults: full.results,
 				});
-				cacheIt("news", full);
 				await writeApiCache(cacheKey, full, userId);
 				get().markFetched("news");
 				get().setApiStatus("news", "ok");
@@ -1597,16 +1651,13 @@ export const useDataStore = create((set, get) => ({
 
 			if (didFetchAny) {
 				const full = {
-					news: [],
 					answer: localEdge?.data?.answer ?? globalEdge?.data?.answer ?? null,
 					results: [],
 				};
 				set({
-					news: full.news,
 					newsAnswer: full.answer,
 					newsResults: full.results,
 				});
-				cacheIt("news", full);
 				await writeApiCache(cacheKey, full, userId);
 				get().markFetched("news");
 				get().setApiStatus("news", "ok");

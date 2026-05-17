@@ -39,7 +39,6 @@ export const useBriefingContext = () => {
 	const newsResults = useDataStore((s) => s.newsResults);
 	const newsAnswer = useDataStore((s) => s.newsAnswer);
 	const trendsResults = useDataStore((s) => s.trendsResults);
-	const trendsAnswer = useDataStore((s) => s.trendsAnswer);
 	const healthData = useDataStore((s) => s.healthData);
 	const activeWidgetIds = useDataStore((s) => s.activeWidgetIds) || [];
 	const todos = useTodoStore((s) => s.todos);
@@ -88,7 +87,6 @@ export const useBriefingContext = () => {
 			newsResults: (newsResults ?? []).slice(0, 5),
 			newsAnswer: newsAnswer ?? "",
 			trendsResults: (trendsResults ?? []).slice(0, 5),
-			trendsAnswer: trendsAnswer ?? "",
 			todayQA: todayQA ?? [],
 			smartSummaries: buildSmartSummaries(smartKeywords, smartWidgetData),
 			healthData: healthData ?? null,
