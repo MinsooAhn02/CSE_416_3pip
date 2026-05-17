@@ -91,4 +91,4 @@ stocks widgets(난이도: 중):
 plan with opus, work with sonnet(swtich model required). ask questions if unclear. After the entire execution, update in @DOCS.md
 
 Calendar: when regenerating already generated journal, google calendar events are not included in 일정
-  seciton, when switchting through language settings. Fix this issue as well.
+  seciton, even in switchting through language settings. Fix this issue as well.

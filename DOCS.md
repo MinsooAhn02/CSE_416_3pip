@@ -1132,7 +1132,6 @@ https://www.googleapis.com/auth/fitness.activity.read
 |------|------|
 | Google Calendar 실 API 연동 | Edge Function 구현됨, 프론트 store는 Mock 기반 |
 | Google Fitness 실 API 연동 | Edge Function 구현됨, 실 토큰 연동 필요 |
-| kakao-places 함수 | 구현됨, 프론트에서 미사용 |
 | 음성 기능 (voiceOn) | 상태는 존재, UI/TTS 구현 없음 |
 | keyword_score_log 자동 집계 | runPersonalizationBatch 호출됨, 내부 상세 로직 미확인 |
 | NewsDetailModal | 파일 존재하나 미사용 (직접 URL 이동으로 대체) |
@@ -1497,3 +1496,27 @@ line && typeof line === "object" ? (
 **스마트 키워드 입력창 위치:** `SettingsModal.jsx` 스마트 탭에서 입력창을 키워드 rows 하단 → 섹션 헤더 직후 상단으로 이동. 관심사 키워드 레이아웃(입력 → 리스트)과 동일한 패턴. 섹션 헤더 조건부(`smartKeywords.length > 0`) 제거 → 항시 표시.
 
 **AI 브리핑 토글 제거:** 위젯 관리 탭의 기본 위젯 리스트에서 `briefing` 필터링. AI 브리핑은 항상 활성화 (사용자가 끌 수 없음). `DEFAULT_VIS`, `FIXED_WIDGETS`는 변경 없음.
+
+---
+
+## Fixes Round 7 (2026-05-17)
+
+### 일기 재생성 시 일정 섹션 소실 버그 수정
+
+**문제:** 오늘 일기를 처음 생성하면 구글 캘린더 일정이 정상 표시되지만, **다시 생성** 클릭 시 일정 섹션이 "일정 없음"으로 바뀐다.
+
+**근본 원인:** `src/services/diaryGenerationService.js`의 `fetchCalendarEventsForDate`가 `useDataStore.calEvents`를 primary source로 사용했으나:
+
+1. `useDataStore.fetchCalendar`는 `todayOnly: true`로 오늘 이벤트만 캐싱 → 재생성 시점에 store가 갱신되거나 에러 fallback(`cached("calendar", [])`)으로 빈 배열이 될 수 있음.
+2. `filterEventsForDate`가 `isSameLocalDate(start, dateStr)` 검사를 사용해, all-day 이벤트(`start = "2026-05-17"`)를 UTC 기준으로 파싱하면 타임존에 따라 날짜가 하루 어긋남.
+3. 보조 fallback으로 `supabase.functions.invoke("events", { body: { token, date } })`를 호출했으나 Edge Function은 `{ action: "list", timeMin, timeMax }` 형식을 요구해 항상 실패.
+
+**해결:** `useGoogleCalendarStore.events`를 canonical source로 사용 (CalendarWidget과 동일 패턴)
+
+- `filterEventsForDate`: `event.date === dateStr` 직접 비교 우선 (normalized string, timezone 무관) → fallback으로 `isSameLocalDate`.
+- `fetchCalendarEventsForDate`: `useGoogleCalendarStore.getState().events`에서 읽고, 없으면 `fetchEvents({ date: dateStr, skipLoading: true })`로 lazy-fetch. 깨진 supabase fallback 제거.
+- `import { supabase }` 제거 (더 이상 불필요).
+
+**수정 파일:** `src/services/diaryGenerationService.js` (lines 1, 19-49)
+
+**부수 효과:** 과거 날짜 일기 재생성 시에도 해당 달 이벤트가 `useGoogleCalendarStore.events`에 있으면 올바르게 포함됨.

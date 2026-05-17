@@ -1,4 +1,3 @@
-import { supabase } from "../lib/supabase";
 import { useDataStore } from "../store/useDataStore";
 import { useDiaryStore } from "../store/useDiaryStore";
 import { useGoogleCalendarStore } from "../store/useGoogleCalendarStore";
@@ -21,51 +20,32 @@ const filterEventsForDate = (events = [], dateStr) => {
 	if (!Array.isArray(events)) return [];
 
 	return events.filter((event) => {
-		const start = event?.start || event?.date || null;
-		if (!start) return false;
-		return isSameLocalDate(start, dateStr);
+		if (event?.date === dateStr) return true;
+		const start = event?.start || event?.startTime || null;
+		return start ? isSameLocalDate(start, dateStr) : false;
 	});
 };
 
 const fetchCalendarEventsForDate = async (dateStr) => {
-	const cachedEvents = filterEventsForDate(
-		useDataStore.getState().calEvents || [],
-		dateStr,
-	);
+	const calendarStore = useGoogleCalendarStore.getState();
+	let events = filterEventsForDate(calendarStore.events || [], dateStr);
 
-	if (cachedEvents.length > 0 || !supabase) {
-		return cachedEvents;
+	if (events.length === 0 && typeof calendarStore.fetchEvents === "function") {
+		try {
+			await calendarStore.fetchEvents({ date: dateStr, skipLoading: true });
+			events = filterEventsForDate(
+				useGoogleCalendarStore.getState().events || [],
+				dateStr,
+			);
+		} catch (error) {
+			console.warn(
+				`[Diary] Failed to fetch calendar events for ${dateStr}:`,
+				error?.message || error,
+			);
+		}
 	}
 
-	try {
-		const {
-			data: { session },
-		} = await supabase.auth.getSession();
-		const token = session?.provider_token;
-
-		if (!token) {
-			return cachedEvents;
-		}
-
-		const { data, error } = await supabase.functions.invoke("events", {
-			body: {
-				token,
-				date: dateStr,
-			},
-		});
-
-		if (error) {
-			throw error;
-		}
-
-		return filterEventsForDate(data || [], dateStr);
-	} catch (error) {
-		console.warn(
-			`[Diary] Failed to fetch calendar events for ${dateStr}:`,
-			error?.message || error,
-		);
-		return cachedEvents;
-	}
+	return events;
 };
 
 const fetchCompletedTasksForDate = async (dateStr) => {
