@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
+import toast from "react-hot-toast";
 import {
 	Bold,
 	Italic,
@@ -471,6 +472,11 @@ const EventPanel = ({ selectedDate, onClose }) => {
 		savedDescriptionRangeRef.current = null;
 	};
 
+	const handleCloseAddForm = () => {
+		setShowAddForm(false);
+		resetForm();
+	};
+
 	useEffect(() => {
 		setShowAddForm(false);
 		setSelectedEventForDetail(null);
@@ -519,59 +525,69 @@ const EventPanel = ({ selectedDate, onClose }) => {
 
 	const handleSubmit = async (event) => {
 		event.preventDefault();
-		if (!formData.allDay && (!formData.startTime || !formData.endTime)) return;
+		if (!formData.allDay && (!formData.startTime || !formData.endTime)) {
+			toast.error(t("toast.event_time_required"), { id: "event-time-required" });
+			return;
+		}
+
+		const isEdit = !!editingId;
+		const targetId = editingId;
+		const previousDetail = selectedEventForDetail;
+		const attendees = parseGuestEmailsText(formData.guestEmailsText);
+		const repeat = buildRepeatObject(formData);
+		const existingEvent = isEdit
+			? editingEventSnapshot || events.find((item) => item.id === targetId)
+			: null;
+		const payload = {
+			title: formData.title,
+			allDay: formData.allDay,
+			date: activeFormDate,
+			location: formData.location,
+			description: formData.description,
+			startTime: formData.allDay ? "" : formData.startTime,
+			endTime: formData.allDay ? "" : formData.endTime,
+			repeat,
+			attendees,
+			addGoogleMeet: formData.addGoogleMeet,
+			clearConference: !!(
+				isEdit &&
+				existingEvent?.addGoogleMeet &&
+				!formData.addGoogleMeet
+			),
+			visibility: formData.visibility,
+			availability: formData.availability,
+			remindersUseDefault: formData.reminderMode === "default",
+			reminderOverrides:
+				formData.reminderMode === "custom"
+					? [
+							{
+								method: "popup",
+								minutes: Number(formData.reminderMinutes || 30),
+							},
+						]
+					: [],
+			sendUpdates: attendees.length > 0 ? formData.sendUpdates : false,
+		};
+
+		handleCloseAddForm();
+		if (isEdit && previousDetail?.id === targetId) {
+			setSelectedEventForDetail({ ...previousDetail, ...payload });
+		}
 
 		try {
-			const attendees = parseGuestEmailsText(formData.guestEmailsText);
-			const repeat = buildRepeatObject(formData);
-			const existingEvent = editingId
-				? editingEventSnapshot || events.find((item) => item.id === editingId)
-				: null;
-			const payload = {
-				title: formData.title,
-				allDay: formData.allDay,
-				date: activeFormDate,
-				location: formData.location,
-				description: formData.description,
-				startTime: formData.allDay ? "" : formData.startTime,
-				endTime: formData.allDay ? "" : formData.endTime,
-				repeat,
-				attendees,
-				addGoogleMeet: formData.addGoogleMeet,
-				clearConference: !!(
-					editingId &&
-					existingEvent?.addGoogleMeet &&
-					!formData.addGoogleMeet
-				),
-				visibility: formData.visibility,
-				availability: formData.availability,
-				remindersUseDefault: formData.reminderMode === "default",
-				reminderOverrides:
-					formData.reminderMode === "custom"
-						? [
-								{
-									method: "popup",
-									minutes: Number(formData.reminderMinutes || 30),
-								},
-							]
-						: [],
-				sendUpdates: attendees.length > 0 ? formData.sendUpdates : false,
-			};
-
-			if (editingId) {
-				await updateEvent(editingId, payload);
-				setEditingId(null);
-				if (selectedEventForDetail?.id === editingId) {
-					setSelectedEventForDetail({ ...selectedEventForDetail, ...payload });
-				}
+			if (isEdit) {
+				await updateEvent(targetId, payload);
 			} else {
 				await addEvent(payload);
 			}
-
-			resetForm();
-			setShowAddForm(false);
 		} catch (err) {
-			console.error("Failed to save event:", err);
+			console.error("[gcal] save event failed:", err);
+			toast.error(
+				err?.message
+					? `${t("toast.event_save_failed")}: ${err.message}`
+					: t("toast.event_save_failed"),
+				{ id: "event-save-failed" },
+			);
 		}
 	};
 
@@ -888,10 +904,7 @@ const EventPanel = ({ selectedDate, onClose }) => {
 				createPortal(
 					<div
 						className="fixed inset-0 z-[22000] bg-black/60 backdrop-blur-md flex items-center justify-center"
-						onClick={() => {
-							setShowAddForm(false);
-							resetForm();
-						}}
+						onClick={handleCloseAddForm}
 					>
 						<div
 							className={`z-[22010] w-full max-w-md max-h-[78vh] overflow-y-auto rounded-2xl border-2 shadow-2xl p-6 space-y-4 ${modalCardCls}`}
@@ -902,10 +915,8 @@ const EventPanel = ({ selectedDate, onClose }) => {
 									{editingId ? t("events.edit_event") : t("events.add_event")}
 								</h2>
 								<button
-									onClick={() => {
-										setShowAddForm(false);
-										resetForm();
-									}}
+									type="button"
+									onClick={handleCloseAddForm}
 									className={`p-1.5 rounded-lg ${hoverCls}`}
 								>
 									<X size={20} />
@@ -1483,10 +1494,7 @@ const EventPanel = ({ selectedDate, onClose }) => {
 									</button>
 									<button
 										type="button"
-										onClick={() => {
-											setShowAddForm(false);
-											resetForm();
-										}}
+										onClick={handleCloseAddForm}
 										className={`flex-1 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${modalSecondaryBtnCls}`}
 									>
 										{t("common.cancel")}

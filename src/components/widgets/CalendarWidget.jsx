@@ -6,10 +6,12 @@ import {
 	ChevronRight,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import toast from "react-hot-toast";
 import { useTheme } from "../../hooks/useTheme";
 import {
 	filterTasksByTaskList,
 	useGoogleCalendarStore,
+	GOOGLE_SYNC_AUTH_ERROR,
 } from "../../store/useGoogleCalendarStore";
 import { useTodoStore } from "../../store/useTodoStore";
 import { useDiaryStore } from "../../store/useDiaryStore";
@@ -90,7 +92,12 @@ const CalendarWidget = () => {
 		useGoogleCalendarStore
 			.getState()
 			.fetchEventsAndTasks?.({ date: formatLocalDate(currentDate) })
-			.catch(() => {});
+			.catch((err) => {
+				console.warn("[gcal] calendar sync failed:", err);
+				if (err?.message && err.message !== GOOGLE_SYNC_AUTH_ERROR) {
+					toast.error(t("toast.calendar_sync_failed"), { id: "calendar-sync-failed" });
+				}
+			});
 	}, [currentDate]);
 
 	const handleCycleView = () => {

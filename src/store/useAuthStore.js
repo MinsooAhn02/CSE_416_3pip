@@ -148,7 +148,8 @@ export const useAuthStore = create((set, get) => ({
 				set({ providerToken: refreshedToken });
 			}
 			return refreshedToken;
-		} catch {
+		} catch (err) {
+			console.warn("[gcal] ensureProviderToken failed:", err);
 			return null;
 		}
 	},

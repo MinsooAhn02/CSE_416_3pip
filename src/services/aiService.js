@@ -2037,54 +2037,72 @@ export async function generateDiary({
 			: [],
 	};
 
-	const systemPromptV2 = [
-		"You are a diary assistant that summarizes a user's day from structured facts.",
-		`Write the response in ${diaryCopy.targetLanguageName}.`,
-		"Return exactly one JSON object and nothing else.",
-		"Do not invent events, emotions, or conclusions that are not supported by the input.",
-	].join("\n");
+	const isKoTarget = resolvedLanguage === "ko";
 
-	const promptV2 = [
-		`Write a diary title and summary for ${formattedDate}.`,
-		`Write both fields in ${diaryCopy.targetLanguageName}.`,
-		'Return JSON only in this shape: {"title":"...","summary":"..."}',
-		"",
-		"Rules:",
-		"- Title should be short and symbolic, without exaggeration.",
-		"- Summary should be 2 to 4 factual sentences.",
-		"- The schedule and completed lists will already be shown separately, so connect the day naturally instead of repeating every bullet verbatim.",
-		"- If memo exists, weave it in naturally as a factual note.",
-		"- If the day was inactive, mention that naturally.",
-		"- If user interests are listed and relevant data (trends, news, stocks) exists, briefly reference them naturally.",
-		"- briefingText contains time-stamped briefing snapshots saved throughout the day — use them as the primary source for what actually happened.",
-		"- If previousDayDiary is provided, write in a similar tone and style. If previousDayFeedback is provided, address those points in this entry.",
-		"",
-		"Input data:",
-		JSON.stringify(promptContext, null, 2),
-	].join("\n");
+	const systemPromptV2 = isKoTarget
+		? [
+				"당신은 사용자의 하루를 정리하는 일기 보조 AI입니다.",
+				"반드시 한국어(한글)로만 모든 텍스트를 작성하세요.",
+				"일본어, 중국어, 러시아어, 아랍어 등 다른 언어/문자는 절대 사용하지 마세요.",
+				'날짜는 "5월 15일"처럼 숫자+한글 형식으로 표기하세요 ("五月十五日" 같은 한자 단독 표기 금지).',
+				"반드시 JSON 객체 하나만 반환하세요.",
+				"summary는 사실 기반으로만 쓰고, 추측이나 감정 과장은 금지합니다.",
+			].join("\n")
+		: [
+				"You are a diary assistant that summarizes a user's day from structured facts.",
+				"Write ALL output strictly in English. Do not use Korean Hangul, Japanese kana, Chinese characters, Cyrillic, Arabic, or any other script.",
+				'Use plain Latin letters for dates (e.g. "May 15"). Never use CJK or other non-Latin date formats.',
+				"Return exactly one JSON object and nothing else.",
+				"Summary must be factual only. Do not invent events, emotions, or conclusions not supported by the input.",
+			].join("\n");
 
-	const systemPrompt = [
-		"당신은 사용자의 하루를 정리하는 일기 보조 AI입니다.",
-		"반드시 JSON 객체 하나만 반환하세요.",
-		"summary는 사실 기반으로만 쓰고, 감정 과장이나 추측은 금지합니다.",
-		"title은 짧은 상징 문구로 작성하되 과장하지 마세요.",
-	].join("\n");
+	const promptV2 = isKoTarget
+		? [
+				`${formattedDate}의 일기 제목과 요약을 한국어로 작성하세요.`,
+				"반드시 한국어(한글)만 사용하고 다른 언어 문자는 절대 사용하지 마세요.",
+				'반드시 아래 형식의 JSON만 반환하세요: {"title":"...","summary":"..."}',
+				"",
+				"규칙:",
+				"- title: 3~10자 내외의 짧은 상징 문구 (한국어)",
+				"- summary: 한국어 2~4문장, 사실 기반",
+				"- 일정 목록과 완료 목록은 앱에서 따로 보여주므로 summary는 흐름 정리에 집중",
+				"- memo가 있으면 사실 기반으로 자연스럽게 반영",
+				"- 앱 미접속일이면 summary에 그 사실을 자연스럽게 포함",
+				"- briefingText에 시간대별 브리핑 스냅샷이 있으면 이를 그날의 주요 내용으로 활용",
+				"- previousDayDiary가 있으면 비슷한 문체로 작성, previousDayFeedback이 있으면 해당 내용 반영",
+				"",
+				"입력 데이터:",
+				JSON.stringify(promptContext, null, 2),
+			].join("\n")
+		: [
+				`Write a diary title and summary for ${formattedDate}.`,
+				"Write both fields strictly in English only. No other languages or scripts.",
+				'Return JSON only in this shape: {"title":"...","summary":"..."}',
+				"",
+				"Rules:",
+				"- Title should be short and symbolic, without exaggeration.",
+				"- Summary should be 2 to 4 factual sentences.",
+				"- The schedule and completed lists will already be shown separately, so connect the day naturally instead of repeating every bullet verbatim.",
+				"- If memo exists, weave it in naturally as a factual note.",
+				"- If the day was inactive, mention that naturally.",
+				"- If user interests are listed and relevant data (trends, news, stocks) exists, briefly reference them naturally.",
+				"- briefingText contains time-stamped briefing snapshots saved throughout the day — use them as the primary source for what actually happened.",
+				"- If previousDayDiary is provided, write in a similar tone and style. If previousDayFeedback is provided, address those points in this entry.",
+				"",
+				"Input data:",
+				JSON.stringify(promptContext, null, 2),
+			].join("\n");
 
-	const prompt = [
-		`${formattedDate}의 일기 제목과 요약을 작성하세요.`,
-		"반드시 아래 형식의 JSON만 반환하세요.",
-		'{"title":"...","summary":"..."}',
-		"",
-		"규칙:",
-		"- title: 한국어 3~10자 내외의 짧은 상징 문구",
-		"- summary: 한국어 2~4문장, 사실 기반",
-		"- 일정 목록과 완료 목록은 앱에서 따로 보여주므로 summary는 흐름 정리에 집중",
-		"- Memo가 있으면 사실 기반으로 한 문장 안에서 자연스럽게 반영 가능",
-		"- 앱 미접속일이면 summary 안에 그 사실을 자연스럽게 한 문장으로 포함",
-		"",
-		"입력 데이터:",
-		JSON.stringify(promptContext, null, 2),
-	].join("\n");
+	const containsForeignScripts = (text, targetLang) => {
+		if (!text) return false;
+		if (targetLang === "ko") {
+			return /[぀-ゟ゠-ヿЀ-ӿ؀-ۿ֐-׿฀-๿ऀ-ॿ]/.test(text);
+		}
+		if (targetLang === "en") {
+			return /[가-힯぀-ゟ゠-ヿ一-鿿Ѐ-ӿ؀-ۿ]/.test(text);
+		}
+		return false;
+	};
 
 	const data = await invokeFunction("groq", {
 		prompt: promptV2,
@@ -2098,14 +2116,29 @@ export async function generateDiary({
 			const title = normalizeDiaryLineText(parsed?.title, fallbackTitle);
 			const summary = normalizeDiaryLineText(parsed?.summary, fallbackSummary);
 
+			const titleHasForeign = containsForeignScripts(title, resolvedLanguage);
+			const summaryHasForeign = containsForeignScripts(summary, resolvedLanguage);
+
+			if (titleHasForeign || summaryHasForeign) {
+				console.warn(`[Diary] AI output contained foreign script (lang=${resolvedLanguage}); falling back.`);
 				return buildDiaryTextForLanguage({
-					title,
+					title: titleHasForeign ? fallbackTitle : title,
 					formattedDate,
 					scheduleLines,
 					completedLines,
-					summary,
+					summary: summaryHasForeign ? fallbackSummary : summary,
 					language: resolvedLanguage,
 				});
+			}
+
+			return buildDiaryTextForLanguage({
+				title,
+				formattedDate,
+				scheduleLines,
+				completedLines,
+				summary,
+				language: resolvedLanguage,
+			});
 		} catch (error) {
 			console.warn("AI Diary 파싱 실패:", error?.message || error);
 		}

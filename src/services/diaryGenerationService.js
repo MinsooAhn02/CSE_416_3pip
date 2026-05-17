@@ -80,6 +80,7 @@ export const buildDiaryGenerationContext = async (
 		dateStr === formatLocalDate() ||
 		diaryAnswers.length > 0 ||
 		!!(existingEntry?.notes || existingEntry?.memo || "").trim() ||
+		!!(existingEntry?.diary || "").trim() ||
 		(Array.isArray(briefingSnapshots) && briefingSnapshots.length > 0);
 
 	const settingsStore = useSettingsStore.getState();

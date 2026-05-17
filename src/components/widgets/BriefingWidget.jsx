@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Sparkles, RefreshCw, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useTheme } from "../../hooks/useTheme";
+import { useFontSize } from "../../hooks/useFontSize";
 import { useSettingsStore } from "../../store/useSettingsStore";
 import { useBriefingHistoryStore } from "../../store/useBriefingHistoryStore";
 import { useBriefingContext } from "../../hooks/useBriefingContext";
@@ -12,6 +13,10 @@ import BriefingSectionsView, { SkeletonLine } from "./BriefingSectionsView";
 
 const BriefingWidget = () => {
 	const { isDark, cardCls, cardShadowCls, muted } = useTheme();
+	const { body: bodyStyle, title: titleStyle } = useFontSize();
+	const { body: sectionTitleStyle } = useFontSize(0.75);
+	const { body: contentLineStyle } = useFontSize(0.92);
+	const { body: footerHintStyle } = useFontSize(0.83);
 	const { t, i18n } = useTranslation();
 	const BRIEFING_LENGTH = "medium";
 
@@ -198,7 +203,7 @@ const BriefingWidget = () => {
 				<div className="flex items-center justify-between mb-4">
 					<div className="flex items-center gap-2">
 						<Sparkles size={18} className="text-blue-500" />
-						<h2 className="font-bold text-sm">{t("briefing.title")}</h2>
+						<h2 className="font-bold" style={titleStyle}>{t("briefing.title")}</h2>
 					</div>
 					<div className="flex items-center gap-1">
 						<button
@@ -219,11 +224,11 @@ const BriefingWidget = () => {
 					</div>
 				</div>
 
-				<p className={`text-xs uppercase tracking-widest mb-3 ${muted}`}>
+				<p className={`uppercase tracking-widest mb-3 ${muted}`} style={bodyStyle}>
 					{t("briefing.subtitle")}
 				</p>
 
-				<p className="text-sm font-medium mb-3">
+				<p className="font-medium mb-3" style={titleStyle}>
 					{t("briefing.today_briefing")}
 				</p>
 
@@ -240,12 +245,13 @@ const BriefingWidget = () => {
 					) : displayBriefing.sections.length > 0 ? (
 						displayBriefing.sections.map((section) => (
 							<div key={section.id} className="py-1.5 first:pt-0 last:pb-0">
-								<p className={`text-[9px] font-bold uppercase tracking-wider mb-0.5 ${isDark ? "text-blue-400/70" : "text-blue-600/70"}`}>
+								<p className={`font-bold uppercase tracking-wider mb-0.5 ${isDark ? "text-blue-400/70" : "text-blue-600/70"}`} style={sectionTitleStyle}>
 									{section.title}
 								</p>
 								<p
-									className={`text-[11px] leading-snug ${muted} overflow-hidden`}
+									className={`leading-snug ${muted} overflow-hidden`}
 									style={{
+										...contentLineStyle,
 										display: "-webkit-box",
 										WebkitLineClamp: 2,
 										WebkitBoxOrient: "vertical",
@@ -260,8 +266,9 @@ const BriefingWidget = () => {
 						))
 					) : detailLines.length > 0 ? (
 						<p
-							className={`text-[11px] leading-snug ${muted} overflow-hidden pt-1`}
+							className={`leading-snug ${muted} overflow-hidden pt-1`}
 							style={{
+								...contentLineStyle,
 								display: "-webkit-box",
 								WebkitLineClamp: 6,
 								WebkitBoxOrient: "vertical",
@@ -272,7 +279,7 @@ const BriefingWidget = () => {
 					) : null}
 				</div>
 
-				<p className={`mt-4 text-[10px] ${muted} text-center`}>
+				<p className={`mt-4 ${muted} text-center`} style={footerHintStyle}>
 					{t("briefing.click_for_detail")}
 				</p>
 			</div>

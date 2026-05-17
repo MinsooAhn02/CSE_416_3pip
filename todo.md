@@ -89,6 +89,3 @@ stocks widgets(난이도: 중):
    - remove ticker?에서 confirm을 누르면 삭제가 되면서 remove ticker?를 물어본 모달만 꺼져야 함.
 
 plan with opus, work with sonnet(swtich model required). ask questions if unclear. After the entire execution, update in @DOCS.md
-
-Calendar: when regenerating already generated journal, google calendar events are not included in 일정
-  seciton, even in switchting through language settings. Fix this issue as well.

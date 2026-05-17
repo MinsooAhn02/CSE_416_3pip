@@ -10,7 +10,9 @@
       "PowerShell($c = Get-Content \"DOCS.md\"; \"lines: $\\($c.Count\\)\"; \"--- tail 90 ---\"; $c | Select-Object -Last 90)",
       "Bash(npx vite *)",
       "Bash(python *)",
-      "Bash(npx tsc *)"
+      "Bash(npx tsc *)",
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\okggg\\\\Desktop\\\\CSE 416\\\\CSE_416_3pip\\\\src\\\\components\" -Recurse -Filter \"*.jsx\")",
+      "Bash(Select-Object FullName)"
     ],
     "deny": []
   },

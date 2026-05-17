@@ -478,7 +478,10 @@ export const useGoogleCalendarStore = create((set, get) => ({
 					: invokeGoogleFunction("tasks", {
 						token,
 						action: "listTaskLists",
-					}).catch(() => FALLBACK_TASK_LISTS),
+					}).catch((err) => {
+						console.warn("[gcal] listTaskLists failed, using fallback:", err);
+						return FALLBACK_TASK_LISTS;
+					}),
 				invokeGoogleFunction("tasks", {
 					token,
 					action: "list",
@@ -564,7 +567,8 @@ export const useGoogleCalendarStore = create((set, get) => ({
 			writeTaskListFilter(selectedTaskListFilter);
 			set({ taskLists: lists, taskListsLoaded: true, selectedTaskListFilter });
 			return lists;
-		} catch {
+		} catch (err) {
+			console.warn("[gcal] fetchTaskLists failed, using fallback:", err);
 			const selectedTaskListFilter = resolveTaskListFilterId(
 				get().selectedTaskListFilter,
 				FALLBACK_TASK_LISTS,
@@ -749,6 +753,10 @@ export const useGoogleCalendarStore = create((set, get) => ({
 			const merged = normalizeEvent({
 				...(current || {}),
 				...(updates || {}),
+				// Null out the stale ISO start/end so normalizeEvent picks up
+				// the new HH:MM startTime/endTime from updates instead.
+				start: null,
+				end: null,
 				id: eventId,
 				recurrence:
 					updates?.recurrence ||

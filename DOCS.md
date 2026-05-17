@@ -1520,3 +1520,126 @@ line && typeof line === "object" ? (
 **수정 파일:** `src/services/diaryGenerationService.js` (lines 1, 19-49)
 
 **부수 효과:** 과거 날짜 일기 재생성 시에도 해당 달 이벤트가 `useGoogleCalendarStore.events`에 있으면 올바르게 포함됨.
+
+---
+
+## Fixes Round 8 (2026-05-17)
+
+### 1. 일기 생성 언어 엄격 적용 + 외래 문자 후처리 검증
+
+**문제:** AI가 일기 title/summary를 "五月十五日"(한자), "스트 назначить"(한국어+러시아어) 등 엉뚱한 언어로 생성하는 경우 발생. 기존 프롬프트는 `Write the response in Korean` 한 줄뿐이라 입력 데이터에 외래어가 섞이면 모델이 언어를 혼용함.
+
+**해결:** `src/services/aiService.js` `generateDiary` 함수 수정
+
+- **프롬프트 강화:** `resolvedLanguage`에 따라 한국어/영어 시스템 프롬프트를 분기. 한국어 시스템 프롬프트는 한국어로 작성하여 모델을 한국어 컨텍스트에 고정. 각 프롬프트에 사용 금지 문자(일본어, 러시아어, 아랍어 등) 명시 및 날짜 표기 형식("5월 15일" — "五月十五日" 금지) 안내.
+- **후처리 검증:** `containsForeignScripts(text, targetLang)` 헬퍼 추가. AI 응답 파싱 후 title/summary 각각 검사 — 한국어 대상: 히라가나·가타카나·키릴 등 탐지, 영어 대상: 한글·CJK·키릴 등 탐지. 외래 문자 감지 시 해당 필드를 결정론적 fallback(`buildDiaryFallbackTitleForLanguage`, `buildDiaryFallbackSummaryForLanguage`)으로 대체 후 경고 로그 출력.
+- 기존 미사용 한국어 `prompt`/`systemPrompt` 변수(dead code) 제거.
+
+### 2. AI 브리핑 대시보드 뷰 글자 크기 설정 적용
+
+**문제:** `글자 크기` 설정이 AI 브리핑 모달에는 적용되지만 대시보드 위젯 미리보기에는 적용되지 않음. 대시보드 내 모든 텍스트가 `text-xs`, `text-[11px]`, `text-[9px]`, `text-[10px]` 등 하드코딩된 Tailwind 클래스를 사용.
+
+**해결:** `src/components/widgets/BriefingWidget.jsx` 수정
+
+- `useFontSize` 훅 임포트 추가.
+- 컴포넌트 상단에서 4개 스타일 변수 선언: `bodyStyle`(×1.0), `titleStyle`(×1.0), `sectionTitleStyle`(×0.75, ~9px), `contentLineStyle`(×0.92, ~11px), `footerHintStyle`(×0.83, ~10px). 각 배수는 medium 기준 현행 픽셀값을 유지.
+- 대시보드 내 모든 텍스트 요소(위젯 제목 h2, 자막, today_briefing 레이블, 섹션 타이틀, 섹션 콘텐츠, "자세히 보기" 힌트)에서 하드코딩 사이즈 클래스 제거 → `style={...Style}` 적용.
+- 모달 뷰(`BriefingSectionsView`)는 이미 `useFontSize(1.2)` 사용 중 — 변경 없음.
+
+---
+
+## Fixes Round 9 (2026-05-17)
+
+### 재생성 과거 일기에 "앱 접속 기록이 없어" 문장 오출력 수정
+
+**문제:** 과거 날짜(예: 5월 15일) 일기를 재생성하면 "앱 접속 기록이 없어 자동 수집된 데이터만 정리했다." 문장이 포함됨. 해당 날짜에 실제로 앱을 사용했음에도 `wasActiveDay = false`로 추론됨.
+
+**근본 원인 (2가지):**
+
+1. `useDiaryStore.wasActiveOn(dateStr)` — `ACTIVE_KEY`("mb_last_access_date")는 단일 문자열 슬롯. `useMidnightTrigger.js`가 로그인마다 `todayStr()`으로 덮어씀. 5월 17일 로그인 후 `wasActiveOn("2026-05-15")`는 항상 `false`.
+2. `buildDiaryGenerationContext`의 `inferredWasActiveDay` OR 체인이 "일기가 이미 존재함" 신호를 누락. 일기가 존재한다는 사실 자체가 과거 활동의 증거임 — 자동 합성(briefing snapshots 존재 → `wasActiveDay: true`로 저장) 또는 사용자 명시적 생성 어느 경로로든 생성된 것이므로.
+
+**해결:** `src/services/diaryGenerationService.js` `buildDiaryGenerationContext` 내 `inferredWasActiveDay` OR 체인에 한 줄 추가:
+
+```js
+!!(existingEntry?.diary || "").trim() ||
+```
+
+`existingEntry?.notes`/`existingEntry?.memo` 검사 뒤, `briefingSnapshots` 검사 앞에 삽입. `existingEntry`는 이미 같은 함수 상단에서 로드된 변수 — 추가 store 호출 없음.
+
+**수정 파일:** `src/services/diaryGenerationService.js` (line 101, 1줄 추가)
+
+**보류 항목:** Set 기반 다중 날짜 활동 기록 + `markActive(today)` 로그인 시 호출 + 기존 일기 키에서 backfill. 현재 재생성 시나리오는 이번 fix로 커버되므로 우선순위 낮음.
+
+---
+
+## Fixes Round 10 (2026-05-17)
+
+### 1. Edit event modal not closing / save not persisting
+
+**문제:** 이벤트 시간 수정 후 저장 버튼 클릭 시 모달이 닫히지 않고 변경 사항이 저장되지 않음.
+
+**근본 원인:** Google 동기화 실패 시 `updateEvent`가 throw → `handleSubmit` catch 블록이 `console.error`만 출력하고 끝남 → 성공 경로의 `setShowAddForm(false)` / `resetForm()`이 실행되지 않아 모달 유지. 사용자 입장에서 "아무 일도 안 일어났다"처럼 보임.
+
+**해결:** `src/components/layout/EventPanel.jsx` handleSubmit catch 블록에 `toast.error()` 추가. 오류 발생 시 빨간 토스트로 에러 메시지 표시 (모달은 열린 채 유지 — 사용자가 편집 내용 보존). `react-hot-toast` import 추가.
+
+### 2. Google Calendar 동기화 오류 표면화
+
+**문제:** Google 로그인 상태임에도 캘린더 이벤트 동기화 실패. 오류가 모두 무음으로 삼켜져 사용자/개발자 모두 원인 파악 불가.
+
+**4개 무음 catch 수정:**
+
+| 파일 | 위치 | 수정 내용 |
+|------|------|----------|
+| `src/components/widgets/CalendarWidget.jsx` | line 93 | `.catch(() => {})` → `[gcal]` 로그 + auth 오류 제외 toast |
+| `src/store/useGoogleCalendarStore.js` | line 481 | `.catch(() => FALLBACK_TASK_LISTS)` → 로그 추가 후 동일 fallback |
+| `src/store/useGoogleCalendarStore.js` | line 567 | `catch {}` → `catch (err)` + `[gcal]` 로그 |
+| `src/store/useAuthStore.js` | line 151 | `catch { return null; }` → `catch (err)` + `[gcal]` 로그 |
+
+**진단 포인트:** `[gcal] ensureProviderToken failed:` 로그가 콘솔에 나타나면 Supabase OAuth `provider_token` 만료가 실제 원인임을 확인 가능 — 이를 기반으로 다음 라운드에서 재연결 플로우 개선 가능.
+
+**i18n 추가:** `en.json` + `ko.json` `toast` 네임스페이스에 `event_save_failed`, `calendar_sync_failed` 키 추가.
+
+**수정 파일:** `EventPanel.jsx`, `CalendarWidget.jsx`, `useGoogleCalendarStore.js`, `useAuthStore.js`, `en.json`, `ko.json`
+
+
+---
+
+## 23) 2026-05-17 — Round 11: 이벤트 생성/편집 모달 닫힘 버그 수정
+
+### 증상
+
+1. 새 이벤트 생성 — 저장은 성공하지만 모달이 닫히지 않음
+2. 이벤트 편집 — 저장도 안 되고 모달도 닫히지 않음
+3. Cancel 버튼 — 클릭해도 아무 반응 없음
+
+### 근본 원인
+
+handleSubmit의 setShowAddForm(false) 호출이 await addEvent/updateEvent 이후에 조건부로만 실행됨. addEvent 내부에서 fetchEvents가 추가 re-render를 유발해 setShowAddForm(false) 타이밍과 충돌 -> 모달이 열린 채 유지.
+
+Round 10의 '오류 시 모달 유지' 정책도 사용자 UX 기대와 충돌.
+
+추가: 시간 미입력 시 무음 return — 피드백 없이 아무것도 안 되는 것처럼 보임.
+
+### 해결
+
+패턴: Optimistic Close — 네트워크 호출 전에 모달을 먼저 닫고, 실패 시 toast만 표시.
+
+#### src/components/layout/EventPanel.jsx
+
+- handleCloseAddForm 헬퍼 추가 (setShowAddForm(false) + resetForm() 묶음)
+- handleSubmit 전면 개선:
+  - editingId, selectedEventForDetail 등 필요한 값을 로컬 변수에 미리 캡처
+  - payload 빌드 완료 후 await 이전에 handleCloseAddForm() 호출 (항상 닫힘 보장)
+  - 성공/실패 여부와 무관하게 모달은 항상 닫힘; 실패는 toast로만 알림
+  - 시간 미입력 early-return -> toast 피드백 추가 (toast.event_time_required)
+- X 버튼에 type='button' 명시 (방어적 수정)
+- backdrop / X / Cancel 세 곳의 인라인 close 핸들러를 handleCloseAddForm 단일 호출로 교체
+
+#### src/l10n/en.json + src/l10n/ko.json
+
+toast.event_time_required 키 추가:
+- EN: Please fill in start and end time
+- KO: 시작 시간과 종료 시간을 입력해주세요
+
+수정 파일: EventPanel.jsx, en.json, ko.json

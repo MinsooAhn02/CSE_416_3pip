@@ -49,7 +49,10 @@
     "widget_added": "Widget added",
     "widget_exists": "Keyword already added",
     "widget_invalid": "Please enter a keyword",
-    "widget_add_failed": "Failed to add widget"
+    "widget_add_failed": "Failed to add widget",
+    "event_save_failed": "Failed to save event",
+    "event_time_required": "Please fill in start and end time",
+    "calendar_sync_failed": "Calendar sync failed"
   },
   "nav": {
     "search_placeholder": "Search or ask AI...",
