@@ -81,23 +81,14 @@
 
 100. (마무리 단계) i18n En/Ko 설정 적용. dashboard, user settings, briefing에서도 설정한 언어로 display.
 
-ai briefing:
-   1. Market snapshot 관심사 설정이 toggled on 되어 있으면 반영인데, 그냥 삭제.
-   2. 대신 뉴스, 트렌드, 관심사를 정확히 반영해서 내용을 상세적으로 표시해야 함. 뉴스는 제목만 가지고 오는 수준임...제목만 가지고 올거면 원문 뉴스 링크도 hyperlink로 가져와야 함. 혹은, 뉴스 원문을 읽고 ai가 요약해서 프롬프트로 전달해서 브리핑으로 띄울 수 있으면 됌.
-   3. 브리핑 마지막에 뉴스 제목과 뉴스 내용을 요약한 내용 (2줄 정도). 그리고 작은 글씨로 뉴스 하이퍼 링크를 달아줘. 현재는 하이퍼링크가 먼저 나오고 제목이 그 다음 나오는 오류가 있음.
-
 smart widgets(난이도: 상):
    스마트 키워드도 이상함. Super Mario Galaxy Movie를 입력했는데, English language settings로는 관련 내용이 요약되어서 잘 나오지만 Korean language settings는 관련없는 내용이 나옴(e.g. Law Firms' Misleading Ads, Privacy Breaches Spark Outcry - 조선일보). 로직 분석 후 확인 필요. 원인 발견 필요.
-
-user settings ui 수정(난이도: 하):
-   - user settings에서 smart keywords의 입력창이 키워드 rows위 하단에 있는데, 그게 아니라 관심사 키워드 설정에서 입력창처럼 항시 상단 고정이어야 함.
-   - 위젯 관리 창에서 AI 브리핑 삭제
-
-calendar(난이도: 중):
-   calendar에서 일기장이 생성된 날에는 파란색 동그라미 표시가 있어야 되는데, 그 표시가 사라짐. 분석 후 코드 작업 전 확인 받을 것.
 
 stocks widgets(난이도: 중):
    - 주식 위젯: 지수이면 $나 Won symbol이 필요 없음. 주식만 필요함. 이 로직을 구현할 수 있는 코드를 생각해봐야 함.
    - remove ticker?에서 confirm을 누르면 삭제가 되면서 remove ticker?를 물어본 모달만 꺼져야 함.
 
 plan with opus, work with sonnet(swtich model required). ask questions if unclear. After the entire execution, update in @DOCS.md
+
+Calendar: when regenerating already generated journal, google calendar events are not included in 일정
+  seciton, when switchting through language settings. Fix this issue as well.

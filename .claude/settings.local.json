@@ -8,7 +8,9 @@
       "Bash(node --check src/services/aiService.js)",
       "Bash(node -e \"const p=require\\('./package.json'\\); console.log\\(JSON.stringify\\(p.scripts,null,2\\)\\)\")",
       "PowerShell($c = Get-Content \"DOCS.md\"; \"lines: $\\($c.Count\\)\"; \"--- tail 90 ---\"; $c | Select-Object -Last 90)",
-      "Bash(npx vite *)"
+      "Bash(npx vite *)",
+      "Bash(python *)",
+      "Bash(npx tsc *)"
     ],
     "deny": []
   },

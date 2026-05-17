@@ -4,13 +4,9 @@ import { Sparkles, X, RefreshCw } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useTheme } from "../../hooks/useTheme";
 import { useSettingsStore } from "../../store/useSettingsStore";
-import { useDataStore } from "../../store/useDataStore";
-import { useTodoStore } from "../../store/useTodoStore";
-import {
-	generateDetailedBriefing,
-	getTimeGreeting,
-} from "../../services/aiService";
-import { buildPersonaContext } from "../../utils/personaContext";
+import { useBriefingContext } from "../../hooks/useBriefingContext";
+import { generateDetailedBriefing, getTimeGreeting } from "../../services/aiService";
+import BriefingSectionsView from "../widgets/BriefingSectionsView";
 
 /**
  * First-Login Daily Briefing Modal (REQ-WS-006)
@@ -27,16 +23,19 @@ const FirstLoginBriefingModal = () => {
 	const dismissFirstLoginModal = useSettingsStore(
 		(s) => s.dismissFirstLoginModal,
 	);
-	const tone = useSettingsStore((s) => s.tone);
-	const priorityOrder = useSettingsStore((s) => s.priorityOrder) || [];
 	const BRIEFING_LENGTH = "medium";
 
-	// Data context
-	const weather = useDataStore((s) => s.weather);
-	const stocks = useDataStore((s) => s.stocks);
-	const trends = useDataStore((s) => s.trends);
-	const calEvents = useDataStore((s) => s.calEvents);
-	const todos = useTodoStore((s) => s.todos);
+	const {
+		tone,
+		priorityOrder,
+		fetchTodayQA,
+		buildContext,
+		weather,
+		calEvents,
+		stocks,
+		trends,
+		activeWidgetIds,
+	} = useBriefingContext();
 
 	// State
 	const [briefing, setBriefing] = useState(null);
@@ -66,6 +65,11 @@ const FirstLoginBriefingModal = () => {
 	// Time-based greeting
 	const greeting = useMemo(() => getTimeGreeting(), []);
 
+	// Load today's Q&A on mount so briefing has access to it
+	useEffect(() => {
+		fetchTodayQA();
+	}, []); // eslint-disable-line react-hooks/exhaustive-deps
+
 	// Generate briefing when modal opens
 	useEffect(() => {
 		if (!showFirstLoginModal) return;
@@ -73,19 +77,11 @@ const FirstLoginBriefingModal = () => {
 		const generateBriefing = async () => {
 			setIsLoading(true);
 			try {
-				const context = {
-					weather,
-					stocks,
-					trends,
-					calEvents,
-					todos,
-					persona: buildPersonaContext({ includeMemo: false }),
-				};
 				const result = await generateDetailedBriefing({
-					context,
+					context: buildContext(),
 					tone,
 					length: BRIEFING_LENGTH,
-					priorityOrder, // REQ-US-006: Pass priority order to AI
+					priorityOrder,
 				});
 				if (result) {
 					setBriefing(result);
@@ -98,7 +94,7 @@ const FirstLoginBriefingModal = () => {
 		};
 
 		generateBriefing();
-	}, [showFirstLoginModal, weather, stocks, trends, calEvents, todos, tone]);
+	}, [showFirstLoginModal, weather, calEvents, stocks, trends, activeWidgetIds, tone]); // eslint-disable-line react-hooks/exhaustive-deps
 
 	// Countdown timer for dismiss button (REQ-AJ-004: block dismissal for 10 seconds)
 	useEffect(() => {
@@ -140,19 +136,11 @@ const FirstLoginBriefingModal = () => {
 	const handleRefresh = async () => {
 		setIsLoading(true);
 		try {
-			const context = {
-				weather,
-				stocks,
-				trends,
-				calEvents,
-				todos,
-				persona: buildPersonaContext({ includeMemo: false }),
-			};
 			const result = await generateDetailedBriefing({
-				context,
+				context: buildContext(),
 				tone,
 				length: BRIEFING_LENGTH,
-				priorityOrder, // REQ-US-006: Pass priority order to AI
+				priorityOrder,
 			});
 			if (result) {
 				setBriefing(result);
@@ -164,11 +152,32 @@ const FirstLoginBriefingModal = () => {
 		}
 	};
 
-	// Parse briefing detail into lines
-	const detailLines = (briefing?.detail || "")
+	const displayBriefing = useMemo(() => {
+		if (briefing) {
+			return {
+				summary: briefing.summary || copy.title,
+				detail: briefing.detail || "",
+				sections: Array.isArray(briefing.sections) ? briefing.sections : [],
+			};
+		}
+		return { summary: "", detail: "", sections: [] };
+	}, [briefing, copy.title]);
+
+	const detailLines = (displayBriefing.detail || "")
 		.split("\n")
-		.map((line) => line.trim())
-		.filter(Boolean);
+		.map((line) =>
+			line
+				.trim()
+				.replace(/^[*#`]+|[*#`]+$/g, "")
+				.trim(),
+		)
+		.filter(
+			(line) =>
+				line &&
+				!line.startsWith("{") &&
+				!line.startsWith("}") &&
+				!line.startsWith('"'),
+		);
 
 	if (!showFirstLoginModal) return null;
 
@@ -255,37 +264,12 @@ const FirstLoginBriefingModal = () => {
 						</p>
 					</div>
 
-					{/* Briefing Content */}
-					<div className="flex-1 overflow-y-auto p-6 space-y-4">
-						{isLoading ? (
-							<div className="space-y-3 animate-pulse">
-								{[...Array(8)].map((_, i) => (
-									<div
-										key={i}
-										className={`h-4 rounded ${isDark ? "bg-morning-dark-hover" : "bg-morning-light-hover/30"}`}
-										style={{ width: `${75 + Math.random() * 25}%` }}
-									/>
-								))}
-							</div>
-						) : detailLines.length > 0 ? (
-							<div className="space-y-3">
-								{detailLines.map((line, idx) => (
-									<p
-										key={idx}
-										className={`text-sm leading-relaxed ${
-											isDark
-												? "text-morning-dark-muted"
-												: "text-morning-light-muted"
-										}`}
-									>
-										{line}
-									</p>
-								))}
-							</div>
-						) : (
-							<p className={`text-sm ${muted}`}>{copy.loading}</p>
-						)}
-					</div>
+					{/* Briefing Content — shared renderer identical to BriefingWidget detailed modal */}
+					<BriefingSectionsView
+						displayBriefing={displayBriefing}
+						detailLines={detailLines}
+						isLoading={isLoading}
+					/>
 
 					{/* Footer */}
 					<div

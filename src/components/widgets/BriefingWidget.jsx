@@ -4,95 +4,32 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Sparkles, RefreshCw, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useTheme } from "../../hooks/useTheme";
-import { useFontSize } from "../../hooks/useFontSize";
 import { useSettingsStore } from "../../store/useSettingsStore";
-import { useDataStore } from "../../store/useDataStore";
-import { useTodoStore } from "../../store/useTodoStore";
-import { useDiaryStore } from "../../store/useDiaryStore";
-import { useAuthStore } from "../../store/useAuthStore";
-import { useWidgetStore } from "../../store/useWidgetStore";
 import { useBriefingHistoryStore } from "../../store/useBriefingHistoryStore";
-import { mergeInterestLists } from "../../utils/interests";
-import { shiftDateString, formatLocalDate } from "../../utils/date";
-import {
-	generateDetailedBriefing,
-	getTimeGreeting,
-} from "../../services/aiService";
-
-/** 스켈레톤 라인 컴포넌트 */
-const SkeletonLine = ({ width = "100%" }) => (
-	<div
-		className="h-4 rounded bg-gray-200 dark:bg-gray-700 animate-pulse"
-		style={{ width }}
-	/>
-);
-
-/** 스켈레톤 UI - 상세 브리핑 로딩 시 표시 */
-const BriefingSkeleton = () => (
-	<motion.div
-		className="space-y-3"
-		initial={{ opacity: 0 }}
-		animate={{ opacity: 1 }}
-		exit={{ opacity: 0 }}
-		transition={{ duration: 0.3 }}
-	>
-		<SkeletonLine width="90%" />
-		<SkeletonLine width="100%" />
-		<SkeletonLine width="85%" />
-		<div className="h-2" />
-		<SkeletonLine width="95%" />
-		<SkeletonLine width="80%" />
-		<SkeletonLine width="100%" />
-		<SkeletonLine width="70%" />
-		<div className="h-2" />
-		<SkeletonLine width="88%" />
-		<SkeletonLine width="92%" />
-		<SkeletonLine width="75%" />
-	</motion.div>
-);
+import { useBriefingContext } from "../../hooks/useBriefingContext";
+import { generateDetailedBriefing, getTimeGreeting } from "../../services/aiService";
+import BriefingSectionsView, { SkeletonLine } from "./BriefingSectionsView";
 
 const BriefingWidget = () => {
 	const { isDark, cardCls, cardShadowCls, muted } = useTheme();
 	const { t, i18n } = useTranslation();
 	const BRIEFING_LENGTH = "medium";
-	const tone = useSettingsStore((s) => s.tone);
-	const priorityOrder = useSettingsStore((s) => s.priorityOrder) || [];
-	const fixedInterestIds = useSettingsStore((s) => s.fixedInterestIds) || [];
-	const keywordInterests = useSettingsStore((s) => s.keywordInterests) || [];
-	const persona = useAuthStore((s) => s.persona);
 
-	const weather = useDataStore((s) => s.weather);
-	const stocks = useDataStore((s) => s.stocks);
-	const trends = useDataStore((s) => s.trends);
-	const calEvents = useDataStore((s) => s.calEvents);
-	const tomorrowEvents = useDataStore((s) => s.tomorrowEvents);
-	const newsResults = useDataStore((s) => s.newsResults);
-	const newsAnswer = useDataStore((s) => s.newsAnswer);
-	const trendsResults = useDataStore((s) => s.trendsResults);
-	const trendsAnswer = useDataStore((s) => s.trendsAnswer);
-	const healthData = useDataStore((s) => s.healthData);
-	// activeWidgetIds는 useDataStore에서 세팅됨 (fetchAll → set activeWidgetIds)
-	const activeWidgetIds = useDataStore((s) => s.activeWidgetIds) || [];
-	const todos = useTodoStore((s) => s.todos);
+	const {
+		tone,
+		priorityOrder,
+		fetchTodayQA,
+		buildContext,
+		weather,
+		calEvents,
+		stocks,
+		trends,
+		activeWidgetIds,
+	} = useBriefingContext();
 
-	const smartKeywords = useWidgetStore((s) => s.smartKeywords);
-	const smartWidgetData = useWidgetStore((s) => s.smartWidgetData);
+	const addSnapshot = useBriefingHistoryStore((s) => s.addSnapshot);
+	const shouldSave = useBriefingHistoryStore((s) => s.shouldSave);
 
-	const todayQA = useDiaryStore((s) => s.todayQA);
-	const fetchTodayQA = useDiaryStore((s) => s.fetchTodayQA);
-	const diaryEntries = useDiaryStore((s) => s.entries);
-
-	const yesterdayDateStr = shiftDateString(formatLocalDate(), -1);
-
-	const yesterdayEntry = diaryEntries?.[yesterdayDateStr] || null;
-	const yesterdayMemo = yesterdayEntry?.memo || "";
-	const yesterdayDiary = yesterdayEntry?.diary || "";
-	const effectiveInterests = useMemo(
-		() => mergeInterestLists(fixedInterestIds, keywordInterests),
-		[fixedInterestIds, keywordInterests],
-	);
-
-	// Store briefings for all lengths: { short: {...}, medium: {...}, long: {...} }
 	const [briefingVersions, setBriefingVersions] = useState({
 		short: null,
 		medium: null,
@@ -101,12 +38,9 @@ const BriefingWidget = () => {
 	const [isLoading, setIsLoading] = useState(false);
 	const [isExpanded, setIsExpanded] = useState(false);
 	const [lastGenerated, setLastGenerated] = useState(null);
-	const addSnapshot = useBriefingHistoryStore((s) => s.addSnapshot);
-	const shouldSave = useBriefingHistoryStore((s) => s.shouldSave);
 
 	const detailPreviewContainerRef = useRef(null);
 
-	// 마운트 시 오늘의 Q&A 답변 로드
 	useEffect(() => {
 		fetchTodayQA();
 	}, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -124,17 +58,6 @@ const BriefingWidget = () => {
 		};
 	}, [isExpanded]);
 
-	// 스마트 위젯 요약 빌더 (상위 3개 키워드, 각 3개 bullet)
-	const buildSmartSummaries = (keywords, data) =>
-		(keywords ?? [])
-			.filter((kw) => data?.[kw])
-			.slice(0, 3)
-			.map((kw) => ({
-				keyword: kw,
-				bullets:
-					data[kw]?.sections?.flatMap((s) => s.bullets ?? []).slice(0, 3) ?? [],
-			}));
-
 	const generateBriefingVersion = async (
 		targetLength,
 		forceRefresh = false,
@@ -143,39 +66,7 @@ const BriefingWidget = () => {
 		if (!forceRefresh && briefingVersions[targetLength]) return;
 		setIsLoading(true);
 		try {
-			// 현재 시각 이전에 끝난 일정은 브리핑에서 제외
-			const nowMs = Date.now();
-			const filteredCalEvents = (calEvents ?? []).filter((e) => {
-				const endStr = e?.endTime || e?.end || null;
-				if (!endStr) return true;
-				try {
-					return new Date(endStr).getTime() >= nowMs;
-				} catch {
-					return true;
-				}
-			});
-
-			const context = {
-				weather,
-				stocks,
-				trends,
-				calEvents: filteredCalEvents,
-				tomorrowEvents,
-				todos,
-				activeWidgetIds,
-				yesterdayMemo,
-				keywordInterests: effectiveInterests,
-				fixedInterestIds,
-				persona,
-				newsResults: (newsResults ?? []).slice(0, 5),
-				newsAnswer: newsAnswer ?? "",
-				trendsResults: (trendsResults ?? []).slice(0, 5),
-				trendsAnswer: trendsAnswer ?? "",
-				todayQA: todayQA ?? [],
-				smartSummaries: buildSmartSummaries(smartKeywords, smartWidgetData),
-				healthData: healthData ?? null,
-				yesterdayDiary,
-			};
+			const context = buildContext();
 			const result = await generateDetailedBriefing({
 				context,
 				tone,
@@ -188,7 +79,6 @@ const BriefingWidget = () => {
 			}));
 			setLastGenerated(new Date());
 
-			// 스냅샷 저장: 첫 저장이거나 3시간 경과, 또는 manual refresh
 			if (result && shouldSave(snapshotSource)) {
 				addSnapshot({
 					source: snapshotSource,
@@ -204,14 +94,11 @@ const BriefingWidget = () => {
 		}
 	};
 
-	// Check if any briefing version exists
 	const hasBriefings =
 		briefingVersions.short || briefingVersions.medium || briefingVersions.long;
 
-	// 초기 1회 생성 플래그 — 위젯 데이터가 최소 한 종류 로드된 뒤 브리핑을 만들기 위해
 	const [initialGenDone, setInitialGenDone] = useState(false);
 
-	// 데이터가 준비되면 초기 브리핑을 1회 생성
 	useEffect(() => {
 		if (initialGenDone) return;
 		if (isLoading) return;
@@ -227,7 +114,6 @@ const BriefingWidget = () => {
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [weather, calEvents, stocks, trends, activeWidgetIds, initialGenDone]);
 
-	// 1시간마다 자동 갱신 (초기 생성 완료 후)
 	useEffect(() => {
 		if (!initialGenDone) return;
 		const interval = setInterval(() => {
@@ -237,7 +123,6 @@ const BriefingWidget = () => {
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [initialGenDone]);
 
-	// 톤이 변경되면 즉시 재생성 (초기 생성이 끝난 뒤에만)
 	useEffect(() => {
 		if (!initialGenDone) return;
 		if (isLoading) return;
@@ -245,8 +130,6 @@ const BriefingWidget = () => {
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [tone]);
 
-	// 언어가 변경되면 캐시 무효화 후 현재 언어로 재생성
-	// (refresh 버튼을 누르지 않아도 자동으로 사용자 언어를 따라가도록 보장)
 	useEffect(() => {
 		if (!initialGenDone) return;
 		setBriefingVersions({ short: null, medium: null, long: null });
@@ -254,7 +137,6 @@ const BriefingWidget = () => {
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [i18n.language]);
 
-	// Get the current briefing based on selected length
 	const currentBriefing = briefingVersions[BRIEFING_LENGTH];
 
 	const displayBriefing = useMemo(() => {
@@ -292,12 +174,6 @@ const BriefingWidget = () => {
 
 	const greeting = useMemo(() => getTimeGreeting(), [i18n.language]);
 
-	// 모달 본문 글자색 — muted 보다 더 진한(라이트)/더 밝은(다크) 색
-	const modalBodyText = isDark
-		? "text-morning-dark-text/90"
-		: "text-morning-light-text/85";
-	const { body: modalBodyFontStyle } = useFontSize(1.2);
-
 	const handleRefresh = (e) => {
 		e.stopPropagation();
 		generateBriefingVersion(BRIEFING_LENGTH, true, "refresh");
@@ -312,7 +188,6 @@ const BriefingWidget = () => {
 	const handleClose = () => {
 		setIsExpanded(false);
 	};
-
 
 	return (
 		<>
@@ -486,135 +361,12 @@ const BriefingWidget = () => {
 									</p>
 								</div>
 
-								<div className="flex-1 overflow-y-auto p-5 space-y-4">
-									<AnimatePresence mode="wait">
-										{isLoading ? (
-											<BriefingSkeleton key="skeleton" />
-										) : (
-											<motion.div
-												key="content"
-												className={`divide-y ${
-													isDark
-														? "divide-morning-dark-hover"
-														: "divide-morning-light-hover/40"
-												}`}
-												initial={{ opacity: 0 }}
-												animate={{ opacity: 1 }}
-												exit={{ opacity: 0 }}
-												transition={{ duration: 0.3 }}
-											>
-												{displayBriefing.sections.length > 0 ? (
-													displayBriefing.sections.map((section) => (
-														<div key={section.id} className="py-3 first:pt-0 last:pb-0">
-															<p
-																className={`text-[11px] font-bold uppercase tracking-widest mb-1.5 ${
-																	isDark ? "text-blue-300" : "text-blue-700"
-																}`}
-															>
-																{section.title}
-															</p>
-															{Array.isArray(section.subBlocks) && section.subBlocks.length > 0 ? (
-																<div className="space-y-2.5">
-																	{section.subBlocks.map((sb) => (
-																		<div key={sb.id}>
-																			<p
-																				className={`text-[10px] font-semibold uppercase tracking-wider mb-1 ${
-																					isDark ? "text-blue-400/80" : "text-blue-600/80"
-																				}`}
-																			>
-																				{sb.title}
-																			</p>
-																			<div className="space-y-2">
-																				{(sb.lines ?? []).map((line, idx) =>
-																					line && typeof line === "object" ? (
-																						<div key={idx} className="space-y-0.5">
-																							<p style={modalBodyFontStyle}>
-																								<a
-																									href={line.url}
-																									target="_blank"
-																									rel="noopener noreferrer"
-																									className={`font-medium underline underline-offset-2 ${isDark ? "text-blue-300 hover:text-blue-200" : "text-blue-700 hover:text-blue-900"}`}
-																									style={modalBodyFontStyle}
-																									onClick={(e) => e.stopPropagation()}
-																								>
-																									{line.title}
-																								</a>
-																								{line.source && (
-																									<span className={`ml-1.5 text-[10px] ${muted}`}>— {line.source}</span>
-																								)}
-																							</p>
-																							{line.summary && (
-																								<p
-																									className={`leading-relaxed ${modalBodyText} pl-0`}
-																									style={modalBodyFontStyle}
-																								>
-																									{line.summary}
-																								</p>
-																							)}
-																						</div>
-																					) : (
-																						<p
-																							key={idx}
-																							className={`leading-relaxed ${modalBodyText}`}
-																							style={modalBodyFontStyle}
-																						>
-																							{line}
-																						</p>
-																					)
-																				)}
-																			</div>
-																		</div>
-																	))}
-																</div>
-															) : (
-																<div className="space-y-1">
-																	{(section.lines ?? []).map((line, idx) => (
-																		<p
-																			key={idx}
-																			className={`leading-relaxed ${modalBodyText}`}
-																			style={modalBodyFontStyle}
-																		>
-																			{line}
-																		</p>
-																	))}
-																</div>
-															)}
-														</div>
-													))
-												) : detailLines.length > 0 ? (
-													<div className="py-1 space-y-3">
-														{detailLines.map((line, idx) => (
-															<p
-																key={idx}
-																className={`leading-relaxed ${modalBodyText}`}
-																style={modalBodyFontStyle}
-															>
-																{line}
-															</p>
-														))}
-													</div>
-												) : (
-													<p className={`text-sm ${muted}`}>
-														{t("briefing.loading_detail")}
-													</p>
-												)}
-											</motion.div>
-										)}
-									</AnimatePresence>
-
-									{lastGenerated && (
-										<p className={`text-[10px] ${muted} text-right`}>
-											{t("briefing.last_updated")}:{" "}
-											{lastGenerated.toLocaleTimeString(
-												i18n.language === "ko" ? "ko-KR" : "en-US",
-												{
-													hour: "2-digit",
-													minute: "2-digit",
-												},
-											)}
-										</p>
-									)}
-								</div>
+								<BriefingSectionsView
+									displayBriefing={displayBriefing}
+									detailLines={detailLines}
+									isLoading={isLoading}
+									lastGenerated={lastGenerated}
+								/>
 							</motion.div>
 						</>
 					)}

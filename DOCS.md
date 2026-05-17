@@ -1466,3 +1466,34 @@ line && typeof line === "object" ? (
 ### 회귀 위험
 
 낮음. `summarizeArticlesBatch` 실패 → 빈 `articleSummaries` → `newsSummaryMap`/`trendsSummaryMap` 빈 맵 → 객체 lines에서 `summary: ""` → UI에서 `line.summary && ...` 조건으로 요약 줄 숨김. 제목+링크는 항상 표시.
+
+---
+
+## Fixes Round 6 (2026-05-17)
+
+### 1. AI Briefing 첫 로그인 모달 ↔ 위젯 상세 모달 동기화
+
+**문제:** `FirstLoginBriefingModal`이 5개 필드만 AI에 전달해 평문 text를 렌더링했고, `BriefingWidget` 상세 모달(14+ 필드, 구조화 섹션)과 내용이 달랐다.
+
+**해결:** 공유 로직 추출
+
+- `src/hooks/useBriefingContext.js` (신규): 모든 스토어 구독 + `buildContext()` 함수 반환. 두 컴포넌트가 동일한 14-필드 컨텍스트를 빌드하도록 보장.
+- `src/components/widgets/BriefingSectionsView.jsx` (신규): 구조화 섹션 렌더러 (sections → subBlocks → 뉴스 링크 포함). `SkeletonLine`, `BriefingSkeleton` export 포함.
+- `BriefingWidget.jsx`: `useBriefingContext` 훅 + `BriefingSectionsView` 사용으로 리팩터.
+- `FirstLoginBriefingModal.jsx`: `useBriefingContext` 훅 + `BriefingSectionsView` 사용으로 업데이트. `fetchTodayQA` 마운트 시 호출.
+
+### 2. 캘린더 일기 파란 점 복원
+
+**문제:** commit `42573fd` 리팩터로 `useDiaryStore` 임포트 + 파란 점 렌더링 제거됨.
+
+**해결:** `CalendarWidget.jsx`에
+
+- `useDiaryStore` import 추가
+- `diaryEntries`로 `diaryDateSet` (Set) 계산 + `hasDiaryOnDate()` 함수
+- Month View, Week View 인디케이터 컨테이너에 파란 점 (`bg-blue-500`, today면 `bg-white`) 추가
+
+### 3. 설정 UI 수정
+
+**스마트 키워드 입력창 위치:** `SettingsModal.jsx` 스마트 탭에서 입력창을 키워드 rows 하단 → 섹션 헤더 직후 상단으로 이동. 관심사 키워드 레이아웃(입력 → 리스트)과 동일한 패턴. 섹션 헤더 조건부(`smartKeywords.length > 0`) 제거 → 항시 표시.
+
+**AI 브리핑 토글 제거:** 위젯 관리 탭의 기본 위젯 리스트에서 `briefing` 필터링. AI 브리핑은 항상 활성화 (사용자가 끌 수 없음). `DEFAULT_VIS`, `FIXED_WIDGETS`는 변경 없음.

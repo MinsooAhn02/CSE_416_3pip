@@ -446,7 +446,7 @@ const SettingsModal = () => {
 								<p className={`text-xs mb-2 ${muted}`}>
 									{settingsCopy.widgets.intro}
 								</p>
-								{WIDGET_LIST.filter((w) => w.category === "core").map((w) => (
+								{WIDGET_LIST.filter((w) => w.category === "core" && w.id !== "briefing").map((w) => (
 									<div
 										key={w.id}
 										className={`flex items-center justify-between p-3 rounded-xl ${isDark ? "bg-white/5" : "bg-gray-50"}`}
@@ -502,15 +502,29 @@ const SettingsModal = () => {
 										<Toggle on={vis[w.id]} onToggle={() => toggleVis(w.id)} />
 									</div>
 								))}
-								{smartKeywords.length > 0 && (
-									<div
-										className={`border-t pt-4 mt-4 ${isDark ? "border-white/10" : "border-gray-200"}`}
+								<div
+									className={`border-t pt-4 mt-4 ${isDark ? "border-white/10" : "border-gray-200"}`}
+								>
+									<p className={`text-xs font-medium mb-3 ${muted}`}>
+										{settingsCopy.smart.keywordWidgets}
+									</p>
+								</div>
+								<div className="flex gap-2">
+									<input
+										type="text"
+										value={newKeyword}
+										onChange={(e) => setNewKeyword(e.target.value)}
+										onKeyDown={(e) => e.key === "Enter" && addSmartWidget()}
+										placeholder={settingsCopy.smart.placeholder}
+										className={`flex-grow rounded-xl px-4 py-2.5 text-sm outline-none border focus:border-blue-400 ${inputCls}`}
+									/>
+									<button
+										onClick={addSmartWidget}
+										className="bg-blue-500 hover:bg-blue-400 text-white px-4 py-2.5 rounded-xl text-sm font-bold"
 									>
-										<p className={`text-xs font-medium mb-3 ${muted}`}>
-											{settingsCopy.smart.keywordWidgets}
-										</p>
-									</div>
-								)}
+										{settingsCopy.smart.add}
+									</button>
+								</div>
 								{smartKeywords.map((kw) => (
 									<div
 										key={kw}
@@ -557,22 +571,6 @@ const SettingsModal = () => {
 										</button>
 									</div>
 								))}
-								<div className="flex gap-2 mt-3">
-									<input
-										type="text"
-										value={newKeyword}
-										onChange={(e) => setNewKeyword(e.target.value)}
-										onKeyDown={(e) => e.key === "Enter" && addSmartWidget()}
-										placeholder={settingsCopy.smart.placeholder}
-										className={`flex-grow rounded-xl px-4 py-2.5 text-sm outline-none border focus:border-blue-400 ${inputCls}`}
-									/>
-									<button
-										onClick={addSmartWidget}
-										className="bg-blue-500 hover:bg-blue-400 text-white px-4 py-2.5 rounded-xl text-sm font-bold"
-									>
-										{settingsCopy.smart.add}
-									</button>
-								</div>
 							</div>
 						)}
 						{false && settingsTab === "routine" && (

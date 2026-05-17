@@ -12,6 +12,7 @@ import {
 	useGoogleCalendarStore,
 } from "../../store/useGoogleCalendarStore";
 import { useTodoStore } from "../../store/useTodoStore";
+import { useDiaryStore } from "../../store/useDiaryStore";
 import { formatLocalDate } from "../../utils/date";
 import {
 	doesTaskOccurOnDate,
@@ -50,6 +51,16 @@ const CalendarWidget = () => {
 		() => filterTasksByTaskList(tasks, selectedTaskListFilter),
 		[tasks, selectedTaskListFilter],
 	);
+
+	const diaryEntries = useDiaryStore((s) => s.entries);
+	const diaryDateSet = useMemo(
+		() =>
+			new Set(
+				Object.keys(diaryEntries || {}).filter((d) => diaryEntries[d]?.diary),
+			),
+		[diaryEntries],
+	);
+	const hasDiaryOnDate = (dateStr) => diaryDateSet.has(dateStr);
 
 	const hasEventsOnDate = (dateStr) => {
 		return events?.some((e) => e.date === dateStr) || false;
@@ -354,6 +365,12 @@ const CalendarWidget = () => {
 											title={t("tasks.title")}
 										/>
 									)}
+									{hasDiaryOnDate(dateStr) && (
+										<span
+											className={`w-1 h-1 rounded-full ${isToday ? "bg-white" : "bg-blue-500"}`}
+											title={t("diary.title")}
+										/>
+									)}
 								</div>
 							</button>
 						);
@@ -400,6 +417,14 @@ const CalendarWidget = () => {
 												sameDay(d, now) ? "bg-white" : "bg-green-500"
 											}`}
 											title={t("tasks.title")}
+										/>
+									)}
+									{hasDiaryOnDate(dateStr) && (
+										<span
+											className={`w-1 h-1 rounded-full ${
+												sameDay(d, now) ? "bg-white" : "bg-blue-500"
+											}`}
+											title={t("diary.title")}
 										/>
 									)}
 								</div>
