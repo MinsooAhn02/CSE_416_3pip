@@ -1093,6 +1093,15 @@ https://www.googleapis.com/auth/fitness.activity.read
 - `not_found_handling: "single-page-application"`: OAuth 콜백(`/?code=xxx`) 및 딥링크가 404 대신 `index.html`을 받도록 — SPA 라우팅 필수.
 - 이 파일 없이 `npx wrangler versions upload` 실행 시 `Missing entry-point to Worker script or to assets directory` 오류로 배포 실패.
 
+**배포 절차 (필수 순서):**
+```powershell
+npm run build      # .env의 VITE_* 값을 번들에 주입
+npx wrangler deploy
+```
+- `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`는 **빌드 시점에 JS 번들에 하드코딩**됨. Cloudflare Workers 런타임에서 `.env`를 읽지 않는다.
+- `npm run build` 없이 `wrangler deploy`만 실행하면 이전 dist가 그대로 올라가 Supabase 키 누락 → Demo mode로 동작.
+- `.env`가 없거나 키가 비어있는 상태로 빌드하면 배포 후 로그인 화면에 "Demo mode · add Supabase keys in .env to enable real login" 표시.
+
 **GCP OAuth 앱 검증 (개발자 액션 필요):**
 - 앱이 "Testing" 상태이면 비-테스트 유저에게 "확인하지 않은 앱" 경고 노출.
 - Calendar/Tasks(sensitive) + Fitness(restricted) 스코프 요청 → Google 검증 필수. restricted Fitness 스코프는 연 1회 CASA 보안 평가 추가.
