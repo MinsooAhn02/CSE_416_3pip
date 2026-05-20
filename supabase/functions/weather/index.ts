@@ -7,11 +7,11 @@ const corsHeaders = {
 };
 
 const AQI_LABELS: Record<number, string> = {
-	1: "좋음",
-	2: "보통",
-	3: "보통",
-	4: "나쁨",
-	5: "매우 나쁨",
+	1: "Good",
+	2: "Fair",
+	3: "Moderate",
+	4: "Poor",
+	5: "Very Poor",
 };
 
 serve(async (req) => {
@@ -31,7 +31,7 @@ serve(async (req) => {
 			: `lat=${lat}&lon=${lon}`;
 
 		const weatherRes = await fetch(
-			`${baseUrl}/weather?${weatherQuery}&units=metric&lang=kr&appid=${apiKey}`,
+			`${baseUrl}/weather?${weatherQuery}&units=metric&lang=en&appid=${apiKey}`,
 		);
 		if (!weatherRes.ok) throw new Error(`OpenWeather ${weatherRes.status}`);
 		const data = await weatherRes.json();
@@ -50,7 +50,7 @@ serve(async (req) => {
 
 		// 대기질 (AQI 1~5)
 		const aqi: number = aqData?.list?.[0]?.main?.aqi ?? 0;
-		const airQuality = AQI_LABELS[aqi] ?? "보통";
+		const airQuality = AQI_LABELS[aqi] ?? "Moderate";
 
 		// 강수 확률 추정 (현재날씨 API는 확률 미제공 → 운량 + 강수량으로 추정)
 		const rainVol = (data.rain?.["1h"] ?? data.rain?.["3h"] ?? 0) as number;
@@ -68,7 +68,7 @@ serve(async (req) => {
 				temp: Math.round(data.main.temp),
 				feels_like: Math.round(data.main.feels_like),
 				humidity: data.main.humidity,
-				condition: data.weather?.[0]?.description ?? "정보 없음",
+				condition: data.weather?.[0]?.description ?? "N/A",
 				icon: data.weather?.[0]?.icon ?? "01d",
 				city: data.name,
 				precipitation,

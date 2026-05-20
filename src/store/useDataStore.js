@@ -694,6 +694,8 @@ const filterByAllowedDomains = (items, language) => {
 	const allowedDomains = language === "ko" ? KO_NEWS_DOMAINS : EN_NEWS_DOMAINS;
 	return items.filter((item) => {
 		const host = getUrlHost(item?.url);
+		// Exclude English-language subdomains (e.g. en.yna.co.kr) from Korean feed
+		if (language === "ko" && /^en\./i.test(host)) return false;
 		return allowedDomains.some((domain) => host.includes(domain));
 	});
 };
@@ -808,10 +810,10 @@ const normalizeGroqWeather = (payload) => {
 	const precipitation = Number(payload.precipitation);
 	return {
 		temp: Number.isFinite(temp) ? temp : 20,
-		city: String(payload.city || "서울"),
-		condition: String(payload.condition || payload.description || "정보 없음"),
+		city: String(payload.city || "Seoul"),
+		condition: String(payload.condition || payload.description || "N/A"),
 		precipitation: Number.isFinite(precipitation) ? precipitation : 0,
-		airQuality: String(payload.airQuality || "정보 없음"),
+		airQuality: String(payload.airQuality || "N/A"),
 		humidity: Number.isFinite(humidity) ? humidity : 50,
 	};
 };

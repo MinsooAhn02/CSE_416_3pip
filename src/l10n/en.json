@@ -211,7 +211,8 @@
       "detail_title": "News Details",
       "no_results": "No news to display.",
       "no_content": "No summary available.",
-      "read_original": "Read original"
+      "read_original": "Read original",
+      "item_count": "{{count}} items"
     },
     "health": {
       "title": "Health (Google Fit)",

@@ -211,7 +211,8 @@
       "detail_title": "뉴스 상세",
       "no_results": "표시할 뉴스가 없습니다.",
       "no_content": "요약 내용이 없습니다.",
-      "read_original": "원문 보기"
+      "read_original": "원문 보기",
+      "item_count": "{{count}}건"
     },
     "health": {
       "title": "건강 (Google Fit)",

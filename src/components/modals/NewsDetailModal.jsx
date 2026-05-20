@@ -212,7 +212,7 @@ const NewsDetailModal = ({
 							{t("widgets.news.detail_title")}
 						</h3>
 						{items.length > 0 && (
-							<span className={`${metaCls} ${muted}`}>{items.length}건</span>
+							<span className={`${metaCls} ${muted}`}>{t("widgets.news.item_count", { count: items.length })}</span>
 						)}
 					</div>
 					<button
