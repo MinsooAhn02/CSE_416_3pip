@@ -1322,8 +1322,10 @@ const filterSmartResults = (items, isKo) => {
 		const t = r.title ?? "";
 		return isKo ? _HANGUL.test(t) : (!_HANGUL.test(t) && _LATIN.test(t));
 	});
-	// 한국어 결과 1개라도 있으면 한국어만 표시 (이전: 2개 미만이면 전체 사용)
-	return langFiltered.length >= 1 ? langFiltered : items;
+	if (langFiltered.length >= 1) return langFiltered;
+	// Korean mode: fall back to all items (Korean sources may mix scripts)
+	// English mode: never fall back to mixed/Korean articles
+	return isKo ? items : [];
 };
 
 const dedupeByUrl = (items) => {
@@ -1484,7 +1486,7 @@ export async function generateSmartWidgetData(keyword, context = {}) {
 	if (bullets.length > 0) {
 		sections.push({
 			type: "summary",
-			title: "Personalized Search",
+			title: isKo ? "맞춤 검색" : "Personalized Search",
 			bullets,
 		});
 	}

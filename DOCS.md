@@ -334,8 +334,8 @@ useSettingsStore.subscribe((state) => {
 });
 ```
 
-- 언어 변경 리스너는 `force=true` 미사용. 캐시 키가 `news_${lang}_*` / `trends_full_${lang}` 로 언어별 독립이라 신규 언어 캐시가 hit이면 그대로 사용, miss이면 자연스러운 fresh fetch. "강제 재호출"이라는 표현 대신 "재호출 (캐시 우선)" 으로 이해해야 정확.
-- 관심사 변경 리스너만 `force=true` 사용 — fingerprint가 바뀌면 즉시 새 쿼리로 fresh fetch가 필요하므로.
+- 언어 변경 리스너는 `force=true` 사용 + `clearFeedForLanguageSwitch()` 선행 호출. 전환 즉시 `newsResults`/`trendsResults`를 비우고 `loading.news/trends = true`로 설정해 이전 언어 기사가 화면에 잔류하지 않도록 한다. 이후 `fetchNews(userId, true)` / `fetchTrends(userId, true)`로 새 언어 캐시 또는 fresh fetch.
+- 관심사 변경 리스너도 `force=true` 사용 — fingerprint가 바뀌면 즉시 새 쿼리로 fresh fetch.
 
 ---
 

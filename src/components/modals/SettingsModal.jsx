@@ -704,11 +704,12 @@ const SettingsModal = () => {
 										<div className="space-y-3">
 											<div>
 												<p className="text-sm font-medium">
-													Generation language
+													{isKo ? "생성 언어" : "Generation language"}
 												</p>
 												<p className={`text-xs mt-1 ${muted}`}>
-													Choose the language used when AI creates a new diary
-													entry.
+													{isKo
+														? "AI가 새 일기를 생성할 때 사용할 언어를 선택합니다."
+														: "Choose the language used when AI creates a new diary entry."}
 												</p>
 											</div>
 

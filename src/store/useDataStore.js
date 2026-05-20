@@ -1047,6 +1047,15 @@ export const useDataStore = create((set, get) => ({
 		return Number.isFinite(mins) ? mins : null;
 	},
 
+	/* 언어 전환 시 뉴스/트렌드 즉시 초기화 — 새 언어로 fetch 전까지 빈 상태 유지 */
+	clearFeedForLanguageSwitch: () =>
+		set((s) => ({
+			newsResults: [],
+			trendsResults: [],
+			loading: { ...s.loading, news: true, trends: true },
+			errors: { ...s.errors, news: null, trends: null },
+		})),
+
 	/* ══════════════════════════════════════════
 	   날씨 (Weather)
 	   - OpenWeatherMap API (실제 날씨 데이터)
@@ -2042,15 +2051,20 @@ export const useDataStore = create((set, get) => ({
 	},
 }));
 
-// 언어 변경 시 뉴스/트렌드 자동 재호출 (React 렌더 사이클 외부에서도 동작)
+// 언어 변경 시 뉴스/트렌드 즉시 초기화 후 새 언어로 강제 재호출
 i18n.on("languageChanged", () => {
 	const store = useDataStore.getState();
 	const userId = useAuthStore.getState().user?.id;
-	if (store.apiStatus?.news === "ok" || store.apiStatus?.news === "error") {
-		store.fetchNews(userId);
+	const hasNews = store.apiStatus?.news === "ok" || store.apiStatus?.news === "error";
+	const hasTrends = store.apiStatus?.trends === "ok" || store.apiStatus?.trends === "error";
+	if (hasNews || hasTrends) {
+		store.clearFeedForLanguageSwitch();
 	}
-	if (store.apiStatus?.trends === "ok" || store.apiStatus?.trends === "error") {
-		store.fetchTrends(userId);
+	if (hasNews) {
+		store.fetchNews(userId, true);
+	}
+	if (hasTrends) {
+		store.fetchTrends(userId, true);
 	}
 });
 

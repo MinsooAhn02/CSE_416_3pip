@@ -9,7 +9,7 @@ import i18n, { getCurrentLanguage } from "../l10n/i18n";
 import { buildPersonaContext } from "../utils/personaContext";
 
 const resolveSmartLang = () =>
-	String(getCurrentLanguage() || "ko").startsWith("ko") ? "ko" : "en";
+	String(getCurrentLanguage() || "en").toLowerCase().startsWith("ko") ? "ko" : "en";
 
 const LAYOUT_VERSION = 14;
 const BUILTIN_IDS = new Set(WIDGET_LIST.map((w) => w.id));
