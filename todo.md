@@ -9,9 +9,10 @@
      5. ✅ SettingsModal 일기 섹션 헤더 번역 ("Generation language" → "생성 언어")
 
 smart widgets (난이도: 상):
-   - Korean language settings에서 관련 없는 기사 노출 문제. 원인 분석 필요.
-     (예: "Super Mario Galaxy Movie" 검색 → 조선일보 법조 기사 노출)
-     ✅ 완료 (2026-05-20) — `filterSmartResults` 영어 fallback 제거로 해결
+
+- Korean language settings에서 관련 없는 기사 노출 문제. 원인 분석 필요.
+  (예: "Super Mario Galaxy Movie" 검색 → 조선일보 법조 기사 노출)
+  ✅ 완료 (2026-05-20) — `filterSmartResults` 영어 fallback 제거로 해결
 
 ---
 
