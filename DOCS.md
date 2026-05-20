@@ -697,6 +697,7 @@ payload     jsonb -- { text, summary, sections }
 - `filterSmartResults(items, isKo)`: Hangul/Latin 정규식으로 언어 감지, 일치 결과 ≥1개면 해당 언어만, 0개면 전체 fallback
 - Groq bullets에 한글 없으면 번역 재요청(추가 1회), 한글 검증된 항목만 채택
 - 두 섹션만 렌더: `type === "summary"` (Groq bullet 3-4개) + `type === "news"` (관련 뉴스 2-3개, 새 탭 이동)
+- 섹션 타이틀은 저장된 캐시 값을 그대로 신뢰하지 않고 `section.type` + 현재 i18n 언어로 렌더 시 재결정한다. 한국어 모드 summary는 항상 "맞춤 검색", news는 "관련 정보"로 표시해 오래된 영어 캐시 title이 노출되지 않게 한다.
 - Tavily `r.content` 스니펫을 `[제목]\n본문` 형식으로 Groq에 전달 → 제목 나열 금지 프롬프트
 
 #### DiaryCard
@@ -728,7 +729,7 @@ payload     jsonb -- { text, summary, sections }
 | 모달 | 역할 |
 |------|------|
 | `OnboardingModal` | 최초 카테고리 선택, 페르소나 선택, 권한 토글 |
-| `SettingsModal` | 테마, 시계, 온도 단위, 주식 심볼, 우선순위, 브리핑 모달 토글 |
+| `SettingsModal` | 테마, 시계, 온도 단위, 주식 심볼, 우선순위, 브리핑 모달 토글, 일기 생성 언어/PIN 잠금 설정 |
 | `BriefSettingsModal` | AI 브리핑 어조 + 길이 선택 |
 | `FirstLoginBriefingModal` | 당일 첫 로그인 시 브리핑 표시 (REQ-WS-006), 오늘 날짜 기록으로 재표시 방지 |
 | `WidgetSettingsModal` | 뉴스 뷰 타입 선택(text/news/grid), 스마트 위젯 관심사 반영 토글 |
@@ -983,6 +984,8 @@ resolveDiaryGenerationLanguage()  [diaryGenerationService.js, exported]
   2. 아니면 i18n.language → "en"/"ko" 매핑
 ```
 `BriefingWidget`의 아침 자동일기(`ensureYesterdayDiaryForMorning`)와 로그인 시 lazy 합성(`useMidnightTrigger → generateAndSaveDiaryForDate`) 모두 이 함수를 사용해 언어 일관성 보장.
+
+`SettingsModal` 일기 탭은 `settingsCopy.diary`를 통해 UI 문구, 생성 언어 옵션, PIN 잠금 옵션을 현재 앱 언어에 맞춰 표시한다. store의 `PIN_LOCK_OPTIONS` 기본 라벨은 그대로 두고 모달에서 현 언어별 라벨/설명으로 덮어쓴다.
 
 ---
 

@@ -157,7 +157,7 @@ const SettingsModal = () => {
 							priority: "데이터 우선순위",
 							briefing: "AI 브리핑",
 							interests: "관심사",
-							diary: "Diary",
+							diary: "일기",
 							profile: "프로필",
 						},
 						fontSizes: {
@@ -215,6 +215,75 @@ const SettingsModal = () => {
 							factualTitle: "Factual-Only 모드",
 							factualDesc:
 								"AI 브리핑과 다이어리는 사실 기반으로만 생성됩니다. 감정적 표현, 비교, 예측은 자동으로 제외됩니다.",
+						},
+						diary: {
+							title: "일기 설정",
+							desc:
+								"일기 보호 설정과 새로 생성되는 일기의 언어를 관리합니다.",
+							pinSet: "PIN이 설정되어 있어요",
+							pinNotSet: "PIN이 아직 설정되지 않았어요",
+							pinOn: "PIN 켜짐",
+							pinOff: "PIN 꺼짐",
+							pinSetDesc:
+								"PIN을 변경하거나 해제하고, 아래에서 잠금 시간을 조정할 수 있습니다.",
+							pinNotSetDesc:
+								"PIN을 설정하면 PIN 변경과 잠금 시간 설정이 여기에 표시됩니다.",
+							changePin: "PIN 변경",
+							generationLanguage: "생성 언어",
+							generationLanguageDesc:
+								"AI가 새 일기를 생성할 때 사용할 언어를 선택합니다.",
+							languageOptions: {
+								app: {
+									label: "앱 언어 따라가기",
+									description:
+										"일기를 생성할 때마다 현재 앱 언어를 사용합니다.",
+								},
+								ko: {
+									label: "한국어",
+									description:
+										"일기 제목과 요약을 항상 한국어로 생성합니다.",
+								},
+								en: {
+									label: "영어",
+									description:
+										"일기 제목과 요약을 항상 영어로 생성합니다.",
+								},
+							},
+							lockTiming: "잠금 시간",
+							lockTimingDesc:
+								"PIN 확인 후 일기가 열린 상태로 유지되는 시간을 선택합니다.",
+							pinLockOptions: {
+								immediate: {
+									label: "바로 잠금",
+									description:
+										"일기를 닫으면 바로 다시 PIN을 입력해야 합니다.",
+								},
+								"5m": {
+									label: "5분 뒤 잠금",
+									description: "마지막 PIN 인증 후 5분 동안 유지됩니다.",
+								},
+								"30m": {
+									label: "30분 뒤 잠금",
+									description: "마지막 PIN 인증 후 30분 동안 유지됩니다.",
+								},
+								"1h": {
+									label: "1시간 뒤 잠금",
+									description: "마지막 PIN 인증 후 1시간 동안 유지됩니다.",
+								},
+								"3h": {
+									label: "3시간 뒤 잠금",
+									description: "마지막 PIN 인증 후 3시간 동안 유지됩니다.",
+								},
+								"6h": {
+									label: "6시간 뒤 잠금",
+									description: "마지막 PIN 인증 후 6시간 동안 유지됩니다.",
+								},
+							},
+							lockOffInfo:
+								"PIN이 설정되어 있지만 현재 일기 보호가 꺼져 있습니다. 잠금 시간을 선택하면 다시 켜집니다.",
+							lockImmediateInfo: "일기를 닫으면 바로 다시 잠깁니다.",
+							lockDelayedInfo:
+								"한 번 PIN을 인증하면 선택한 시간 동안 일기가 열린 상태로 유지됩니다.",
 						},
 						interests: {
 							title: "관심 키워드",
@@ -301,6 +370,81 @@ const SettingsModal = () => {
 							factualDesc:
 								"AI briefings and diaries are generated using facts only. Emotional phrasing, comparisons, and predictions are automatically excluded.",
 						},
+						diary: {
+							title: "Diary settings",
+							desc:
+								"Manage diary protection and choose which language newly generated diaries should use.",
+							pinSet: "PIN is set",
+							pinNotSet: "PIN is not set",
+							pinOn: "PIN on",
+							pinOff: "PIN off",
+							pinSetDesc:
+								"You can change your PIN, disable it, or adjust the lock timing below.",
+							pinNotSetDesc:
+								"Once you set a PIN, PIN change and lock timing controls will appear here.",
+							changePin: "Change PIN",
+							generationLanguage: "Generation language",
+							generationLanguageDesc:
+								"Choose the language used when AI creates a new diary entry.",
+							languageOptions: {
+								app: {
+									label: "Follow app language",
+									description:
+										"Use the current UI language each time a diary is generated.",
+								},
+								ko: {
+									label: "Korean",
+									description:
+										"Always generate diary titles and summaries in Korean.",
+								},
+								en: {
+									label: "English",
+									description:
+										"Always generate diary titles and summaries in English.",
+								},
+							},
+							lockTiming: "Lock timing",
+							lockTimingDesc:
+								"Choose how long diary stays unlocked after a successful PIN check.",
+							pinLockOptions: {
+								immediate: {
+									label: "Immediate lock",
+									description:
+										"Diary locks again as soon as you close it.",
+								},
+								"5m": {
+									label: "Lock after 5 minutes",
+									description:
+										"Stays unlocked for 5 minutes after the last PIN check.",
+								},
+								"30m": {
+									label: "Lock after 30 minutes",
+									description:
+										"Stays unlocked for 30 minutes after the last PIN check.",
+								},
+								"1h": {
+									label: "Lock after 1 hour",
+									description:
+										"Stays unlocked for 1 hour after the last PIN check.",
+								},
+								"3h": {
+									label: "Lock after 3 hours",
+									description:
+										"Stays unlocked for 3 hours after the last PIN check.",
+								},
+								"6h": {
+									label: "Lock after 6 hours",
+									description:
+										"Stays unlocked for 6 hours after the last PIN check.",
+								},
+							},
+							lockOffInfo:
+								"PIN exists, but diary protection is currently off. Choose a lock time to turn it back on.",
+							lockImmediateInfo:
+								"Diary locks again as soon as you close it.",
+							lockDelayedInfo:
+								"After you unlock diary once, it stays open for the selected amount of time.",
+						},
 						interests: {
 							title: "Interest keywords",
 							desc: "Keywords automatically extracted from Q&A and diary entries. You can also add or remove them manually.",
@@ -333,6 +477,15 @@ const SettingsModal = () => {
 	const pinLockOptions = PIN_LOCK_OPTIONS.filter(
 		(option) => option.id !== "off",
 	);
+	const diaryCopy = settingsCopy.diary;
+	const diaryLanguageOptions = ["app", "ko", "en"].map((id) => ({
+		id,
+		...diaryCopy.languageOptions[id],
+	}));
+	const localizedPinLockOptions = pinLockOptions.map((option) => ({
+		...option,
+		...(diaryCopy.pinLockOptions[option.id] ?? {}),
+	}));
 	const openConfirm = (title, message, onConfirm) =>
 		setConfirmState({ title, message, onConfirm });
 	const closeConfirm = () => setConfirmState(null);
@@ -638,10 +791,11 @@ const SettingsModal = () => {
 						{settingsTab === "diary" && (
 							<div className="space-y-6">
 								<div>
-									<p className="text-sm font-medium mb-2">Diary settings</p>
+									<p className="text-sm font-medium mb-2">
+										{diaryCopy.title}
+									</p>
 									<p className={`text-xs mb-4 ${muted}`}>
-										Manage diary protection and choose which language newly
-										generated diaries should use.
+										{diaryCopy.desc}
 									</p>
 								</div>
 
@@ -659,7 +813,9 @@ const SettingsModal = () => {
 												<div className="flex-1 min-w-0 space-y-1">
 													<div className="flex items-center justify-between gap-3">
 														<p className="text-sm font-medium">
-															{pinSet ? "PIN is set" : "PIN is not set"}
+															{pinSet
+																? diaryCopy.pinSet
+																: diaryCopy.pinNotSet}
 														</p>
 														<div className="flex flex-col items-end gap-1">
 															<Toggle
@@ -669,14 +825,16 @@ const SettingsModal = () => {
 																}
 															/>
 															<p className={`text-[11px] ${muted}`}>
-																{pinSet ? "PIN on" : "PIN off"}
+																{pinSet
+																	? diaryCopy.pinOn
+																	: diaryCopy.pinOff}
 															</p>
 														</div>
 													</div>
 													<p className={`text-xs mt-1 ${muted}`}>
 														{pinSet
-															? "You can change your PIN, disable it, or adjust the lock timing below."
-															: "Once you set a PIN, PIN change and lock timing controls will appear here."}
+															? diaryCopy.pinSetDesc
+															: diaryCopy.pinNotSetDesc}
 													</p>
 												</div>
 											</div>
@@ -691,7 +849,7 @@ const SettingsModal = () => {
 																: "border-gray-200 bg-white hover:bg-gray-50"
 														}`}
 													>
-														Change PIN
+														{diaryCopy.changePin}
 													</button>
 												)}
 											</div>
@@ -704,41 +862,15 @@ const SettingsModal = () => {
 										<div className="space-y-3">
 											<div>
 												<p className="text-sm font-medium">
-													{isKo ? "생성 언어" : "Generation language"}
+													{diaryCopy.generationLanguage}
 												</p>
 												<p className={`text-xs mt-1 ${muted}`}>
-													{isKo
-														? "AI가 새 일기를 생성할 때 사용할 언어를 선택합니다."
-														: "Choose the language used when AI creates a new diary entry."}
+													{diaryCopy.generationLanguageDesc}
 												</p>
 											</div>
 
 											<div className="grid gap-2">
-												{[
-													{
-														id: "app",
-														label: isKo
-															? "앱 언어 따라가기"
-															: "Follow app language",
-														description: isKo
-															? "일기를 생성할 때마다 현재 앱 언어를 사용합니다."
-															: "Use the current UI language each time a diary is generated.",
-													},
-													{
-														id: "ko",
-														label: isKo ? "한국어" : "Korean",
-														description: isKo
-															? "일기 제목과 요약을 항상 한국어로 생성합니다."
-															: "Always generate diary titles and summaries in Korean.",
-													},
-													{
-														id: "en",
-														label: "English",
-														description: isKo
-															? "일기 제목과 요약을 항상 영어로 생성합니다."
-															: "Always generate diary titles and summaries in English.",
-													},
-												].map((option) => {
+												{diaryLanguageOptions.map((option) => {
 													const selected = diaryLanguage === option.id;
 													return (
 														<button
@@ -784,15 +916,16 @@ const SettingsModal = () => {
 										>
 											<div className="space-y-3">
 												<div>
-													<p className="text-sm font-medium">Lock timing</p>
+													<p className="text-sm font-medium">
+														{diaryCopy.lockTiming}
+													</p>
 													<p className={`text-xs mt-1 ${muted}`}>
-														Choose how long diary stays unlocked after a
-														successful PIN check.
+														{diaryCopy.lockTimingDesc}
 													</p>
 												</div>
 
 												<div className="grid gap-2">
-													{pinLockOptions.map((option) => {
+													{localizedPinLockOptions.map((option) => {
 														const selected = pinLockMode === option.id;
 														return (
 															<button
@@ -822,7 +955,7 @@ const SettingsModal = () => {
 																					: "text-blue-600"
 																			}`}
 																		>
-																			Selected
+																			{settingsCopy.selected}
 																		</span>
 																	)}
 																</div>
@@ -836,121 +969,15 @@ const SettingsModal = () => {
 
 												<p className={`text-xs ${muted}`}>
 													{pinLockMode === "off"
-														? "PIN exists, but diary protection is currently off. Choose a lock time to turn it back on."
+														? diaryCopy.lockOffInfo
 														: pinLockMode === "immediate"
-															? "Diary locks again as soon as you close it."
-															: "After you unlock diary once, it stays open for the selected amount of time."}
+															? diaryCopy.lockImmediateInfo
+															: diaryCopy.lockDelayedInfo}
 												</p>
 											</div>
 										</div>
 									)}
 								</>
-							</div>
-						)}
-						{false && settingsTab === "privacy" && (
-							<div className="space-y-6">
-								<div>
-									<p className="text-sm font-medium mb-2">Diary PIN</p>
-									<p className={`text-xs mb-4 ${muted}`}>
-										일기와 일기 목록을 4자리 PIN으로 보호합니다.
-									</p>
-								</div>
-
-								<div
-									className={`p-4 rounded-xl border ${isDark ? "bg-white/5 border-white/10" : "bg-gray-50 border-gray-200"}`}
-								>
-									<div className="flex items-start justify-between gap-4">
-										<div className="flex items-start gap-3">
-											<div
-												className={`p-2 rounded-lg ${isDark ? "bg-blue-500/15" : "bg-blue-100"}`}
-											>
-												<Lock size={18} className="text-blue-500" />
-											</div>
-											<div>
-												<p className="text-sm font-medium">
-													{pinSet
-														? "PIN이 설정되어 있어요"
-														: "PIN이 아직 설정되지 않았어요"}
-												</p>
-												<p className={`text-xs mt-1 ${muted}`}>
-													{pinSet
-														? "현재 PIN을 확인한 뒤 새 PIN으로 변경할 수 있어요."
-														: "처음 diary를 열기 전에 PIN을 먼저 설정하게 됩니다."}
-												</p>
-											</div>
-										</div>
-
-										<button
-											onClick={() => {
-												setPinModalMode(pinSet ? "change" : "setup");
-												setShowPinModal(true);
-											}}
-											className="px-3 py-2 rounded-lg text-sm font-medium bg-blue-500 hover:bg-blue-600 text-white transition-colors"
-										>
-											{pinSet ? "PIN 변경" : "PIN 설정"}
-										</button>
-									</div>
-								</div>
-
-								<div
-									className={`p-4 rounded-xl border ${isDark ? "bg-white/5 border-white/10" : "bg-gray-50 border-gray-200"}`}
-								>
-									<div className="space-y-3">
-										<div>
-											<p className="text-sm font-medium">잠금 방식</p>
-											<p className={`text-xs mt-1 ${muted}`}>
-												Diary PIN을 언제 다시 요구할지 정할 수 있어요.
-											</p>
-										</div>
-
-										<div className="grid gap-2">
-											{PIN_LOCK_OPTIONS.map((option) => {
-												const selected = pinLockMode === option.id;
-												return (
-													<button
-														key={option.id}
-														onClick={() => handlePinLockModeChange(option.id)}
-														className={`w-full rounded-xl border px-4 py-3 text-left transition-all ${
-															selected
-																? isDark
-																	? "border-blue-400 bg-blue-500/15"
-																	: "border-blue-500 bg-blue-50"
-																: isDark
-																	? "border-white/10 bg-white/5 hover:bg-white/10"
-																	: "border-gray-200 bg-white hover:bg-gray-50"
-														}`}
-													>
-														<div className="flex items-center justify-between gap-3">
-															<p className="text-sm font-medium">
-																{option.label}
-															</p>
-															{selected && (
-																<span
-																	className={`text-[11px] font-semibold ${
-																		isDark ? "text-blue-300" : "text-blue-600"
-																	}`}
-																>
-																	선택됨
-																</span>
-															)}
-														</div>
-														<p className={`text-xs mt-1 ${muted}`}>
-															{option.description}
-														</p>
-													</button>
-												);
-											})}
-										</div>
-
-										<p className={`text-xs ${muted}`}>
-											{pinLockMode === "off"
-												? "PIN을 꺼두면 diary와 diary list를 바로 열 수 있어요."
-												: pinSet
-													? "PIN은 유지되고, 잠금 타이밍만 바뀝니다."
-													: "잠금 방식을 켜두면 diary에 처음 들어갈 때 PIN 설정 팝업이 바로 열립니다."}
-										</p>
-									</div>
-								</div>
 							</div>
 						)}
 						{settingsTab === "profile" && (

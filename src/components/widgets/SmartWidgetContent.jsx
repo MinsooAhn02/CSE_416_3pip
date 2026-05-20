@@ -40,6 +40,16 @@ const SmartWidgetContent = ({ keyword }) => {
 		? `'${keyword}' 검색 중...`
 		: `Searching '${keyword}'...`;
 
+	const getLocalizedSectionTitle = (section) => {
+		if (section?.type === "summary") {
+			return isKo ? "맞춤 검색" : "Personalized Search";
+		}
+		if (section?.type === "news") {
+			return isKo ? "관련 정보" : "Related Info";
+		}
+		return section?.title || "";
+	};
+
 	if (!data) {
 		return (
 			<div
@@ -127,7 +137,7 @@ const SmartWidgetContent = ({ keyword }) => {
 										className={`font-bold uppercase tracking-wider mb-2 ${muted}`}
 									style={titleStyle}
 									>
-										{section.title}
+										{getLocalizedSectionTitle(section)}
 									</p>
 									<div
 										className={`px-3 py-2.5 rounded-xl ${secondaryBgCls} space-y-1.5`}
@@ -153,7 +163,7 @@ const SmartWidgetContent = ({ keyword }) => {
 										className={`font-bold uppercase tracking-wider mb-1.5 ${muted}`}
 									style={titleStyle}
 									>
-										{section.title}
+										{getLocalizedSectionTitle(section)}
 									</p>
 									<div className="space-y-1">
 										{section.items.map((item, j) => (
