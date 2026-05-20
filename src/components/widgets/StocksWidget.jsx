@@ -90,9 +90,9 @@ const StockCard = ({ s, isDark, secondaryBgCls, bodyStyle }) => {
 };
 
 const CURRENCY_MAP = {
-	KOSPI: "KRW",
-	NASDAQ: "USD",
-	SP500: "USD",
+	KOSPI: "Index",
+	NASDAQ: "Index",
+	SP500: "Index",
 	USDKRW: "Rate",
 };
 const getCurrency = (s) =>

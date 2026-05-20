@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { useTheme } from "../../hooks/useTheme";
 import { useDiaryStore } from "../../store/useDiaryStore";
 import { useSettingsStore } from "../../store/useSettingsStore";
+import { useBriefingHistoryStore } from "../../store/useBriefingHistoryStore";
 import { generateAndSaveDiaryForDate } from "../../services/diaryGenerationService";
 import PINModal from "../modals/PINModal";
 import ConfirmDialog from "../common/ConfirmDialog";
@@ -250,7 +251,8 @@ const DiaryPanel = ({ selectedDate, onClose, compact = false }) => {
 	const handleGenerateDiary = async (overwrite = false) => {
 		setIsGeneratingDiary(true);
 		try {
-			await generateAndSaveDiaryForDate(selectedDate, { overwrite });
+			const snapshots = useBriefingHistoryStore.getState().getSnapshotsForDate(selectedDate);
+			await generateAndSaveDiaryForDate(selectedDate, { overwrite, briefingSnapshots: snapshots });
 			setIsEditingDiary(false);
 		} catch (err) {
 			console.error("Failed to generate diary:", err);

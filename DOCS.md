@@ -1,6 +1,6 @@
 # MorningBriefing.AI - 통합 프로젝트 문서
 
-> 최종 정리일: 2026-05-16
+> 최종 정리일: 2026-05-20
 > 관리 정책: 문서는 DOCS.md 단일 파일로 유지
 
 ---
@@ -665,14 +665,12 @@ payload     jsonb -- { text, summary, sections }
 - 데이터: weather, stocks, trends, calEvents(현재 시각 이후 미종료 이벤트만 필터), **tomorrowEvents**, todos, newsResults, trendsResults, smartSummaries, keywordInterests, **fixedInterestIds**, persona
 - **결정론적 섹션 + 좁은 AI 보강 패턴** (`aiService.generateDetailedBriefing`):
   - JS로 섹션 구조·순서 고정 → 새로고침 변동성 제거
-  - Groq 호출은 3개로 한정(`temperature: 0.1`, 사실 외 생성 금지 가드): 어제 일기 재작성 / 고정 관심사별 1문장 / 스마트 키워드 요약
+  - Groq 호출은 3개로 한정(`temperature: 0.1`, 사실 외 생성 금지 가드): 어제 일기 재작성 / 스마트 키워드 요약 / 기사 배치 요약
 - 섹션 순서:
   1. `header` — 날짜 + 날씨 결합 한 줄. 날씨 상태 → 이모지 매핑(`getWeatherEmoji`).
   2. `schedule` — 시간대 분기. 오전(5–12): 오늘 일정. 오후·저녁(≥12): 오늘 남은 일정 + 내일 일정(`tomorrowEvents`).
   3. `yesterday` — 어제 일기/메모를 1–2문장 과거형 사실로 재작성(Groq #1).
-  4. `interests` — `fixedInterestIds` 중 `news/tech/finance/health/food/entertainment`에 대해 각각 한 문장(Groq #2). 데이터 부족 항목은 "오늘 새로운 정보가 없습니다".
-  5. `latest_info` — `subBlocks: [관심 키워드, 주요 뉴스 Top 3]`. 관심 키워드는 스마트 위젯 bullets 요약(Groq #3), 뉴스는 `newsResults[0..2]` + URL 호스트명 출처.
-  6. `market` (조건부) — `fixedInterestIds` 에 `finance` 포함 시 stocks Top 4.
+  4. `latest_info` — `subBlocks: [latest_smart, latest_news, latest_trends]`. 스마트 키워드 bullets 요약(Groq #2), 뉴스 Top 3 + AI 1문장 요약 + 링크(Groq #3 배치), 트렌드 Top 3 + AI 1문장 요약 + 링크.
 - 반환: `{ summary, detail, sections, timeMode }`. `sections` 는 `[{ id, title, lines, subBlocks? }]`. `detail` 은 후방호환용 평문.
 - 모달 렌더링: `divide-y` 섹션 블록 + 굵은 카테고리 제목 + `subBlocks` 하위 헤더(작은 글자, 들여쓰기). 본문 라인(`sb.lines`, `section.lines`, `detailLines`)에 `useFontSize(1.2).body` 적용 — 다른 위젯 대비 1.2× 크기.
 - 언어 일치: 모든 섹션 제목·내용·Groq 프롬프트가 `getLangConfig()` 기반으로 ko/en 분기.
@@ -686,7 +684,7 @@ payload     jsonb -- { text, summary, sections }
   - 첫 저장이거나 마지막 저장 이후 ≥3시간 → `source: "auto"` 로 저장
   - manual refresh → `source: "refresh"` 로 무조건 저장
 - **일정 필터**: 브리핑 컨텍스트에 투입되는 `calEvents`는 현재 시각 이후 미종료 이벤트만 포함
-- 아침 자동일기(`ensureYesterdayDiaryForMorning`): `language: resolveDiaryGenerationLanguage()` + `interests: effectiveInterests` 전달.
+- 아침 자동일기는 `useMidnightTrigger` 전담 경로(`generateAndSaveDiaryForDate`)로만 처리.
 
 #### SmartWidgetContent
 
@@ -930,8 +928,6 @@ $$score = \sum \left(base\_weight \times \frac{30 - elapsed\_days}{30}\right), \
 | 적용 지점 | 방식 | 파일 |
 |-----------|------|------|
 | **뉴스 쿼리** | 관심사 상위 5개를 Tavily 쿼리에 삽입 | `useDataStore.js` |
-| **상세 AI 브리핑 — 관심사 섹션** | `fixedInterestIds` 중 news/tech/finance/health/food/entertainment 각각에 대해 newsResults/stocks/trendsResults/smartSummaries에서 사실 1개 선택 → JSON 출력 → 섹션 라인. 미지원 id는 "기타: ..." 라벨로 묶음 | `aiService.generateInterestSentences()` |
-| **상세 AI 브리핑 — 시장 섹션 (조건부)** | `fixedInterestIds.includes("finance")` + stocks 데이터 존재 시만 노출 | `aiService.generateDetailedBriefing()` |
 | **단순 AI 브리핑** | `keywordInterests` → `Interest guidance:` 줄로 Groq 프롬프트에 포함 | `aiService.generateBriefing()` |
 | **Diary Q&A 질문** | `fixedInterestIds` → `INTEREST_TOPIC_MAP` → 관심사 주제 1개 + 일반 주제 1개 혼합 | `aiService.generatePersonalizedQuestion()` |
 | **AI 일기 자동 생성** | `interests` + `briefingSnapshots`(시간대별 브리핑 텍스트) + `previousDayDiary/Feedback` → `promptContext`에 포함 | `aiService.generateDiary()` |
@@ -1687,3 +1683,98 @@ toast.event_time_required 키 추가:
 
 - `npm run build` 통과.
 - 빌드 산출물 `dist/index.html`의 번들 해시 변경은 소스 변경과 무관해 되돌림.
+
+---
+
+## 25) 2026-05-20 — 일기 생성 로직 개선: 브리핑 스냅샷 반영 + 프롬프트 강화
+
+### 문제
+
+1. **수동 생성 시 브리핑 스냅샷 누락**: `DiaryPanel.jsx`의 "일기 생성" 버튼이 `briefingSnapshots` 없이 `generateAndSaveDiaryForDate`를 호출해, 시간대별 브리핑 내용이 일기에 반영되지 않았다. 자정 자동 생성(`useMidnightTrigger`)은 정상적으로 스냅샷을 넘겼지만 수동 생성 경로만 누락됐다.
+
+2. **불필요한 stocks 데이터 포함**: `promptContext`에 주식 데이터가 포함돼 LLM 프롬프트가 오염됐다.
+
+3. **피드백 연속성 문제**: 전날 피드백("주식 없애줘")이 Day 2에는 반영되지만 Day 3에서 사라지는 구조적 문제가 있었다.
+
+### 해결
+
+#### DiaryPanel.jsx
+- `useBriefingHistoryStore` import 추가
+- `handleGenerateDiary`에서 `useBriefingHistoryStore.getState().getSnapshotsForDate(selectedDate)`로 스냅샷을 조회해 `generateAndSaveDiaryForDate`에 전달
+
+#### diaryGenerationService.js
+- `buildDiaryGenerationContext` 반환값에서 `stocks: dataStore.stocks` 제거
+- `interests` slice 10 → 8
+
+#### aiService.js
+- `generateDiary()` 파라미터에서 `stocks` 제거
+- `promptContext`에서 `stocks` 제거
+- 영어 프롬프트 룰에서 stocks 언급 제거
+
+#### 프롬프트 룰 강화 (한/영 공통)
+- 기존: "previousDayDiary가 있으면 비슷한 문체로 작성"
+- 변경:
+  - `previousDayDiary`는 **문체·톤·스타일 참고용만** — 전날 사건·내용은 오늘 일기에 절대 포함 금지
+  - 오늘 내용은 오직 `briefingText / completedLines / scheduleLines / diaryAnswers`에서만
+  - `previousDayFeedback`이 있으면 해당 선호도(포함·제외 항목)를 오늘 일기에 반영
+
+### 피드백 연속성 설계
+
+`previousDayDiary`는 이미 `buildDiaryGenerationContext` 내에서 항상 조회된다 (파라미터 미제공 시 store에서 직접 조회). 전날 피드백을 이전처럼 조건부로 넘기는 대신 다음 흐름으로 처리한다:
+
+```
+Day 1 일기 (주식 포함) + 피드백 "주식 없애줘"
+  ↓
+Day 2: previousDayDiary(스타일 참고) + previousDayFeedback(주식 제외) → 주식 없는 일기
+  ↓
+Day 3: previousDayDiary = Day 2 일기(주식 없는 스타일) → 피드백 없어도 스타일 유지
+```
+
+프롬프트가 "전날 스타일 참고, 오늘 내용은 입력 데이터에서만"을 명시하므로 전날 이벤트 혼입 없이 선호도가 자연스럽게 이어진다.
+
+### 브리핑 스냅샷 구조
+
+`useBriefingHistoryStore` — 3시간 간격으로 스냅샷 누적 저장
+
+```
+shouldSave() → 마지막 스냅샷으로부터 3시간 경과 여부 확인
+addSnapshot() → { capturedAt, source, text, summary, sections }
+             → localStorage (mb_briefing_history) + Supabase briefing_snapshots 테이블
+getSnapshotsForDate(dateStr) → 해당 날짜 스냅샷 배열 반환
+clearDate(dateStr) → 일기 생성 후 소비된 스냅샷 정리
+```
+
+LLM에는 최대 6개, 각 200자로 잘라서 `[09:00] 브리핑 내용...` 형태로 포맷팅 후 `briefingText`로 전달.
+
+### 검증
+
+`scripts/test-diary-generation.mjs` — Node.js 스크립트로 Supabase Edge Function 직접 호출
+
+```
+✅ stocks 없음 (promptContext에서 제거 확인)
+✅ briefingText 포함 (시간대별 스냅샷 반영)
+✅ previousDayDiary 항상 전달
+✅ interests 8개
+✅ 전날 이벤트 혼입 없음
+✅ 주식 언급 없음
+✅ 오늘 할일/일정 반영
+```
+
+수정 파일: `DiaryPanel.jsx`, `diaryGenerationService.js`, `aiService.js`
+추가 파일: `scripts/test-diary-generation.mjs`
+
+## 26) 2026-05-20 — Stocks Widget 버그 수정 2종
+
+### Fix 1: 지수 항목 통화 심볼($, ₩) 제거
+
+- **파일**: `src/components/widgets/StocksWidget.jsx`
+- **문제**: KOSPI, NASDAQ, S&P 500은 포인트 단위 지수임에도 `CURRENCY_MAP`에서 "KRW"/"USD"로 매핑되어 ₩/$가 표시됨.
+- **해결**: `CURRENCY_MAP`의 KOSPI/NASDAQ/SP500 값을 `"Index"`로 변경. `curSymbol` 도출 로직(`cur === "KRW" ? "₩" : cur === "USD" ? "$" : ""`)이 "Index"에 대해 빈 문자열을 반환하므로 심볼 미표시. StockCard(위젯 본체)와 모달 상세 뷰 모두 `getCurrency()`를 통해 처리되므로 단일 변경으로 적용.
+
+### Fix 2: "remove ticker?" 확인 후 메인 모달 유지
+
+- **파일**: `src/components/common/ConfirmDialog.jsx`
+- **문제**: ConfirmDialog backdrop 클릭(Cancel/backdrop) 시 React synthetic event가 상위 컴포넌트로 전파되어 StocksWidget의 메인 모달 backdrop(`onClick={() => setShowModal(false)}`)까지 도달, 메인 모달이 함께 닫힘.
+- **해결**: ConfirmDialog backdrop의 `onClick={onCancel}` → `onClick={(e) => { e.stopPropagation(); onCancel(); }}`로 변경. ConfirmDialog를 사용하는 모든 컴포넌트(DiaryPanel, SettingsModal, EventPanel, TaskPanel)에 동일하게 적용됨.
+
+수정 파일: `src/components/widgets/StocksWidget.jsx`, `src/components/common/ConfirmDialog.jsx`

@@ -103,7 +103,6 @@ export const buildDiaryGenerationContext = async (
 		diaryAnswers,
 		memo: existingEntry?.notes || existingEntry?.memo || "",
 		weather: dataStore.weather,
-		stocks: dataStore.stocks,
 		trends: dataStore.trends,
 		calEvents: await fetchCalendarEventsForDate(dateStr),
 		date: dateStr,
@@ -114,7 +113,7 @@ export const buildDiaryGenerationContext = async (
 		interests: mergeInterestLists(
 			settingsStore.fixedInterestIds ?? [],
 			settingsStore.keywordInterests ?? []
-		).slice(0, 10),
+		).slice(0, 8),
 		briefingSnapshots: Array.isArray(briefingSnapshots) ? briefingSnapshots : [],
 		previousDayDiary: prevDiary || "",
 		previousDayFeedback: prevFeedback || "",

@@ -11,4 +11,6 @@ package-lock.json
 .package-lock.json
 .vite/
 CHANGELOG.md
-Claude.md
+claude.md
+.claude/
+.claude-ignore

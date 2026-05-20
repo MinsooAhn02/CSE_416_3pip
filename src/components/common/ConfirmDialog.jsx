@@ -47,7 +47,7 @@ const ConfirmDialog = ({
 	return createPortal(
 		<div
 			className="fixed inset-0 z-[30000] bg-black/60 backdrop-blur-md flex items-center justify-center p-4"
-			onClick={onCancel}
+			onClick={(e) => { e.stopPropagation(); onCancel(); }}
 		>
 			<div
 				className={`w-full max-w-sm rounded-2xl border-2 shadow-2xl p-6 space-y-4 ${cardCls}`}
