@@ -1470,11 +1470,20 @@ const isBlogSmartSection = (section) =>
 const isNutritionSmartSection = (section) =>
 	NUTRITION_SMART_SECTION_TYPES.has(section?.type);
 
+const isStreetwearFreshSearchSection = (section) =>
+	section?.category === "streetwear" &&
+	(section?.type === "collab" || section?.type === "release");
+
 const smartSectionRequiresTitleKeyword = (section) =>
-	Boolean(section?.keyword);
+	isArticleSmartSection(section) ||
+	isVideoSmartSection(section) ||
+	isBlogSmartSection(section);
 
 const getSmartSearchDomains = (section, isKo) => {
 	if (isNutritionSmartSection(section)) {
+		return [];
+	}
+	if (section?.category === "streetwear" && isArticleSmartSection(section)) {
 		return [];
 	}
 	if (isKeyInfoSmartSection(section)) {
@@ -1544,6 +1553,7 @@ const smartResultIsFreshEnough = (result, section, isKo = false) => {
 	if (isKeyInfoSmartSection(section)) return true;
 	if (isArticleSmartSection(section)) {
 		if (smartResultHasStaleRelativeSignal(result)) return false;
+		if (isStreetwearFreshSearchSection(section)) return true;
 		return !smartResultTitleHasOlderYearSignal(result, currentYear);
 	}
 	if (publishedYear !== null) return publishedYear >= currentYear;
@@ -2772,6 +2782,11 @@ const SMART_CATEGORY_REQUIRED_TERMS = {
 		"collaborations",
 		"collection",
 		"lookbook",
+		"droplist",
+		"drop list",
+		"box logo",
+		"spring/summer",
+		"fall/winter",
 		"brand",
 		"skate",
 		"skateboarding",
@@ -2794,6 +2809,7 @@ const SMART_CATEGORY_REQUIRED_TERMS = {
 const SMART_CATEGORY_EXCLUDED_TERMS = {
 	streetwear: [
 		"supreme court",
+		"chris stussy",
 	],
 };
 
@@ -2812,7 +2828,6 @@ const smartResultMatchesCategoryContext = (result, section) => {
 	) {
 		return false;
 	}
-	if (isCommunitySmartSection(section)) return true;
 	return smartTextIncludesAny(haystack, SMART_CATEGORY_REQUIRED_TERMS[category]);
 };
 
@@ -3131,7 +3146,9 @@ const formatSmartItems = (results, isKo, section) => {
 	});
 	const requiredMatchSet = new Set(requiredKeywordMatches);
 	const titleMatchSet = new Set(titleKeywordMatches);
-	const mustMatchKeyword = isNutritionSmartSection(section);
+	const mustMatchKeyword =
+		isNutritionSmartSection(section) ||
+		section?.category === "streetwear";
 	const mustMatchTitleKeyword = smartSectionRequiresTitleKeyword(section);
 	const sourceItems = dedupeByUrl([
 		...titleKeywordMatches,
@@ -3190,6 +3207,16 @@ const buildSmartTavilyQuery = (section, isKo) => {
 			: `"${section.keyword}" ${section.query} person`;
 	}
 	if (section.category === "streetwear" && isArticleSmartSection(section)) {
+		if (section.type === "collab") {
+			return isKo
+				? `"${section.keyword}" 패션 콜라보 협업 컬렉션 최신`
+				: `"${section.keyword}" fashion collaboration collection latest`;
+		}
+		if (section.type === "release") {
+			return isKo
+				? `"${section.keyword}" 패션 발매 드롭 출시 최신`
+				: `"${section.keyword}" fashion release drops launch latest`;
+		}
 		return isKo
 			? `${section.query} ${currentYear}년 패션 스트릿웨어 기사`
 			: `${section.query} ${currentYear} fashion streetwear news`;
@@ -3274,18 +3301,21 @@ const fetchNonLatestArticleTavily = (section, isKo, includeDomains = []) =>
 	});
 
 const searchSmartSection = async (section, isKo) => {
-	const mode = isArticleSmartSection(section) ? "news" : "search";
+	const useFreshSearchMode = isStreetwearFreshSearchSection(section);
+	const mode = isArticleSmartSection(section) && !useFreshSearchMode ? "news" : "search";
 	const preferredDomains = getSmartSearchDomains(section, isKo);
 	const primaryTimeRange = (
 		isKeyInfoSmartSection(section) ||
 		isNutritionSmartSection(section) ||
-		isArticleSmartSection(section)
+		(isArticleSmartSection(section) && !useFreshSearchMode)
 	)
 		? null
 		: "month";
 	const retryTimeRange = (isKeyInfoSmartSection(section) || isNutritionSmartSection(section))
 		? null
-		: primaryTimeRange;
+		: useFreshSearchMode
+			? null
+			: primaryTimeRange;
 	const tavilyData = preferredDomains.length > 0
 		? await fetchSmartTavily(section, mode, isKo, preferredDomains, primaryTimeRange)
 		: await fetchSmartTavily(section, mode, isKo, [], primaryTimeRange);
@@ -3311,7 +3341,16 @@ const searchSmartSection = async (section, isKo) => {
 	}
 
 	let items = formatSmartItems(rawResults, isKo, section);
-	if (isArticleSmartSection(section) && items.length === 0) {
+	if ((isVideoSmartSection(section) || isBlogSmartSection(section)) && items.length === 0) {
+		const fallback = preferredDomains.length > 0
+			? await fetchSmartTavily(section, mode, isKo, preferredDomains, null)
+			: await fetchSmartTavily(section, mode, isKo, [], null);
+		if (fallback?.results?.length > 0) {
+			rawResults = dedupeByUrl([...rawResults, ...fallback.results]);
+			items = formatSmartItems(rawResults, isKo, section);
+		}
+	}
+	if (isArticleSmartSection(section) && !useFreshSearchMode && items.length === 0) {
 		const fallback = await fetchNonLatestArticleTavily(
 			section,
 			isKo,

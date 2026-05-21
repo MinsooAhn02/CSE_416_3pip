@@ -27,10 +27,15 @@ smart widgets (난이도: 상):
 
 ### Smart Widget 해야 할 것
 
-- 한국어 모드에서 `Latest Updates` / `Latest Coverage` 표시되는지 확인.
-- 영어 모드에서는 latest 결과가 우선 뜨고, 없을 때만 fallback 되는지 확인.
-- 모든 카테고리에서 제목 키워드 필터가 너무 빡세서 결과가 비지 않는지 샘플 테스트.
-- Tavily 토큰 소모가 너무 커지면 latest fallback 호출 조건을 더 줄이기.
+- Smart Widget 한국어 모드에서 `Latest Updates` / `Latest Coverage` 왜 안되는지
+
+---
+
+## 추가 TODO
+
+- 다이어리 피드백 안됨.
+- 연동 끄기 안됨 -> 연동 끄기 옵션 제거하고 무조건 연동되게 변경.
+- 스마트위젯 키워드가 개인화 컨텍스트에 반영되는지 확인.
 
 ---
 
@@ -48,3 +53,5 @@ smart widgets (난이도: 상):
 - plan with opus, work with sonnet (switch model required)
 - ask questions if unclear
 - After the entire execution, update in @DOCS.md
+
+

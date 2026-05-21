@@ -14,7 +14,7 @@ import { buildPersonaContext } from "../utils/personaContext";
 const resolveSmartLang = () =>
 	String(getCurrentLanguage() || "en").toLowerCase().startsWith("ko") ? "ko" : "en";
 
-const SMART_WIDGET_DATA_VERSION = "v48";
+const SMART_WIDGET_DATA_VERSION = "v55";
 export const getSmartWidgetCacheKey = (kw, lang = resolveSmartLang()) =>
 	`${kw}_${lang}_${SMART_WIDGET_DATA_VERSION}`;
 
