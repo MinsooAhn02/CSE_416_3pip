@@ -2,7 +2,10 @@ import { create } from "zustand";
 import toast from "react-hot-toast";
 import { load, save } from "../utils/storage";
 import { supabase } from "../lib/supabase";
-import { generateSmartWidgetData } from "../services/aiService";
+import {
+	generateSmartWidgetData,
+	SMART_WIDGET_CATEGORY_OPTIONS,
+} from "../services/aiService";
 import { useAuthStore } from "./useAuthStore";
 import { DEFAULT_VIS, DEFAULT_LAYOUTS, WIDGET_LIST } from "../constants";
 import i18n, { getCurrentLanguage } from "../l10n/i18n";
@@ -10,6 +13,14 @@ import { buildPersonaContext } from "../utils/personaContext";
 
 const resolveSmartLang = () =>
 	String(getCurrentLanguage() || "en").toLowerCase().startsWith("ko") ? "ko" : "en";
+
+const SMART_WIDGET_DATA_VERSION = "v48";
+export const getSmartWidgetCacheKey = (kw, lang = resolveSmartLang()) =>
+	`${kw}_${lang}_${SMART_WIDGET_DATA_VERSION}`;
+
+const SMART_WIDGET_CATEGORY_IDS = new Set(
+	SMART_WIDGET_CATEGORY_OPTIONS.map((option) => option.id),
+);
 
 const LAYOUT_VERSION = 14;
 const BUILTIN_IDS = new Set(WIDGET_LIST.map((w) => w.id));
@@ -70,6 +81,7 @@ export const useWidgetStore = create((set, get) => ({
 	smartKeywords: load("mb_smart", []),
 	smartWidgetData: load("mb_smart_data", {}),
 	smartWidgetErrors: {},
+	smartWidgetCategoryOverrides: load("mb_smart_categories", {}),
 	refreshing: {},
 	showAddSmart: false,
 	newKeyword: "",
@@ -149,9 +161,10 @@ export const useWidgetStore = create((set, get) => ({
 	},
 	loadSmartWidget: async (kw, force = false) => {
 		const lang = resolveSmartLang();
-		const cacheKey = `${kw}_${lang}`;
+		const cacheKey = getSmartWidgetCacheKey(kw, lang);
 		const existing = get().smartWidgetData?.[cacheKey];
 		if (existing && !force) return existing;
+		const categoryOverride = get().smartWidgetCategoryOverrides?.[kw] ?? null;
 
 		set((s) => ({
 			refreshing: { ...s.refreshing, [kw]: true },
@@ -164,6 +177,7 @@ export const useWidgetStore = create((set, get) => ({
 			const data = await generateSmartWidgetData(kw, {
 				persona: buildPersonaContext(),
 				token: providerToken ?? authState.providerToken ?? null,
+				categoryOverride,
 			});
 			if (!data) throw new Error("No smart widget data returned");
 
@@ -310,12 +324,15 @@ export const useWidgetStore = create((set, get) => ({
 			const nextKeywords = s.smartKeywords.filter((k) => k !== kw);
 			const nextData = { ...s.smartWidgetData };
 			const nextErrors = { ...s.smartWidgetErrors };
-			delete nextData[kw];
-			delete nextData[`${kw}_ko`];
-			delete nextData[`${kw}_en`];
+			const nextCategoryOverrides = { ...s.smartWidgetCategoryOverrides };
+			Object.keys(nextData).forEach((key) => {
+				if (key === kw || key.startsWith(`${kw}_`)) delete nextData[key];
+			});
 			delete nextErrors[kw];
+			delete nextCategoryOverrides[kw];
 			save("mb_smart", nextKeywords);
 			save("mb_smart_data", nextData);
+			save("mb_smart_categories", nextCategoryOverrides);
 			const nextLayouts = {};
 			for (const bp of Object.keys(s.layouts)) {
 				nextLayouts[bp] = s.layouts[bp].filter((l) => l.i !== removeKey);
@@ -328,8 +345,91 @@ export const useWidgetStore = create((set, get) => ({
 				layouts: nextLayouts,
 				smartWidgetData: nextData,
 				smartWidgetErrors: nextErrors,
+				smartWidgetCategoryOverrides: nextCategoryOverrides,
 			};
 		});
+	},
+	renameSmartWidget: async (oldKw, nextKwRaw) => {
+		const nextKw = String(nextKwRaw || "").trim();
+		if (!nextKw) {
+			toast.error(i18n.t("toast.widget_invalid"), { id: "widget-invalid" });
+			return false;
+		}
+		if (nextKw === oldKw) return true;
+		const { smartKeywords } = get();
+		if (smartKeywords.includes(nextKw)) {
+			toast.error(i18n.t("toast.widget_exists"), { id: "widget-exists" });
+			return false;
+		}
+		if (nextKw.startsWith("smart_") || BUILTIN_IDS.has(nextKw)) {
+			toast.error(i18n.t("toast.widget_invalid"), { id: "widget-invalid" });
+			return false;
+		}
+
+		const oldKey = `smart_${oldKw}`;
+		const nextKey = `smart_${nextKw}`;
+		set((s) => {
+			const nextKeywords = s.smartKeywords.map((kw) =>
+				kw === oldKw ? nextKw : kw,
+			);
+			const nextData = { ...s.smartWidgetData };
+			const nextErrors = { ...s.smartWidgetErrors };
+			const nextRefreshing = { ...s.refreshing };
+			const nextCategoryOverrides = { ...s.smartWidgetCategoryOverrides };
+			Object.keys(nextData).forEach((key) => {
+				if (key === oldKw || key.startsWith(`${oldKw}_`)) delete nextData[key];
+			});
+			delete nextErrors[oldKw];
+			delete nextRefreshing[oldKw];
+			if (Object.prototype.hasOwnProperty.call(nextCategoryOverrides, oldKw)) {
+				nextCategoryOverrides[nextKw] = nextCategoryOverrides[oldKw];
+				delete nextCategoryOverrides[oldKw];
+			}
+			const nextLayouts = {};
+			for (const bp of Object.keys(s.layouts)) {
+				nextLayouts[bp] = s.layouts[bp].map((layout) =>
+					layout.i === oldKey ? { ...layout, i: nextKey } : layout,
+				);
+			}
+			save("mb_smart", nextKeywords);
+			save("mb_smart_data", nextData);
+			save("mb_smart_categories", nextCategoryOverrides);
+			save("mb_layouts", nextLayouts);
+			syncKeywords(nextKeywords);
+			syncWidgetDB({ layouts: nextLayouts });
+			return {
+				smartKeywords: nextKeywords,
+				layouts: nextLayouts,
+				smartWidgetData: nextData,
+				smartWidgetErrors: nextErrors,
+				refreshing: nextRefreshing,
+				smartWidgetCategoryOverrides: nextCategoryOverrides,
+			};
+		});
+		await get().loadSmartWidget(nextKw, true);
+		return true;
+	},
+	setSmartWidgetCategory: async (kw, category) => {
+		const nextCategory = SMART_WIDGET_CATEGORY_IDS.has(category)
+			? category
+			: "general";
+		set((s) => {
+			const nextCategoryOverrides = {
+				...s.smartWidgetCategoryOverrides,
+				[kw]: nextCategory,
+			};
+			const nextData = { ...s.smartWidgetData };
+			Object.keys(nextData).forEach((key) => {
+				if (key === kw || key.startsWith(`${kw}_`)) delete nextData[key];
+			});
+			save("mb_smart_categories", nextCategoryOverrides);
+			save("mb_smart_data", nextData);
+			return {
+				smartWidgetCategoryOverrides: nextCategoryOverrides,
+				smartWidgetData: nextData,
+			};
+		});
+		await get().loadSmartWidget(kw, true);
 	},
 	refreshSmartWidget: async (kw) => get().loadSmartWidget(kw, true),
 	reloadAllSmartWidgets: () => {

@@ -1300,9 +1300,9 @@ export async function generateBriefing({ tone, length, context }) {
 
 /**
  * 스마트 위젯 데이터 생성
- * 1단계: Groq → 키워드 핵심 포인트 3개 + 이모지 추출
- * 2단계: Tavily → 키워드 관련 최신 뉴스/정보 검색
- * 3단계: 두 결과를 SmartWidgetContent 포맷으로 조합
+ * 1단계: Groq/룰 기반으로 키워드 카테고리 분류
+ * 2단계: 카테고리별 섹션 계획 생성
+ * 3단계: Tavily로 섹션별 검색 후 Groq로 섹션 요약 생성
  */
 const _HANGUL = /[가-힣]/;
 const _LATIN  = /[a-zA-Z]/;
@@ -1317,11 +1317,304 @@ const KO_NEWS_DOMAINS = [
 	"news1.kr",
 ];
 
+const KO_INFO_DOMAINS = [
+	"blog.naver.com",
+	"m.blog.naver.com",
+	"post.naver.com",
+	"kin.naver.com",
+	"brunch.co.kr",
+	"tistory.com",
+	"velog.io",
+	"youtube.com",
+	"youtu.be",
+	"terms.naver.com",
+	"namu.wiki",
+];
+
+const EN_INFO_DOMAINS = [
+	"youtube.com",
+	"youtu.be",
+	"medium.com",
+	"reddit.com",
+	"substack.com",
+	"wordpress.com",
+	"blogspot.com",
+	"quora.com",
+];
+
+const uniqueSmartDomains = (domains) => Array.from(new Set(domains));
+
+const KO_VIDEO_DOMAINS = uniqueSmartDomains([
+	"youtube.com",
+	"youtu.be",
+]);
+
+const EN_VIDEO_DOMAINS = uniqueSmartDomains([
+	"youtube.com",
+	"youtu.be",
+]);
+
+const KO_BLOG_DOMAINS = uniqueSmartDomains([
+	"blog.naver.com",
+	"m.blog.naver.com",
+	"post.naver.com",
+	"kin.naver.com",
+	"brunch.co.kr",
+	"tistory.com",
+	"velog.io",
+]);
+
+const EN_BLOG_DOMAINS = uniqueSmartDomains([
+	"medium.com",
+	"substack.com",
+	"wordpress.com",
+	"blogspot.com",
+]);
+
+const KO_KEY_INFO_DOMAINS = uniqueSmartDomains([
+	"terms.naver.com",
+	"namu.wiki",
+	"wikipedia.org",
+]);
+
+const EN_KEY_INFO_DOMAINS = uniqueSmartDomains([
+	"wikipedia.org",
+	"britannica.com",
+]);
+
+const KO_ARTICLE_DOMAINS = uniqueSmartDomains([
+	...KO_NEWS_DOMAINS,
+]);
+
+const EN_ARTICLE_DOMAINS = uniqueSmartDomains([
+	"reuters.com",
+	"apnews.com",
+	"bbc.com",
+	"theguardian.com",
+	"nytimes.com",
+	"wsj.com",
+	"theverge.com",
+	"wired.com",
+	"vogue.com",
+	"hypebeast.com",
+]);
+
+const KO_TRUSTED_DOMAINS = uniqueSmartDomains([
+	...KO_KEY_INFO_DOMAINS,
+	...KO_ARTICLE_DOMAINS,
+]);
+
+const EN_TRUSTED_DOMAINS = uniqueSmartDomains([
+	...EN_KEY_INFO_DOMAINS,
+	...EN_ARTICLE_DOMAINS,
+]);
+
+const KO_SMART_DOMAINS = uniqueSmartDomains([
+	...KO_INFO_DOMAINS,
+	...KO_NEWS_DOMAINS,
+]);
+const INFO_SMART_DOMAINS = uniqueSmartDomains([
+	...KO_INFO_DOMAINS,
+	...EN_INFO_DOMAINS,
+]);
+
+const getKoreanSmartDomains = (section) =>
+	section.searchMode === "news"
+		? uniqueSmartDomains([...KO_NEWS_DOMAINS, ...KO_INFO_DOMAINS])
+		: KO_SMART_DOMAINS;
+
+const KEY_INFO_SMART_SECTION_TYPES = new Set([
+	"overview",
+	"brand_info",
+	"profile",
+]);
+
+const ARTICLE_SMART_SECTION_TYPES = new Set([
+	"updates",
+	"release",
+	"collab",
+]);
+
+const VIDEO_SMART_SECTION_TYPES = new Set(["video"]);
+const BLOG_SMART_SECTION_TYPES = new Set(["blog"]);
+const NUTRITION_SMART_SECTION_TYPES = new Set(["nutrition"]);
+const COMMUNITY_SMART_SECTION_TYPES = new Set([
+	...VIDEO_SMART_SECTION_TYPES,
+	...BLOG_SMART_SECTION_TYPES,
+	"community",
+]);
+
+const TRUSTED_SMART_SECTION_TYPES = new Set([
+	...KEY_INFO_SMART_SECTION_TYPES,
+	...ARTICLE_SMART_SECTION_TYPES,
+]);
+
+const isTrustedSmartSection = (section) =>
+	TRUSTED_SMART_SECTION_TYPES.has(section?.type);
+
+const isKeyInfoSmartSection = (section) =>
+	KEY_INFO_SMART_SECTION_TYPES.has(section?.type);
+
+const isArticleSmartSection = (section) =>
+	ARTICLE_SMART_SECTION_TYPES.has(section?.type);
+
+const isCommunitySmartSection = (section) =>
+	COMMUNITY_SMART_SECTION_TYPES.has(section?.type);
+
+const isVideoSmartSection = (section) =>
+	VIDEO_SMART_SECTION_TYPES.has(section?.type);
+
+const isBlogSmartSection = (section) =>
+	BLOG_SMART_SECTION_TYPES.has(section?.type);
+
+const isNutritionSmartSection = (section) =>
+	NUTRITION_SMART_SECTION_TYPES.has(section?.type);
+
+const smartSectionRequiresTitleKeyword = (section) =>
+	Boolean(section?.keyword);
+
+const getSmartSearchDomains = (section, isKo) => {
+	if (isNutritionSmartSection(section)) {
+		return [];
+	}
+	if (isKeyInfoSmartSection(section)) {
+		return isKo ? KO_KEY_INFO_DOMAINS : EN_KEY_INFO_DOMAINS;
+	}
+	if (section?.type === "updates") {
+		return [];
+	}
+	if (isArticleSmartSection(section)) {
+		return isKo ? KO_ARTICLE_DOMAINS : EN_ARTICLE_DOMAINS;
+	}
+	if (isVideoSmartSection(section)) {
+		return isKo ? KO_VIDEO_DOMAINS : EN_VIDEO_DOMAINS;
+	}
+	if (isBlogSmartSection(section)) {
+		return isKo ? KO_BLOG_DOMAINS : EN_BLOG_DOMAINS;
+	}
+	return isKo ? getKoreanSmartDomains(section) : [];
+};
+
+const getSmartCurrentYear = () => new Date().getFullYear();
+
+const getSmartPublishedTime = (result) => {
+	const date = new Date(result?.published_date ?? "");
+	return Number.isNaN(date.getTime()) ? null : date.getTime();
+};
+
+const getSmartPublishedYear = (result) => {
+	const publishedTime = getSmartPublishedTime(result);
+	return publishedTime === null ? null : new Date(publishedTime).getFullYear();
+};
+
+const isKoreanPersonUpdatesSection = (section, isKo) =>
+	Boolean(isKo && section?.category === "person" && section?.type === "updates");
+
+const smartResultHasYearSignal = (result, year = getSmartCurrentYear()) =>
+	normalizeSmartSearchText(getSmartResultText(result)).includes(String(year));
+
+const smartResultHasOlderYearSignal = (result, year = getSmartCurrentYear()) => {
+	const text = normalizeSmartSearchText(getSmartResultText(result));
+	const years = text.match(/\b20\d{2}\b/g) ?? [];
+	return years.some((value) => Number(value) < year);
+};
+
+const smartResultTitleHasOlderYearSignal = (
+	result,
+	year = getSmartCurrentYear(),
+) => {
+	const title = normalizeSmartSearchText(result?.title ?? "");
+	const years = title.match(/\b20\d{2}\b/g) ?? [];
+	return years.some((value) => Number(value) < year);
+};
+
+const smartResultHasStaleRelativeSignal = (result) => {
+	const text = String(getSmartResultText(result) || "").toLowerCase();
+	return (
+		/\b(?:one|[1-9]\d*)\s*(?:year|years|yr|yrs)\s*ago\b/i.test(text) ||
+		/\b(?:1[2-9]|[2-9]\d+)\s*(?:month|months|mo|mos)\s*ago\b/i.test(text) ||
+		/[1-9]\d*\s*년\s*전/.test(text) ||
+		/(?:1[2-9]|[2-9]\d+)\s*개월\s*전/.test(text)
+	);
+};
+
+const smartResultIsFreshEnough = (result, section, isKo = false) => {
+	const currentYear = getSmartCurrentYear();
+	const publishedYear = getSmartPublishedYear(result);
+	if (isKeyInfoSmartSection(section)) return true;
+	if (isArticleSmartSection(section)) {
+		if (smartResultHasStaleRelativeSignal(result)) return false;
+		return !smartResultTitleHasOlderYearSignal(result, currentYear);
+	}
+	if (publishedYear !== null) return publishedYear >= currentYear;
+	if (smartResultHasStaleRelativeSignal(result)) return false;
+	if (isKoreanPersonUpdatesSection(section, isKo)) {
+		return !smartResultTitleHasOlderYearSignal(result, currentYear);
+	}
+	if (smartResultHasYearSignal(result, currentYear)) return true;
+	return !smartResultHasOlderYearSignal(result, currentYear);
+};
+
+const getSmartResultText = (result) =>
+	[
+		result?.title,
+		result?.content,
+		result?.url,
+	].filter(Boolean).join(" ");
+
+const hasSmartResultLanguage = (result, isKo) => {
+	const text = getSmartResultText(result);
+	return isKo ? _HANGUL.test(text) : (!_HANGUL.test(text) && _LATIN.test(text));
+};
+
+const getSmartHostname = (url = "") => {
+	try {
+		return new URL(url).hostname.replace(/^www\./, "");
+	} catch {
+		return "";
+	}
+};
+
+const isSmartDomainMatch = (hostname, domain) =>
+	hostname === domain || hostname.endsWith(`.${domain}`);
+
+const isSmartResultFromDomains = (result, domains = []) => {
+	const hostname = getSmartHostname(result?.url ?? "");
+	return hostname
+		? domains.some((domain) => isSmartDomainMatch(hostname, domain))
+		: false;
+};
+
+const isPreferredKoreanSource = (result) => {
+	const hostname = getSmartHostname(result?.url ?? "");
+	return hostname
+		? KO_SMART_DOMAINS.some((domain) => isSmartDomainMatch(hostname, domain))
+		: false;
+};
+
+const isPreferredInfoSource = (result) => {
+	const hostname = getSmartHostname(result?.url ?? "");
+	return hostname
+		? INFO_SMART_DOMAINS.some((domain) => isSmartDomainMatch(hostname, domain))
+		: false;
+};
+
+const isTrustedSmartSource = (result, isKo) => {
+	const hostname = getSmartHostname(result?.url ?? "");
+	const trustedDomains = isKo ? KO_TRUSTED_DOMAINS : EN_TRUSTED_DOMAINS;
+	return hostname
+		? trustedDomains.some((domain) => isSmartDomainMatch(hostname, domain))
+		: false;
+};
+
 const filterSmartResults = (items, isKo) => {
 	const langFiltered = items.filter((r) => {
-		const t = r.title ?? "";
-		return isKo ? _HANGUL.test(t) : (!_HANGUL.test(t) && _LATIN.test(t));
+		return hasSmartResultLanguage(r, isKo);
 	});
+	if (isKo && langFiltered.length >= 1) {
+		const others = items.filter((r) => !langFiltered.includes(r));
+		return [...langFiltered, ...others];
+	}
 	if (langFiltered.length >= 1) return langFiltered;
 	// Korean mode: fall back to all items (Korean sources may mix scripts)
 	// English mode: never fall back to mixed/Korean articles
@@ -1340,173 +1633,2213 @@ const dedupeByUrl = (items) => {
 	return out;
 };
 
+const SMART_CATEGORY_CONFIGS = {
+	shopping: {
+		emoji: "🛒",
+		label: { ko: "쇼핑", en: "Shopping" },
+		description:
+			"shopping, products, retail items, stores, price checks, product reviews, availability",
+		match:
+			/(쇼핑|구매|제품|상품|스토어|매장|가격|가격비교|최저가|시세|비용|견적|특가|핫딜|쿠폰|할인|세일|딜|가성비|비싸|저렴|쿠팡|네이버쇼핑|무신사|shopping|shop|buy|product|item|store|retail|price|pricing|cost|costs|cheap|cheaper|cheapest|expensive|lowest price|best price|price comparison|deal|sale|discount|coupon|promo|promotion|bargain|value for money|amazon|coupang)/i,
+		sections: [
+			{
+				type: "products",
+				title: { ko: "제품 정보", en: "Product Info" },
+				query: {
+					ko: "{keyword} 제품 정보 특징 스펙 리뷰",
+					en: "{keyword} product information features reviews",
+				},
+				searchMode: "search",
+				maxItems: 2,
+			},
+			{
+				type: "reviews",
+				title: { ko: "리뷰/평가", en: "Reviews" },
+				query: {
+					ko: "{keyword} 리뷰 후기 평가 장단점",
+					en: "{keyword} reviews ratings pros cons",
+				},
+				searchMode: "search",
+				maxItems: 2,
+			},
+			{
+				type: "deals",
+				title: { ko: "가격 동향", en: "Price Watch" },
+				query: {
+					ko: "{keyword} 가격 할인 세일 재고 최신",
+					en: "{keyword} price sale discount availability latest",
+				},
+				searchMode: "search",
+				maxItems: 2,
+			},
+		],
+	},
+	streetwear: {
+		emoji: "🛍️",
+		label: { ko: "패션/스트릿웨어", en: "Fashion & streetwear" },
+		description:
+			"fashion brands, streetwear, sneakers, style, drops, collaborations, lookbooks",
+		match:
+			/(supreme|슈프림|streetwear|스트릿|sneaker|스니커|nike|나이키|adidas|아디다스|fashion|패션|스타일|룩북|의류|옷|stussy|스투시|palace|팔라스)/i,
+		sections: [
+			{
+				type: "brand_info",
+				title: { ko: "브랜드 정보", en: "Brand Info" },
+				query: {
+					ko: "{keyword} 브랜드 특징 룩북 스타일",
+					en: "{keyword} brand profile lookbook style",
+				},
+				searchMode: "search",
+				maxItems: 3,
+			},
+			{
+				type: "collab",
+				title: { ko: "콜라보 정보", en: "Collaborations" },
+				query: {
+					ko: "{keyword} 패션 스트릿웨어 콜라보 협업 컬렉션 최신",
+					en: "{keyword} fashion streetwear latest collaborations collection",
+				},
+				searchMode: "news",
+			},
+			{
+				type: "release",
+				title: { ko: "발매/드롭", en: "Releases & Drops" },
+				query: {
+					ko: "{keyword} 패션 스트릿웨어 발매 일정 드롭 출시 정보",
+					en: "{keyword} fashion streetwear release calendar drops launch date",
+				},
+				searchMode: "news",
+			},
+		],
+	},
+	chains: {
+		emoji: "🏬",
+		label: { ko: "체인/브랜드", en: "Chains & Brands" },
+		description:
+			"chains, franchises, brands, restaurant brands, cafe brands, store brands, brand updates, local branches",
+		match:
+			/(체인|프랜차이즈|브랜드|매장|지점|분점|스타벅스|맥도날드|서브웨이|버거킹|쉐이크쉑|던킨|이디야|백다방|투썸|파리바게뜨|chain|franchise|brand|branch|branches|store brand|restaurant chain|cafe chain|starbucks|mcdonald|subway|burger king|shake shack|dunkin|ediya|twosome|paris baguette)/i,
+		sections: [
+			{
+				type: "brand_info",
+				title: { ko: "브랜드 정보", en: "Brand Info" },
+				query: {
+					ko: "{keyword} 브랜드 정보 특징 대표 메뉴 제품",
+					en: "{keyword} brand information signature menu products",
+				},
+				searchMode: "search",
+				maxItems: 3,
+			},
+			{
+				type: "updates",
+				title: { ko: "최신 업데이트", en: "Latest Updates" },
+				query: {
+					ko: "{keyword} 최신 소식 신메뉴 이벤트 기사",
+					en: "{keyword} latest updates new menu news",
+				},
+				searchMode: "news",
+				maxItems: 2,
+			},
+			{
+				type: "local_spots",
+				title: { ko: "지역 지점/매장", en: "Local Spots" },
+				query: {
+					ko: "{keyword} 지역 매장 지점 맛집 추천",
+					en: "{keyword} local branches locations restaurants",
+				},
+				searchMode: "search",
+				maxItems: 2,
+			},
+		],
+	},
+	food: {
+		emoji: "🍽️",
+		label: { ko: "음식/레스토랑", en: "Food & restaurants" },
+		description:
+			"food, drinks, dishes, ingredients, cafes, restaurants, nutrition, recipes, local food spots",
+		match:
+			/(음식|맛집|식당|분식|요리|레시피|영양|칼로리|재료|메뉴|레스토랑|카페|디저트|베이커리|음료|food|drink|beverage|restaurant|cafe|bakery|dessert|cuisine|dish|meal|menu|recipe|nutrition|calorie|ingredient|snack)/i,
+		sections: [
+			{
+				type: "nutrition",
+				title: { ko: "영양 정보", en: "Nutrition" },
+				query: {
+					ko: "{keyword} 영양 정보 칼로리 성분 건강",
+					en: "{keyword} nutrition calories ingredients health",
+				},
+				searchMode: "search",
+				maxItems: 2,
+			},
+			{
+				type: "recipe",
+				title: { ko: "레시피", en: "Recipes" },
+				query: {
+					ko: "{keyword} 레시피 만드는 법 재료",
+					en: "{keyword} recipe how to make ingredients",
+				},
+				searchMode: "search",
+				maxItems: 2,
+			},
+			{
+				type: "local_spots",
+				title: { ko: "레스토랑/맛집", en: "Restaurants" },
+				query: {
+					ko: "{keyword} 맛집 레스토랑 추천 지역",
+					en: "{keyword} restaurants local spots recommendations",
+				},
+				searchMode: "search",
+				maxItems: 2,
+			},
+		],
+	},
+	camera: {
+		emoji: "📷",
+		label: { ko: "카메라/촬영", en: "Cameras & photography" },
+		description:
+			"cameras, lenses, photography gear, deals, shooting tips, model advice",
+		match:
+			/(카메라|렌즈|미러리스|dslr|사진|촬영|camera|lens|mirrorless|photography|canon|캐논|sony|소니|nikon|니콘|fujifilm|후지|leica|라이카)/i,
+		sections: [
+			{
+				type: "gear",
+				title: { ko: "카메라 정보", en: "Camera Info" },
+				query: {
+					ko: "{keyword} 카메라 정보 리뷰 스펙 추천",
+					en: "{keyword} camera information reviews specs recommendations",
+				},
+				searchMode: "search",
+				maxItems: 2,
+			},
+			{
+				type: "deals",
+				title: { ko: "세일/딜", en: "Sales & Deals" },
+				query: {
+					ko: "{keyword} 카메라 세일 할인 최저가",
+					en: "{keyword} camera deals discounts sale price",
+				},
+				searchMode: "search",
+				maxItems: 2,
+			},
+			{
+				type: "tips",
+				title: { ko: "촬영 팁", en: "Shooting Tips" },
+				query: {
+					ko: "{keyword} 사진 잘 찍는 법 촬영 팁 설정",
+					en: "{keyword} photography tips camera settings how to shoot better",
+				},
+				searchMode: "search",
+				maxItems: 2,
+			},
+			{
+				type: "model_tips",
+				title: { ko: "기종별 꿀팁", en: "Model-Specific Tips" },
+				query: {
+					ko: "{keyword} 기종별 설정 꿀팁 렌즈 추천",
+					en: "{keyword} model specific settings tips lens recommendations",
+				},
+				searchMode: "search",
+				maxItems: 2,
+			},
+		],
+	},
+	beauty: {
+		emoji: "💄",
+		label: { ko: "뷰티/화장품", en: "Beauty & cosmetics" },
+		description:
+			"beauty, skincare, makeup, perfume, cosmetics, routines, deals",
+		match:
+			/(뷰티|화장품|스킨케어|메이크업|향수|립스틱|틴트|파데|파운데이션|크림|토너|쿠션|선크림|beauty|cosmetic|skincare|makeup|perfume|fragrance|lipstick|tint|foundation|moisturizer|toner|cushion|sunscreen|sephora|olive young|올리브영)/i,
+		sections: [
+			{
+				type: "products",
+				title: { ko: "제품", en: "Products" },
+				query: {
+					ko: "{keyword} 제품 추천 성분 리뷰",
+					en: "{keyword} products ingredients reviews",
+				},
+				searchMode: "search",
+				maxItems: 2,
+			},
+			{
+				type: "deals",
+				title: { ko: "세일", en: "Deals" },
+				query: {
+					ko: "{keyword} 세일 할인 올리브영 행사",
+					en: "{keyword} sale discount deals",
+				},
+				searchMode: "search",
+				maxItems: 2,
+			},
+			{
+				type: "tips",
+				title: { ko: "사용 팁", en: "Routine Tips" },
+				query: {
+					ko: "{keyword} 사용법 루틴 팁",
+					en: "{keyword} how to use routine tips",
+				},
+				searchMode: "search",
+				maxItems: 2,
+			},
+		],
+	},
+	books: {
+		emoji: "📚",
+		label: { ko: "책/콘텐츠", en: "Books & reading" },
+		description:
+			"books, novels, manga, authors, reading lists, reviews, where to buy",
+		match:
+			/(책|소설|만화|웹툰|작가|독서|서점|book|novel|manga|comic|author|reading|bookstore|kindle)/i,
+		sections: [
+			{
+				type: "reviews",
+				title: { ko: "리뷰", en: "Reviews" },
+				query: {
+					ko: "{keyword} 리뷰 평점 독자 반응",
+					en: "{keyword} reviews ratings reader reactions",
+				},
+				searchMode: "search",
+				maxItems: 2,
+			},
+			{
+				type: "related",
+				title: { ko: "비슷한 작품", en: "Similar Picks" },
+				query: {
+					ko: "{keyword} 비슷한 책 추천",
+					en: "{keyword} similar books recommendations",
+				},
+				searchMode: "search",
+				maxItems: 2,
+			},
+		],
+	},
+	sports: {
+		emoji: "🏃",
+		label: { ko: "스포츠/운동", en: "Sports & fitness" },
+		description:
+			"sports, teams, athletes, workouts, gear, training tips, schedules",
+		match:
+			/(축구|야구|농구|테니스|러닝|헬스|요가|필라테스|운동|팀|선수|soccer|football|baseball|basketball|tennis|running|workout|fitness|gym|yoga|athlete|team)/i,
+		sections: [
+			{
+				type: "updates",
+				title: { ko: "최신 소식", en: "Updates" },
+				query: {
+					ko: "{keyword} 최신 소식 일정 결과",
+					en: "{keyword} latest updates schedule results",
+				},
+				searchMode: "news",
+				maxItems: 2,
+			},
+			{
+				type: "gear",
+				title: { ko: "장비", en: "Gear" },
+				query: {
+					ko: "{keyword} 장비 추천 용품 가격",
+					en: "{keyword} gear recommendations equipment price",
+				},
+				searchMode: "search",
+				maxItems: 2,
+			},
+			{
+				type: "tips",
+				title: { ko: "훈련 팁", en: "Training Tips" },
+				query: {
+					ko: "{keyword} 훈련 방법 팁 자세",
+					en: "{keyword} training tips technique guide",
+				},
+				searchMode: "search",
+				maxItems: 2,
+			},
+		],
+	},
+	finance: {
+		emoji: "💸",
+		label: { ko: "금융/투자", en: "Finance & investing" },
+		description:
+			"stocks, crypto, markets, personal finance, prices, risks, analysis",
+		match:
+			/(주식|코인|투자|금리|환율|ETF|경제|재테크|stock|crypto|bitcoin|ethereum|market|investing|finance|etf|interest rate|exchange rate)/i,
+		sections: [
+			{
+				type: "updates",
+				title: { ko: "시장 소식", en: "Market Updates" },
+				query: {
+					ko: "{keyword} 시장 소식 가격 전망",
+					en: "{keyword} market news price outlook",
+				},
+				searchMode: "news",
+				maxItems: 2,
+			},
+			{
+				type: "comparison",
+				title: { ko: "비교", en: "Comparison" },
+				query: {
+					ko: "{keyword} 비교 수수료 리스크",
+					en: "{keyword} comparison fees risks",
+				},
+				searchMode: "search",
+				maxItems: 2,
+			},
+			{
+				type: "guide",
+				title: { ko: "체크포인트", en: "Checklist" },
+				query: {
+					ko: "{keyword} 투자 전 체크포인트 리스크",
+					en: "{keyword} investing checklist risks",
+				},
+				searchMode: "search",
+				maxItems: 2,
+			},
+		],
+	},
+	health: {
+		emoji: "🧘",
+		label: { ko: "건강/웰니스", en: "Health & wellness" },
+		description:
+			"health, wellness, nutrition, supplements, sleep, routines, safety",
+		match:
+			/(건강|영양제|비타민|미네랄|수면|다이어트|운동법|피부과|병원|health|wellness|nutrition|supplement|vitamin|mineral|sleep|diet|clinic|medical)/i,
+		sections: [
+			{
+				type: "guide",
+				title: { ko: "핵심 정보", en: "Key Info" },
+				query: {
+					ko: "{keyword} 핵심 정보 주의사항",
+					en: "{keyword} key information precautions",
+				},
+				searchMode: "search",
+				maxItems: 2,
+			},
+			{
+				type: "tips",
+				title: { ko: "루틴 팁", en: "Routine Tips" },
+				query: {
+					ko: "{keyword} 루틴 방법 팁",
+					en: "{keyword} routine tips how to",
+				},
+				searchMode: "search",
+				maxItems: 2,
+			},
+			{
+				type: "updates",
+				title: { ko: "최신 연구/소식", en: "Research & Updates" },
+				query: {
+					ko: "{keyword} 최신 연구 뉴스",
+					en: "{keyword} latest research news",
+				},
+				searchMode: "news",
+				maxItems: 2,
+			},
+		],
+	},
+	education: {
+		emoji: "🎓",
+		label: { ko: "학습/커리어", en: "Learning & career" },
+		description:
+			"courses, exams, universities, career skills, learning resources",
+		match:
+			/(공부|강의|자격증|시험|대학|대학원|커리어|취업|코딩|course|class|exam|certification|university|graduate school|career|job|coding|programming)/i,
+		sections: [
+			{
+				type: "guide",
+				title: { ko: "학습 경로", en: "Learning Path" },
+				query: {
+					ko: "{keyword} 공부 방법 로드맵",
+					en: "{keyword} learning path roadmap",
+				},
+				searchMode: "search",
+				maxItems: 2,
+			},
+			{
+				type: "tips",
+				title: { ko: "실전 팁", en: "Practical Tips" },
+				query: {
+					ko: "{keyword} 실전 팁 준비 방법",
+					en: "{keyword} practical tips preparation",
+				},
+				searchMode: "search",
+				maxItems: 2,
+			},
+		],
+	},
+	automotive: {
+		emoji: "🚗",
+		label: { ko: "자동차/모빌리티", en: "Cars & mobility" },
+		description:
+			"cars, EVs, bikes, mobility, prices, reviews, maintenance, charging",
+		match:
+			/(자동차|전기차|차량|중고차|오토바이|자전거|테슬라|현대차|car|ev|vehicle|used car|motorcycle|bike|tesla|hyundai|charging)/i,
+		sections: [
+			{
+				type: "reviews",
+				title: { ko: "리뷰/스펙", en: "Reviews & Specs" },
+				query: {
+					ko: "{keyword} 리뷰 스펙 장단점",
+					en: "{keyword} review specs pros cons",
+				},
+				searchMode: "search",
+				maxItems: 2,
+			},
+			{
+				type: "deals",
+				title: { ko: "가격/구매", en: "Price & Buying" },
+				query: {
+					ko: "{keyword} 가격 구매 보조금 할인",
+					en: "{keyword} price buying incentives deals",
+				},
+				searchMode: "search",
+				maxItems: 2,
+			},
+			{
+				type: "tips",
+				title: { ko: "관리 팁", en: "Maintenance Tips" },
+				query: {
+					ko: "{keyword} 관리 팁 유지비",
+					en: "{keyword} maintenance tips ownership cost",
+				},
+				searchMode: "search",
+				maxItems: 2,
+			},
+		],
+	},
+	tech: {
+		emoji: "💻",
+		label: { ko: "테크/가젯", en: "Tech & gadgets" },
+		description:
+			"gadgets, laptops, phones, apps, specs, comparisons, deals",
+		match:
+			/(노트북|맥북|아이폰|갤럭시|태블릿|앱|소프트웨어|laptop|macbook|iphone|galaxy|android|tablet|app|software|gadget|device)/i,
+		sections: [
+			{
+				type: "reviews",
+				title: { ko: "리뷰/스펙", en: "Reviews & Specs" },
+				query: {
+					ko: "{keyword} 리뷰 스펙 장단점 비교",
+					en: "{keyword} review specs pros cons comparison",
+				},
+				searchMode: "search",
+			},
+			{
+				type: "deals",
+				title: { ko: "할인/구매", en: "Deals & Buying" },
+				query: {
+					ko: "{keyword} 할인 특가 구매 최저가",
+					en: "{keyword} deals discounts best price buy",
+				},
+				searchMode: "search",
+			},
+			{
+				type: "comparison",
+				title: { ko: "비교", en: "Comparisons" },
+				query: {
+					ko: "{keyword} 비교 추천 대안",
+					en: "{keyword} comparison alternatives best picks",
+				},
+				searchMode: "search",
+			},
+			{
+				type: "tips",
+				title: { ko: "활용 팁", en: "How-To Tips" },
+				query: {
+					ko: "{keyword} 사용법 설정 팁 활용법",
+					en: "{keyword} how to use settings tips guide",
+				},
+				searchMode: "search",
+			},
+		],
+	},
+	travel: {
+		emoji: "📍",
+		label: { ko: "장소/여행", en: "Places & travel" },
+		description:
+			"places, travel, neighborhoods, attractions, itineraries, local guides",
+		match:
+			/(여행|동네|지역|장소|호텔|공항|제주|부산|서울|뉴욕|도쿄|travel|trip|hotel|airport|city|place|neighborhood|tokyo|seoul|busan|jeju|new york)/i,
+		sections: [
+			{
+				type: "guide",
+				title: { ko: "가이드", en: "Guide" },
+				query: {
+					ko: "{keyword} 여행 가이드 코스 추천",
+					en: "{keyword} travel guide itinerary recommendations",
+				},
+				searchMode: "search",
+			},
+			{
+				type: "local_spots",
+				title: { ko: "가볼 만한 곳", en: "Places to Visit" },
+				query: {
+					ko: "{keyword} 가볼만한 곳 맛집 카페",
+					en: "{keyword} things to do restaurants cafes",
+				},
+				searchMode: "search",
+			},
+			{
+				type: "deals",
+				title: { ko: "예약/할인", en: "Booking & Deals" },
+				query: {
+					ko: "{keyword} 호텔 항공권 예약 할인",
+					en: "{keyword} hotel flights booking deals",
+				},
+				searchMode: "search",
+			},
+		],
+	},
+	entertainment: {
+		emoji: "🎬",
+		label: { ko: "엔터테인먼트", en: "Entertainment" },
+		description:
+			"movies, music, games, shows, artists, releases, where to watch",
+		match:
+			/(영화|드라마|게임|음악|가수|앨범|콘서트|movie|film|drama|game|music|artist|album|concert|netflix|youtube)/i,
+		sections: [
+			{
+				type: "overview",
+				title: { ko: "핵심 정보", en: "Key Info" },
+				query: {
+					ko: "{keyword} 작품 정보 줄거리 출연진 기본 정보",
+					en: "{keyword} key information cast plot overview",
+				},
+				searchMode: "search",
+				maxItems: 2,
+			},
+			{
+				type: "release",
+				title: { ko: "공개/발매", en: "Releases" },
+				query: {
+					ko: "{keyword} 공개일 발매일 일정 최신",
+					en: "{keyword} release date schedule latest",
+				},
+				searchMode: "news",
+			},
+			{
+				type: "reviews",
+				title: { ko: "리뷰/반응", en: "Reviews & Reactions" },
+				query: {
+					ko: "{keyword} 리뷰 반응 평점",
+					en: "{keyword} reviews reactions ratings",
+				},
+				searchMode: "search",
+			},
+		],
+	},
+	person: {
+		emoji: "👤",
+		label: { ko: "인물", en: "Person" },
+		description:
+			"people, public figures, celebrities, creators, athletes, artists, politicians, executives, founders",
+		match:
+			/(배우|가수|아이돌|유튜버|크리에이터|인플루언서|작가|감독|선수|교수|창업자|대표|대통령|정치인|아티스트|actor|singer|idol|creator|influencer|writer|director|athlete|professor|founder|ceo|president|politician|artist|designer|celebrity)/i,
+		sections: [
+			{
+				type: "profile",
+				title: { ko: "프로필", en: "Profile" },
+				query: {
+					ko: "{keyword} 프로필 경력 작품",
+					en: "{keyword} biography profile career",
+				},
+				searchMode: "search",
+				maxItems: 2,
+			},
+			{
+				type: "updates",
+				title: { ko: "최신 기사", en: "Latest Coverage" },
+				query: {
+					ko: "{keyword} 최신 기사 근황 뉴스",
+					en: "{keyword} latest news recent coverage",
+				},
+				searchMode: "news",
+				maxItems: 2,
+			},
+		],
+	},
+	general: {
+		emoji: "🔎",
+		label: { ko: "일반 검색", en: "General Search" },
+		description:
+			"general topics, concepts, hobbies, anything not covered above",
+		match: /.*/,
+		sections: [
+			{
+				type: "overview",
+				title: { ko: "핵심 정보", en: "Key Info" },
+				query: {
+					ko: "{keyword} 핵심 정보 최신 정리",
+					en: "{keyword} key information latest overview",
+				},
+				searchMode: "search",
+			},
+			{
+				type: "updates",
+				title: { ko: "최신 업데이트", en: "Latest Updates" },
+				query: {
+					ko: "{keyword} 최신 소식 업데이트",
+					en: "{keyword} latest updates news",
+				},
+				searchMode: "news",
+			},
+		],
+	},
+};
+
+const SMART_CATEGORY_IDS = Object.keys(SMART_CATEGORY_CONFIGS);
+export const SMART_WIDGET_CATEGORY_OPTIONS = SMART_CATEGORY_IDS.map((id) => ({
+	id,
+	label: SMART_CATEGORY_CONFIGS[id].label,
+	emoji: SMART_CATEGORY_CONFIGS[id].emoji,
+}));
+
+const getSmartCategoryKeywordHints = (config) => {
+	const source = config?.match?.source ?? "";
+	if (!source || source === ".*") return [];
+	const body =
+		source.startsWith("(") && source.endsWith(")")
+			? source.slice(1, -1)
+			: source;
+	return Array.from(
+		new Set(
+			body
+				.split("|")
+				.map((term) =>
+					term
+						.replace(/\\s\+/g, " ")
+						.replace(/\\/g, "")
+						.replace(/[()[\]{}^$*+]/g, "")
+						.trim(),
+				)
+				.filter((term) => term && term !== "."),
+		),
+	).slice(0, 36);
+};
+
+const formatSmartCategoryPromptLine = (id) => {
+	const config = SMART_CATEGORY_CONFIGS[id];
+	const keywordHints = getSmartCategoryKeywordHints(config);
+	const hintText =
+		keywordHints.length > 0
+			? ` Keyword hints: ${keywordHints.join(", ")}.`
+			: "";
+	return `- ${id} (${config.label?.en ?? id}): ${config.description}.${hintText}`;
+};
+
+const parseJsonFromText = (text) => {
+	if (!text) return null;
+	try {
+		const trimmed = String(text).trim();
+		const objectMatch = trimmed.match(/\{[\s\S]*\}/);
+		const arrayMatch = trimmed.match(/\[[\s\S]*\]/);
+		const objectIndex = objectMatch ? trimmed.indexOf(objectMatch[0]) : Infinity;
+		const arrayIndex = arrayMatch ? trimmed.indexOf(arrayMatch[0]) : Infinity;
+		const raw = arrayIndex < objectIndex
+			? arrayMatch[0]
+			: (objectMatch?.[0] || arrayMatch?.[0] || trimmed);
+		return JSON.parse(raw);
+	} catch {
+		return null;
+	}
+};
+
+const KOREAN_PERSON_SURNAME_RE =
+	/^(김|이|박|최|정|강|조|윤|장|임|한|오|서|신|권|황|안|송|전|홍|유|고|문|양|손|배|백|허|남|심|노|하|곽|성|차|주|우|구|민|류|나|진|지|엄|채|원|천|방|공|현|함|변|염|여|추|도|석|선|설|마|길|연|위|표|명|기|반|라|왕|금|옥|육|인|맹|제|모|탁|국|어|은|편|용)/;
+
+const KOREAN_NON_PERSON_KEYWORDS = new Set([
+	"이거",
+	"이것",
+	"오늘",
+	"내일",
+	"음식",
+	"커피",
+]);
+
+const PERSON_NAME_STOPWORDS = new Set([
+	"a",
+	"an",
+	"and",
+	"for",
+	"of",
+	"the",
+	"to",
+	"with",
+]);
+
+const PERSON_NAME_BLOCKED_WORDS = new Set([
+	"app",
+	"bread",
+	"cafe",
+	"club",
+	"coffee",
+	"cost",
+	"deal",
+	"discount",
+	"food",
+	"health",
+	"lens",
+	"machine",
+	"movie",
+	"news",
+	"price",
+	"review",
+	"restaurant",
+	"sale",
+	"show",
+	"subway",
+	"vitamin",
+]);
+
+const PERSON_NAME_PREFIXES = new Set([
+	"dr",
+	"mr",
+	"mrs",
+	"ms",
+	"prof",
+	"sir",
+	"dame",
+]);
+
+const PERSON_NAME_SUFFIXES = new Set([
+	"jr",
+	"sr",
+	"ii",
+	"iii",
+	"iv",
+	"v",
+]);
+
+const PERSON_NAME_HINT_WORDS = new Set([
+	"adele",
+	"ariana",
+	"barack",
+	"beyonce",
+	"bieber",
+	"billie",
+	"brad",
+	"chalamet",
+	"donald",
+	"drake",
+	"dua",
+	"elon",
+	"emma",
+	"gaga",
+	"grande",
+	"harry",
+	"jennie",
+	"john",
+	"jordan",
+	"justin",
+	"kardashian",
+	"kim",
+	"kylie",
+	"messi",
+	"musk",
+	"obama",
+	"olivia",
+	"oprah",
+	"pitt",
+	"rihanna",
+	"rodrigo",
+	"ronaldo",
+	"selena",
+	"swift",
+	"taylor",
+	"trump",
+	"zendaya",
+]);
+
+const SINGLE_NAME_PERSON_KEYWORDS = new Set([
+	"adele",
+	"beyonce",
+	"cher",
+	"drake",
+	"jennie",
+	"jisoo",
+	"jungkook",
+	"lisa",
+	"madonna",
+	"prince",
+	"rihanna",
+	"rosé",
+	"rose",
+	"suga",
+	"zendaya",
+]);
+
+const looksLikeKoreanPersonNameKeyword = (keyword) => {
+	const normalized = String(keyword || "").trim();
+	return (
+		/^[가-힣]{2,4}$/.test(normalized) &&
+		!KOREAN_NON_PERSON_KEYWORDS.has(normalized) &&
+		KOREAN_PERSON_SURNAME_RE.test(normalized)
+	);
+};
+
+const looksLikeEnglishPersonNameKeyword = (keyword) => {
+	const normalized = String(keyword || "").trim();
+	const parts =
+		normalized.match(/[A-Za-zÀ-ÖØ-öø-ÿ]+(?:['’-][A-Za-zÀ-ÖØ-öø-ÿ]+)?|[A-Z]\.?/g) ?? [];
+	if (parts.length === 0 || parts.length > 5) return false;
+	const lowerParts = parts.map((part) =>
+		part.toLowerCase().replace(/[.\u2019']/g, ""),
+	);
+	if (lowerParts.some((part) => PERSON_NAME_BLOCKED_WORDS.has(part))) {
+		return false;
+	}
+
+	const contentParts = lowerParts.filter(
+		(part) =>
+			!PERSON_NAME_PREFIXES.has(part) &&
+			!PERSON_NAME_SUFFIXES.has(part) &&
+			!PERSON_NAME_STOPWORDS.has(part) &&
+			part.length > 1,
+	);
+	if (contentParts.length === 1) {
+		return SINGLE_NAME_PERSON_KEYWORDS.has(contentParts[0]);
+	}
+	if (contentParts.length < 2 || contentParts.length > 4) return false;
+
+	const hasNameHint = contentParts.some((part) =>
+		PERSON_NAME_HINT_WORDS.has(part),
+	);
+	const isTitleLike = parts
+		.filter((part) => !/^[A-Z]\.?$/.test(part))
+		.every((part) => /^[A-ZÀ-ÖØ-Þ][A-Za-zÀ-ÖØ-öø-ÿ'’-]+$/.test(part));
+
+	return hasNameHint || isTitleLike;
+};
+
+const looksLikePersonNameKeyword = (keyword) =>
+	looksLikeEnglishPersonNameKeyword(keyword) ||
+	looksLikeKoreanPersonNameKeyword(keyword);
+
+const inferSmartCategoryFallback = (keyword) => {
+	const normalized = String(keyword || "").trim();
+	for (const [id, config] of Object.entries(SMART_CATEGORY_CONFIGS)) {
+		if (id !== "general" && config.match.test(normalized)) return id;
+	}
+	if (looksLikePersonNameKeyword(normalized)) return "person";
+	return "general";
+};
+
+const classifySmartKeyword = async (keyword, isKo) => {
+	const fallbackCategory = inferSmartCategoryFallback(keyword);
+	const categoryText = SMART_CATEGORY_IDS
+		.map(formatSmartCategoryPromptLine)
+		.join("\n");
+
+	const data = await invokeFunction("groq", {
+		system: [
+			"You classify a user's smart-widget keyword into one product/content vertical.",
+			"Return only valid JSON. No markdown, no commentary.",
+			`Allowed categories: ${SMART_CATEGORY_IDS.join(", ")}`,
+			"Review every allowed category in the category guide before answering.",
+			"Classify into the most relevant specific category when there is enough evidence.",
+			"Use the category descriptions, keyword hints, and keyword meaning together.",
+			"Keyword hints are soft signals: they help identify a category, but the final answer must still match the user's likely intent.",
+			"Do not over-focus on the first few categories; camera, beauty, books, sports, finance, health, education, automotive, tech, travel, entertainment, person, and general are equally valid when supported.",
+			"A single dish, ingredient, snack, drink, cuisine, or restaurant food name should be classified as food.",
+			"Choose person only when the whole keyword appears to identify a real person, stage name, creator, celebrity, athlete, artist, founder, executive, or public figure. Do not choose person for generic nouns, products, foods, locations, or brands.",
+			"If multiple categories seem possible, choose the one that best matches the user's likely intent.",
+			"Only choose general when no specific category is reasonably supported.",
+		].join("\n"),
+		prompt: [
+			`Keyword: ${keyword}`,
+			"",
+			"Categories:",
+			categoryText,
+			"",
+			isKo
+				? "The keyword may be Korean or mixed Korean/English. Compare it against every category guide line, including keyword hints, then choose the most specific supported category. Use general only as the final fallback."
+				: "The keyword may be English or mixed English/Korean. Compare it against every category guide line, including keyword hints, then choose the most specific supported category. Use general only as the final fallback.",
+			'Return shape: {"category":"streetwear","emoji":"🛍️"}',
+		].join("\n"),
+		temperature: 0.1,
+	});
+
+	const parsed = parseJsonFromText(data?.text);
+	const parsedCategory = SMART_CATEGORY_IDS.includes(parsed?.category)
+		? parsed.category
+		: null;
+	const category = fallbackCategory === "person"
+		? "person"
+		: (parsedCategory && parsedCategory !== "general"
+			? parsedCategory
+			: fallbackCategory);
+	const emoji = parsed?.emoji || SMART_CATEGORY_CONFIGS[category]?.emoji || "🔎";
+	return { category, emoji };
+};
+
+const fillSmartTemplate = (template, keyword) =>
+	String(template || "").replace(/\{keyword\}/g, keyword);
+
+const OMIT_SMART_SECTION_TYPES = new Set(["shopping", "sites"]);
+const SHOPPING_SMART_SECTION_RE =
+	/(쇼핑|구매|구매처|할인|세일|딜|예약|shopping|stockists|buy|borrow|deals|sale|discount|booking|price & buying)/i;
+
+const buildSmartCommunitySections = (keyword, category, isKo) => [
+	{
+		type: "video",
+		title: isKo ? "영상" : "Videos",
+		keyword,
+		category,
+		query: isKo
+			? `${keyword} 유튜브 영상 리뷰 설명`
+			: `${keyword} YouTube video review guide`,
+		searchMode: "search",
+		allowMixed: true,
+		maxItems: 2,
+	},
+	{
+		type: "blog",
+		title: isKo ? "블로그" : "Blogs",
+		keyword,
+		category,
+		query: isKo
+			? `${keyword} 블로그 후기 정리 리뷰`
+			: `${keyword} blog review analysis guide`,
+		searchMode: "search",
+		allowMixed: true,
+		maxItems: 2,
+	},
+];
+
+const buildSmartSectionPlan = (keyword, category, isKo) => {
+	const lang = isKo ? "ko" : "en";
+	const config =
+		SMART_CATEGORY_CONFIGS[category] ?? SMART_CATEGORY_CONFIGS.general;
+
+	const sections = config.sections
+		.filter((section) => {
+			const title = `${section.title?.ko ?? ""} ${section.title?.en ?? ""}`;
+			return (
+				!section.linkOnly &&
+				!OMIT_SMART_SECTION_TYPES.has(section.type) &&
+				!SHOPPING_SMART_SECTION_RE.test(title)
+			);
+		})
+		.map((section) => ({
+			type: section.type,
+			title: section.title[lang] ?? section.title.en,
+			keyword,
+			category,
+			query: fillSmartTemplate(section.query[lang] ?? section.query.en, keyword),
+			searchMode: section.searchMode ?? "search",
+			allowMixed: Boolean(section.allowMixed),
+			maxItems: section.maxItems ?? 2,
+		}));
+
+	return sections.some((section) => section.type === "community")
+		? sections
+		: [...sections, ...buildSmartCommunitySections(keyword, category, isKo)];
+};
+
+const rankSmartResultsForLanguage = (
+	items,
+	isKo,
+	allowMixed = false,
+	keyword = "",
+) => {
+	const normalized = Array.isArray(items) ? items : [];
+	if (!allowMixed) return filterSmartResults(normalized, isKo);
+
+	const preferred = normalized.filter((r) => {
+		return hasSmartResultLanguage(r, isKo);
+	});
+	const others = normalized.filter((r) => !preferred.includes(r));
+	if (isKo) return [...preferred, ...others];
+	return preferred.length
+		? preferred
+		: normalized.filter((r) => hasSmartResultLanguage(r, false));
+};
+
+const SMART_KEYWORD_STOPWORDS = new Set([
+	"a",
+	"an",
+	"and",
+	"for",
+	"of",
+	"the",
+	"to",
+	"with",
+	"정보",
+	"추천",
+	"최신",
+]);
+
+const SMART_SECTION_STOPWORDS = new Set([
+	...SMART_KEYWORD_STOPWORDS,
+	"가이드",
+	"가격",
+	"검색",
+	"공개",
+	"구매",
+	"뉴스",
+	"리뷰",
+	"메뉴",
+	"방법",
+	"발매",
+	"브랜드",
+	"비교",
+	"사용법",
+	"소식",
+	"스펙",
+	"신메뉴",
+	"업데이트",
+	"일정",
+	"정리",
+	"체인점",
+	"특징",
+	"할인",
+	"핵심",
+	"best",
+	"brands",
+	"comparison",
+	"guide",
+	"how",
+	"info",
+	"information",
+	"latest",
+	"news",
+	"overview",
+	"recommendations",
+	"reviews",
+	"tips",
+	"updates",
+]);
+
+const normalizeSmartSearchText = (value = "") =>
+	String(value || "").toLowerCase().replace(/\s+/g, " ").trim();
+
+const getSmartKeywordTokens = (keyword = "") =>
+	normalizeSmartSearchText(keyword)
+		.split(/[^\p{L}\p{N}]+/u)
+		.map((token) => token.trim())
+		.filter((token) => token.length >= 2 && !SMART_KEYWORD_STOPWORDS.has(token));
+
+const SMART_KEYWORD_ALIASES = {
+	슈프림: ["supreme"],
+	supreme: ["슈프림"],
+	나이키: ["nike"],
+	nike: ["나이키"],
+	아디다스: ["adidas"],
+	adidas: ["아디다스"],
+	스투시: ["stussy"],
+	stussy: ["스투시"],
+	팔라스: ["palace"],
+	palace: ["팔라스"],
+	무신사: ["musinsa"],
+	musinsa: ["무신사"],
+	떡볶이: ["tteokbokki", "topokki"],
+	tteokbokki: ["떡볶이"],
+	카메라: ["camera"],
+	camera: ["카메라"],
+	캐논: ["canon"],
+	canon: ["캐논"],
+	소니: ["sony"],
+	sony: ["소니"],
+	니콘: ["nikon"],
+	nikon: ["니콘"],
+	후지: ["fujifilm", "fuji"],
+	fujifilm: ["후지필름", "후지"],
+	라이카: ["leica"],
+	leica: ["라이카"],
+};
+
+const getSmartKeywordVariants = (keyword = "") => {
+	const normalized = normalizeSmartSearchText(keyword);
+	const tokens = getSmartKeywordTokens(keyword);
+	const variants = new Set([normalized, ...tokens]);
+	for (const token of [normalized, ...tokens]) {
+		(SMART_KEYWORD_ALIASES[token] ?? []).forEach((alias) =>
+			variants.add(normalizeSmartSearchText(alias)),
+		);
+	}
+	return Array.from(variants).filter((value) => value.length >= 2);
+};
+
+const SMART_CATEGORY_REQUIRED_TERMS = {
+	streetwear: [
+		"fashion",
+		"streetwear",
+		"sneaker",
+		"sneakers",
+		"apparel",
+		"clothing",
+		"wear",
+		"drop",
+		"drops",
+		"release",
+		"collab",
+		"collaboration",
+		"collaborations",
+		"collection",
+		"lookbook",
+		"brand",
+		"skate",
+		"skateboarding",
+		"supreme new york",
+		"hypebeast",
+		"패션",
+		"스트릿",
+		"스니커",
+		"의류",
+		"드롭",
+		"발매",
+		"콜라보",
+		"협업",
+		"컬렉션",
+		"룩북",
+		"브랜드",
+	],
+};
+
+const SMART_CATEGORY_EXCLUDED_TERMS = {
+	streetwear: [
+		"supreme court",
+	],
+};
+
+const smartTextIncludesAny = (text, terms = []) =>
+	terms.some((term) => text.includes(term));
+
+const smartResultMatchesCategoryContext = (result, section) => {
+	const category = section?.category;
+	if (!category || !SMART_CATEGORY_REQUIRED_TERMS[category]) return true;
+	const haystack = normalizeSmartSearchText(getSmartResultText(result));
+	if (
+		smartTextIncludesAny(
+			haystack,
+			SMART_CATEGORY_EXCLUDED_TERMS[category] ?? [],
+		)
+	) {
+		return false;
+	}
+	if (isCommunitySmartSection(section)) return true;
+	return smartTextIncludesAny(haystack, SMART_CATEGORY_REQUIRED_TERMS[category]);
+};
+
+const smartResultMatchesSourceScope = (result, section, isKo) => {
+	if (isVideoSmartSection(section)) {
+		return isSmartResultFromDomains(
+			result,
+			isKo ? KO_VIDEO_DOMAINS : EN_VIDEO_DOMAINS,
+		);
+	}
+	if (isBlogSmartSection(section)) {
+		return isSmartResultFromDomains(
+			result,
+			isKo ? KO_BLOG_DOMAINS : EN_BLOG_DOMAINS,
+		);
+	}
+	return true;
+};
+
+const smartResultMatchesKeyword = (result, keyword) => {
+	const normalizedKeyword = normalizeSmartSearchText(keyword);
+	const haystack = normalizeSmartSearchText(
+		[
+			result?.title,
+			result?.content,
+			result?.url,
+		].filter(Boolean).join(" "),
+	);
+	if (!normalizedKeyword || !haystack) return false;
+	if (normalizedKeyword.length >= 2 && haystack.includes(normalizedKeyword)) {
+		return true;
+	}
+
+	const tokens = getSmartKeywordTokens(keyword);
+	if (tokens.length === 0) return false;
+	return tokens.every((token) => haystack.includes(token));
+};
+
+const smartResultTitleMatchesKeyword = (result, keyword) => {
+	const title = normalizeSmartSearchText(result?.title ?? "");
+	if (!title) return false;
+	const normalizedKeyword = normalizeSmartSearchText(keyword);
+	if (normalizedKeyword && title.includes(normalizedKeyword)) return true;
+
+	const normalizedAliases = SMART_KEYWORD_ALIASES[normalizedKeyword] ?? [];
+	if (normalizedAliases.some((alias) => title.includes(normalizeSmartSearchText(alias)))) {
+		return true;
+	}
+
+	const tokens = getSmartKeywordTokens(keyword);
+	if (tokens.length === 0) return false;
+	const tokenMatches = (token) =>
+		title.includes(token) ||
+		(SMART_KEYWORD_ALIASES[token] ?? []).some((alias) =>
+			title.includes(normalizeSmartSearchText(alias)),
+		);
+	return tokens.length === 1
+		? tokenMatches(tokens[0])
+		: tokens.every(tokenMatches);
+};
+
+const smartResultTitleMatchesPersonName = (result, keyword) => {
+	const title = normalizeSmartSearchText(result?.title ?? "");
+	const normalizedKeyword = normalizeSmartSearchText(keyword);
+	if (!title || !normalizedKeyword) return false;
+	const tokens = getSmartKeywordTokens(keyword);
+	if (tokens.length >= 2) {
+		return title.includes(normalizedKeyword) || tokens.every((token) =>
+			title.includes(token),
+		);
+	}
+	return title.includes(normalizedKeyword);
+};
+
+const smartResultTitleMatchesSectionKeyword = (result, section) =>
+	section?.category === "person"
+		? smartResultTitleMatchesPersonName(result, section.keyword)
+		: smartResultTitleMatchesKeyword(result, section.keyword);
+
+const smartResultMatchesRequiredSectionKeyword = (result, section, isKo) =>
+	smartResultTitleMatchesSectionKeyword(result, section) ||
+	(isNutritionSmartSection(section) &&
+		smartResultMatchesKeyword(result, section.keyword)) ||
+	(isKo &&
+		section?.category === "person" &&
+		hasSmartResultLanguage(result, true) &&
+		smartResultMatchesKeyword(result, section.keyword));
+
+const smartResultIsEligibleForSection = (result, section, isKo) =>
+	smartResultIsFreshEnough(result, section, isKo) &&
+	smartResultMatchesCategoryContext(result, section) &&
+	smartResultMatchesSourceScope(result, section, isKo);
+
+const getSmartResultScore = (result) => {
+	const score = Number(result?.score);
+	return Number.isFinite(score) ? score : null;
+};
+
+const getSmartResultFreshnessRank = (result, section, isKo) => {
+	const currentYear = getSmartCurrentYear();
+	const publishedTime = getSmartPublishedTime(result);
+	if (publishedTime !== null) {
+		const publishedYear = new Date(publishedTime).getFullYear();
+		if (publishedYear >= currentYear) return 3;
+		return -8;
+	}
+	if (
+		isKoreanPersonUpdatesSection(section, isKo) &&
+		!smartResultTitleHasOlderYearSignal(result, currentYear)
+	) {
+		return 0.8;
+	}
+	if (smartResultHasStaleRelativeSignal(result)) return -8;
+	if (smartResultHasYearSignal(result, currentYear)) return 1.6;
+	if (smartResultHasOlderYearSignal(result, currentYear)) return -8;
+	return 0;
+};
+
+const getSmartSectionTokens = (section) =>
+	getSmartKeywordTokens(`${section.keyword ?? ""} ${section.query ?? ""}`)
+		.filter((token) => !SMART_SECTION_STOPWORDS.has(token))
+		.slice(0, 8);
+
+const smartResultMatchesSection = (result, section, isKo) => {
+	if (smartResultMatchesKeyword(result, section.keyword)) return true;
+	const haystack = normalizeSmartSearchText(getSmartResultText(result));
+	const title = normalizeSmartSearchText(result?.title ?? "");
+	const sectionTokens = getSmartSectionTokens(section);
+	const tokenMatches = sectionTokens.filter((token) => haystack.includes(token));
+	const titleTokenMatches = sectionTokens.filter((token) => title.includes(token));
+	const score = getSmartResultScore(result);
+	if (score !== null && score >= 0.62 && titleTokenMatches.length >= 1) return true;
+	if (
+		isKo &&
+		hasSmartResultLanguage(result, true) &&
+		isPreferredKoreanSource(result) &&
+		(score === null || score >= 0.45) &&
+		(titleTokenMatches.length >= 1 || tokenMatches.length >= 2)
+	) {
+		return true;
+	}
+	if (isPreferredInfoSource(result) && score !== null && score >= 0.58) {
+		return titleTokenMatches.length >= 1 || tokenMatches.length >= 2;
+	}
+	return tokenMatches.length >= 2;
+};
+
+const formatSmartSource = (url = "") => {
+	return getSmartHostname(url);
+};
+
+const BAD_SMART_CONTENT_RE =
+	/(aboutpresscopyrightcontact\s*uscreatorsadvertisedeveloperstermsprivacypolicy|about\s+press\s+copyright\s+contact\s+us\s+creators\s+advertise\s+developers\s+terms\s+privacy\s+policy|youtube\s+about\s+press\s+copyright|skip navigation|sign in to confirm|privacy policy|terms of service|cookie policy|all rights reserved|copyright|google llc|subscribe to|log in|login|sign up|cookie settings|advertisement|sponsored content|share this|copy link)/i;
+
+const SMART_MARKDOWN_LINK_RE =
+	/\[([^\]]{1,140})\]\((?:https?:\/\/|www\.)[^)]+\)/gi;
+const SMART_RAW_URL_RE = /\b(?:https?:\/\/|www\.)\S+/gi;
+const SMART_SYMBOL_RUN_RE =
+	/[|\u2022\u25CF\u25A0\u25A1\u25C6\u25C7\u2605\u2606\u25B6\u25B7\u25BA\u25BC\u25B2]{2,}/g;
+const SMART_HTML_ENTITY_RE = /&(?:nbsp|amp|quot|apos|#39|lt|gt);/gi;
+const SMART_EMPTY_UI_RE =
+	/^(home|menu|search|login|log in|sign in|subscribe|share|comment|watch|shorts|videos|channels|about|contact)$/i;
+
+const cleanSmartContentText = (value = "") => {
+	const text = String(value || "")
+		.replace(SMART_MARKDOWN_LINK_RE, "$1")
+		.replace(SMART_RAW_URL_RE, " ")
+		.replace(/<[^>]+>/g, " ")
+		.replace(SMART_HTML_ENTITY_RE, " ")
+		.replace(/[\u200B-\u200D\uFEFF]/g, " ")
+		.replace(SMART_SYMBOL_RUN_RE, " ")
+		.replace(/[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}]+/gu, " ")
+		.replace(/(?:©|\(c\)|copyright)\s*\d{4}[^.!?。]*[.!?。]?/gi, " ")
+		.replace(/(^|\s)[#@]([\p{L}\p{N}_-]+)/gu, "$1$2")
+		.replace(
+			/AboutPressCopyrightContact\s*usCreatorsAdvertiseDevelopersTermsPrivacyPolicy.*/gi,
+			" ",
+		)
+		.replace(
+			/About\s+Press\s+Copyright\s+Contact\s+us\s+Creators\s+Advertise\s+Developers\s+Terms\s+Privacy\s+Policy.*/gi,
+			" ",
+		)
+		.replace(
+			/\b(Privacy Policy|Terms of Service|Cookie Policy|All rights reserved|Skip navigation|Sign in to confirm)\b.*/gi,
+			" ",
+		)
+		.replace(/\s+/g, " ")
+		.trim();
+	if (!text || BAD_SMART_CONTENT_RE.test(text)) return "";
+	return text;
+};
+
+const countSmartTextMatches = (value, pattern) =>
+	String(value || "").match(pattern)?.length ?? 0;
+
+const isMeaningfulSmartContentText = (value = "", isKo = false) => {
+	const text = cleanSmartContentText(value);
+	if (!text || SMART_EMPTY_UI_RE.test(text)) return false;
+	if (/\b(?:https?:\/\/|www\.)\S+/i.test(text) || BAD_SMART_CONTENT_RE.test(text)) {
+		return false;
+	}
+
+	const compact = text.replace(/\s+/g, "");
+	const letterCount = countSmartTextMatches(text, /\p{L}/gu);
+	const numberCount = countSmartTextMatches(text, /\p{N}/gu);
+	const contentCount = letterCount + numberCount;
+	const symbolCount = countSmartTextMatches(
+		text,
+		/[^\p{L}\p{N}\s.,!?;:'"()[\]{}%&/+\u00B7\-\u2013\u2014]/gu,
+	);
+
+	if (compact.length < (isKo ? 10 : 28)) return false;
+	if (contentCount < (isKo ? 6 : 18)) return false;
+	if (symbolCount > Math.max(4, Math.floor(contentCount * 0.28))) {
+		return false;
+	}
+
+	if (!isKo) {
+		const words = text.split(/\s+/).filter((word) => /[a-z0-9]/i.test(word));
+		if (words.length < 4) return false;
+	}
+	return true;
+};
+
+const smartResultHasSummarizableContent = (result, isKo) => {
+	const title = cleanSmartContentText(result?.title ?? "");
+	const content = cleanSmartContentText(result?.content ?? "");
+	if (!title || !content) return false;
+	if (BAD_SMART_CONTENT_RE.test(title)) return false;
+	if (!isMeaningfulSmartContentText(content, isKo)) return false;
+	return normalizeSmartSearchText(title) !== normalizeSmartSearchText(content);
+};
+
+const smartResultHasDisplayableContent = (result, isKo) => {
+	const title = cleanSmartContentText(result?.title ?? "");
+	if (!title || BAD_SMART_CONTENT_RE.test(title)) return false;
+	const content = cleanSmartContentText(result?.content ?? "");
+	return !content || isMeaningfulSmartContentText(content, isKo);
+};
+
+const getSmartItemSummaryText = (item, isKo, maxLength = 260) => {
+	const detail = cleanSmartDetail(item?.detail || item?.snippet, maxLength);
+	return isMeaningfulSmartContentText(detail, isKo) ? detail : "";
+};
+
+const cleanSmartSnippet = (value = "", maxLength = 90) => {
+	const text = cleanSmartContentText(value);
+	if (text.length <= maxLength) return text;
+	return `${text.slice(0, maxLength).trim()}...`;
+};
+
+const cleanSmartDetail = (value = "", maxLength = 260) => {
+	const text = cleanSmartContentText(value);
+	if (text.length <= maxLength) return text;
+	const firstChunk = text.split(/[.!?。]/)[0]?.trim() ?? "";
+	if (firstChunk.length > 40 && firstChunk.length <= maxLength) return firstChunk;
+	return `${text.slice(0, maxLength).trim()}...`;
+};
+
+const formatSmartTime = (publishedDate, isKo) => {
+	if (!publishedDate) return isKo ? "최근" : "recent";
+	const date = new Date(publishedDate);
+	if (Number.isNaN(date.getTime())) return isKo ? "최근" : "recent";
+	return date.toLocaleDateString(isKo ? "ko-KR" : "en-US", {
+		month: "short",
+		day: "numeric",
+	});
+};
+
+const getSmartResultRank = (result, section, isKo) => {
+	const score = getSmartResultScore(result) ?? 0;
+	let rank = score + getSmartResultFreshnessRank(result, section, isKo);
+	if (smartResultTitleMatchesSectionKeyword(result, section)) rank += 4;
+	if (smartResultMatchesKeyword(result, section.keyword)) rank += 2;
+	if (isTrustedSmartSection(section) && isTrustedSmartSource(result, isKo)) {
+		rank += 1.4;
+	}
+	if (isPreferredInfoSource(result)) rank += 0.8;
+	if (isKo && isPreferredKoreanSource(result)) rank += 0.6;
+	return rank;
+};
+
+const formatSmartItems = (results, isKo, section) => {
+	const ranked = dedupeByUrl(
+		rankSmartResultsForLanguage(
+			results,
+			isKo,
+			section.allowMixed,
+			section.keyword,
+		),
+	);
+	const eligibleRanked = ranked.filter((r) =>
+		smartResultIsEligibleForSection(r, section, isKo),
+	).filter((r) =>
+		smartResultHasDisplayableContent(r, isKo),
+	);
+	const titleKeywordMatches = eligibleRanked.filter((r) =>
+		smartResultTitleMatchesSectionKeyword(r, section),
+	);
+	const requiredKeywordMatches = eligibleRanked.filter((r) =>
+		smartResultMatchesRequiredSectionKeyword(r, section, isKo),
+	);
+	const keywordMatches = eligibleRanked.filter((r) =>
+		smartResultMatchesKeyword(r, section.keyword),
+	);
+	const relatedMatches = eligibleRanked.filter((r) =>
+		smartResultMatchesSection(r, section, isKo),
+	);
+	const highConfidenceMatches = eligibleRanked.filter((r) => {
+		const score = getSmartResultScore(r);
+		return (
+			score !== null &&
+			score >= 0.72 &&
+			(isPreferredInfoSource(r) || hasSmartResultLanguage(r, isKo))
+		);
+	});
+	const requiredMatchSet = new Set(requiredKeywordMatches);
+	const titleMatchSet = new Set(titleKeywordMatches);
+	const mustMatchKeyword = isNutritionSmartSection(section);
+	const mustMatchTitleKeyword = smartSectionRequiresTitleKeyword(section);
+	const sourceItems = dedupeByUrl([
+		...titleKeywordMatches,
+		...requiredKeywordMatches,
+		...keywordMatches,
+		...relatedMatches,
+		...highConfidenceMatches,
+	]).filter((item) =>
+		mustMatchTitleKeyword
+			? titleMatchSet.has(item)
+			: mustMatchKeyword
+			? smartResultMatchesKeyword(item, section.keyword)
+			: (requiredMatchSet.size > 0 ? requiredMatchSet.has(item) : true),
+	);
+
+	return sourceItems
+		.sort(
+			(a, b) =>
+				getSmartResultRank(b, section, isKo) -
+				getSmartResultRank(a, section, isKo),
+		)
+		.slice(0, section.maxItems ?? 2)
+		.map((r) => {
+			const detail = cleanSmartDetail(r.content);
+			const snippet = cleanSmartSnippet(r.content);
+			return {
+				title: cleanSmartTitle(r.title ?? r.url ?? "", isKo),
+				url: r.url ?? "",
+				source: formatSmartSource(r.url),
+				time: formatSmartTime(r.published_date, isKo),
+				image: r.image ?? null,
+				score: getSmartResultScore(r),
+				snippet,
+				detail,
+			};
+		})
+		.filter((item) => item?.title);
+};
+
+const buildLatestSmartTavilyQuery = (baseQuery, isKo, section = null) => {
+	if (section && (isKeyInfoSmartSection(section) || isNutritionSmartSection(section))) {
+		return String(baseQuery || "").trim();
+	}
+	const currentYear = getSmartCurrentYear();
+	const latestTerms = isKo
+		? `${currentYear} 최신 최근 업데이트 오늘`
+		: `${currentYear} latest recent current updates today`;
+	return `${String(baseQuery || "").trim()} ${latestTerms}`.trim();
+};
+
+const buildSmartTavilyQuery = (section, isKo) => {
+	const currentYear = getSmartCurrentYear();
+	if (section.category === "person") {
+		return isKo
+			? `"${section.keyword}" ${section.query} 인물`
+			: `"${section.keyword}" ${section.query} person`;
+	}
+	if (section.category === "streetwear" && isArticleSmartSection(section)) {
+		return isKo
+			? `${section.query} ${currentYear}년 패션 스트릿웨어 기사`
+			: `${section.query} ${currentYear} fashion streetwear news`;
+	}
+	if (isArticleSmartSection(section)) {
+		return isKo
+			? `${section.query} ${currentYear}년 최신 기사 뉴스`
+			: `${section.query} ${currentYear} latest news article recent`;
+	}
+	if (isNutritionSmartSection(section)) {
+		return isKo
+			? `"${section.keyword}" 영양정보 칼로리 성분 영양성분`
+			: `"${section.keyword}" nutrition facts calories ingredients`;
+	}
+	if (isKeyInfoSmartSection(section)) {
+		return isKo
+			? `${section.query} 위키 백과 기본 정보`
+			: `${section.query} Wikipedia encyclopedia profile key facts`;
+	}
+	if (isVideoSmartSection(section)) {
+		return isKo
+			? `${section.query} 유튜브 영상`
+			: `${section.query} YouTube video`;
+	}
+	if (isBlogSmartSection(section)) {
+		return isKo
+			? `${section.query} 블로그 후기`
+			: `${section.query} blog review`;
+	}
+	if (!isKo) return `${section.query} useful information guide`;
+	return `${section.query} 한국 정보 후기 정리`;
+};
+
+const fetchSmartTavily = (
+	section,
+	mode,
+	isKo,
+	includeDomains = [],
+	timeRange = "month",
+) => {
+	const payload = {
+		query: buildLatestSmartTavilyQuery(
+			buildSmartTavilyQuery(section, isKo),
+			isKo,
+			section,
+		),
+		mode,
+		search_topic: mode === "news" ? "news" : "general",
+		max_results: smartSectionRequiresTitleKeyword(section)
+			? Math.max((section.maxItems ?? 2) + 10, 12)
+			: Math.max((section.maxItems ?? 2) + 4, 6),
+		include_domains: includeDomains,
+	};
+	if (timeRange) payload.time_range = timeRange;
+	return invokeFunction("tavily", payload);
+};
+
+const buildNonLatestArticleQuery = (section, isKo) => {
+	const keyword = `"${section.keyword}"`;
+	if (section.category === "person") {
+		return isKo
+			? `${keyword} 뉴스 기사 인물`
+			: `${keyword} news coverage person`;
+	}
+	if (section.category === "streetwear") {
+		return isKo
+			? `${keyword} 패션 스트릿웨어 뉴스 기사`
+			: `${keyword} fashion streetwear news coverage`;
+	}
+	return isKo
+		? `${keyword} 뉴스 기사`
+		: `${keyword} news coverage`;
+};
+
+const fetchNonLatestArticleTavily = (section, isKo, includeDomains = []) =>
+	invokeFunction("tavily", {
+		query: buildNonLatestArticleQuery(section, isKo),
+		mode: "news",
+		search_topic: "news",
+		max_results: Math.max((section.maxItems ?? 2) + 10, 12),
+		include_domains: includeDomains,
+	});
+
+const searchSmartSection = async (section, isKo) => {
+	const mode = isArticleSmartSection(section) ? "news" : "search";
+	const preferredDomains = getSmartSearchDomains(section, isKo);
+	const primaryTimeRange = (
+		isKeyInfoSmartSection(section) ||
+		isNutritionSmartSection(section) ||
+		isArticleSmartSection(section)
+	)
+		? null
+		: "month";
+	const retryTimeRange = (isKeyInfoSmartSection(section) || isNutritionSmartSection(section))
+		? null
+		: primaryTimeRange;
+	const tavilyData = preferredDomains.length > 0
+		? await fetchSmartTavily(section, mode, isKo, preferredDomains, primaryTimeRange)
+		: await fetchSmartTavily(section, mode, isKo, [], primaryTimeRange);
+
+	let rawResults = tavilyData?.results ?? [];
+	const titleMatchCount = rawResults.filter((r) =>
+		(smartSectionRequiresTitleKeyword(section)
+			? smartResultTitleMatchesSectionKeyword(r, section)
+			: smartResultMatchesRequiredSectionKeyword(r, section, isKo)) &&
+		smartResultIsEligibleForSection(r, section, isKo),
+	).length;
+
+	if (
+		titleMatchCount < (section.maxItems ?? 2) &&
+		retryTimeRange !== primaryTimeRange
+	) {
+		const retry = preferredDomains.length > 0
+			? await fetchSmartTavily(section, mode, isKo, preferredDomains, retryTimeRange)
+			: await fetchSmartTavily(section, mode, isKo, [], retryTimeRange);
+		if (retry?.results?.length > 0) {
+			rawResults = dedupeByUrl([...rawResults, ...retry.results]);
+		}
+	}
+
+	let items = formatSmartItems(rawResults, isKo, section);
+	if (isArticleSmartSection(section) && items.length === 0) {
+		const fallback = await fetchNonLatestArticleTavily(
+			section,
+			isKo,
+			preferredDomains,
+		);
+		if (fallback?.results?.length > 0) {
+			rawResults = dedupeByUrl([...rawResults, ...fallback.results]);
+			items = formatSmartItems(rawResults, isKo, section);
+		}
+	}
+	return {
+		...section,
+		answer: isMeaningfulSmartContentText(tavilyData?.answer, isKo)
+			? tavilyData.answer
+			: "",
+		items,
+	};
+};
+
+const fallbackSmartBullets = (section, isKo) => {
+	if (section.linkOnly) return [];
+	const fromItems = (section.items ?? [])
+		.slice(0, 5)
+		.map((item, index) => {
+			const labels = getSmartBulletLabels(section, isKo);
+			const fact = compactSmartBulletFact(
+				item.snippet || item.detail || item.title,
+				isKo,
+			);
+			if (!fact) return "";
+			return fact;
+		})
+		.filter(Boolean);
+	if (fromItems.length > 0) return fromItems;
+
+	return [];
+};
+
+const cleanSmartSummary = (value, isKo) => {
+	const text = cleanSmartContentText(value)
+		.replace(/^[-•*\d.)\s]+/, "")
+		.replace(/\s+/g, " ")
+		.trim();
+	if (!text || BAD_SMART_BULLET_RE.test(text)) return "";
+	const maxLength = isKo ? 34 : 58;
+	if (text.length <= maxLength) return text.replace(/[.!?。]+$/g, "");
+	const firstChunk = text.split(/[.!?。]/)[0]?.trim() ?? "";
+	if (firstChunk.length > 4 && firstChunk.length <= maxLength) return firstChunk;
+	return `${text.slice(0, maxLength).trim()}...`;
+};
+
+const cleanSmartTitle = (value, isKo) => {
+	const text = String(value || "")
+		.replace(/\s+/g, " ")
+		.trim();
+	const maxLength = isKo ? 64 : 82;
+	if (text.length <= maxLength) return text;
+	return `${text.slice(0, maxLength).trim()}...`;
+};
+
+const getSmartSummaryFallback = (section, isKo) => {
+	const snippets = (section.items ?? [])
+		.map((item) => getSmartItemSummaryText(item, isKo, 120))
+		.filter((snippet) => String(snippet || "").trim().length > 8);
+	return snippets[0] ?? "";
+};
+
+const getSmartSummaryTokens = (value) =>
+	normalizeSmartSearchText(value)
+		.split(/[^\p{L}\p{N}]+/u)
+		.filter((token) => token.length > 2);
+
+const smartSummaryRepeatsTitle = (summary, section) => {
+	const summaryText = normalizeSmartSearchText(summary);
+	if (!summaryText) return false;
+	return (section.items ?? []).some((item) => {
+		const titleText = normalizeSmartSearchText(item.title);
+		if (!titleText) return false;
+		if (titleText.includes(summaryText) || summaryText.includes(titleText)) {
+			return true;
+		}
+		const summaryTokens = getSmartSummaryTokens(summaryText);
+		const titleTokens = getSmartSummaryTokens(titleText);
+		if (summaryTokens.length < 2 || titleTokens.length < 2) return false;
+		const overlap = summaryTokens.filter((token) =>
+			titleTokens.includes(token),
+		).length;
+		return overlap / summaryTokens.length >= 0.7;
+	});
+};
+
+const BAD_SMART_BULLET_RE =
+	/(^additionally$|^also$|^however$|^moreover$|^therefore$|^meanwhile$|^overall$|to ensure|ensure you|check that|quality denim|season and purpose|based on|provided data|no direct|no specific|not available|insufficient|lack of|cannot compare|no comparison|official site|website|click|visit|link|source|aboutpresscopyrightcontact|privacy policy|terms of service|cookie policy|skip navigation|sign in|all rights reserved|copyright|google llc|©|검색 결과가 부족|제공된|직접 비교|비교.*없|정보.*없|자료.*없|공식|사이트|링크|확인하세요)/i;
+
+const BULLET_STOPWORDS = new Set([
+	"a",
+	"an",
+	"and",
+	"are",
+	"for",
+	"in",
+	"is",
+	"of",
+	"on",
+	"the",
+	"to",
+	"with",
+	"that",
+	"this",
+	"you",
+	"your",
+]);
+
+const cleanSmartBullet = (value) => {
+	const text = cleanSmartContentText(value)
+		.replace(/^[-•*\d.)\s]+/, "")
+		.replace(/[.!?。]+$/g, "")
+		.replace(/\s+/g, " ")
+		.trim();
+	if (!text || BAD_SMART_BULLET_RE.test(text)) return "";
+	if (!_HANGUL.test(text)) {
+		const wordCount = text.split(/\s+/).filter(Boolean).length;
+		if (wordCount < 2 || wordCount > 14) return "";
+	}
+	const maxLength = _HANGUL.test(text) ? 80 : 110;
+	if (text.length <= maxLength) return text;
+	const firstChunk = text.split(/[;·\-–—|]/)[0]?.trim() ?? "";
+	if (firstChunk.length > 3 && firstChunk.length <= maxLength) return firstChunk;
+	return "";
+};
+
+function compactSmartBulletFact(value, isKo) {
+	const text = cleanSmartContentText(value)
+		.replace(/^[-•*\d.)\s]+/, "")
+		.replace(/\s+/g, " ")
+		.trim();
+	if (!isMeaningfulSmartContentText(text, isKo)) return "";
+	const firstSentence = text.split(/[.!?。]/)[0]?.trim() || text;
+	const maxLength = isKo ? 72 : 96;
+	const clipped =
+		firstSentence.length <= maxLength
+			? firstSentence
+			: firstSentence.slice(0, maxLength).trim();
+	return clipped.replace(/[,:;·\-–—|]+$/g, "").trim();
+}
+
+const getBulletTokens = (value) =>
+	normalizeSmartSearchText(value)
+		.split(/[^\p{L}\p{N}]+/u)
+		.filter((token) => token.length > 1 && !BULLET_STOPWORDS.has(token));
+
+const areSimilarBullets = (a, b) => {
+	if (!a || !b) return false;
+	if (a.includes(b) || b.includes(a)) return true;
+	const aTokens = getBulletTokens(a);
+	const bTokens = getBulletTokens(b);
+	if (aTokens.length === 0 || bTokens.length === 0) return false;
+	const overlap = aTokens.filter((token) => bTokens.includes(token)).length;
+	return overlap / Math.min(aTokens.length, bTokens.length) >= 0.6;
+};
+
+const normalizeSmartBullets = (value, section = null, isKo = false) => {
+	const bullets = [];
+	const labels = section ? getSmartBulletLabels(section, isKo) : [];
+	for (const item of Array.isArray(value) ? value : []) {
+		const bullet = formatSmartStructuredBullet(
+			item,
+			labels[bullets.length],
+			isKo,
+		);
+		if (
+			bullet.length > 3 &&
+			!bullets.some((existing) => areSimilarBullets(existing, bullet))
+		) {
+			bullets.push(bullet);
+		}
+		if (bullets.length >= 5) break;
+	}
+	return bullets;
+};
+
+function stripSmartBulletLabel(value) {
+	const text = String(value || "").trim();
+	const match = text.match(/^([^:：]{1,24})[:：]\s*(.+)$/);
+	return match ? match[2].trim() : text;
+}
+
+function formatSmartStructuredBullet(value, label, isKo) {
+	const fact = cleanSmartBullet(stripSmartBulletLabel(value));
+	if (!fact) return "";
+	if (!label) return fact;
+	return `${label}: ${fact}`;
+}
+
+const SMART_UI_TOKEN_RE =
+	/(?:\uC811\uAE30|\uB354\uBCF4\uAE30|show\s+more|read\s+more|view\s+more|open|close)/gi;
+const SMART_INCOMPLETE_TAIL_RE =
+	/(?:\b(?:and|or|with|for|to|from|about|including|featuring|starting|additionally)\b|\uC2DC\uC791\uD558\uB294|\uB098\uC624\uB294|\uD558\uB294|\uB418\uB294|\uAC19\uC740|\uC788\uB294|\uADF8\uB9AC\uACE0|\uB610\uD55C)$/i;
+
+const getSmartGeneratedBulletValue = (item) => {
+	if (typeof item === "string") return item;
+	if (!item || typeof item !== "object") return "";
+	return item.text ?? item.fact ?? item.value ?? item.summary ?? item.content ?? "";
+};
+
+const cleanSmartEvidenceText = (value = "", isKo = false, maxLength = 220) => {
+	const text = cleanSmartContentText(value)
+		.replace(SMART_UI_TOKEN_RE, " ")
+		.replace(/\s+/g, " ")
+		.trim();
+	if (!isMeaningfulSmartContentText(text, isKo)) return "";
+	if (text.length <= maxLength) return text;
+	const firstSentence = text.split(/[.!?。]/)[0]?.trim() ?? "";
+	if (firstSentence.length >= (isKo ? 12 : 35) && firstSentence.length <= maxLength) {
+		return firstSentence;
+	}
+	return text.slice(0, maxLength).replace(/\s+\S*$/, "").trim();
+};
+
+const getSmartSectionEvidence = (section, isKo) =>
+	(section.items ?? [])
+		.map((item) => {
+			const text = cleanSmartEvidenceText(
+				item.detail || item.snippet || item.title,
+				isKo,
+				240,
+			);
+			if (!text) return null;
+			return {
+				title: cleanSmartTitle(item.title ?? "", isKo),
+				source: item.source ?? "",
+				time: item.time ?? "",
+				text,
+			};
+		})
+		.filter(Boolean)
+		.slice(0, 3);
+
+const smartTextRepeatsSourceTitle = (value, section) => {
+	const text = normalizeSmartSearchText(stripSmartBulletLabel(value));
+	if (text.length < 12) return false;
+	const textTokens = getBulletTokens(text);
+	return (section.items ?? []).some((item) => {
+		const title = normalizeSmartSearchText(item.title);
+		if (!title || title.length < 12) return false;
+		if (title.includes(text) || text.includes(title)) return true;
+		const titleTokens = getBulletTokens(title);
+		if (textTokens.length < 3 || titleTokens.length < 3) return false;
+		const overlap = textTokens.filter((token) => titleTokens.includes(token)).length;
+		return overlap / Math.min(textTokens.length, titleTokens.length) >= 0.8;
+	});
+};
+
+const cleanSmartGeneratedFact = (value, section, isKo) => {
+	const text = cleanSmartContentText(stripSmartBulletLabel(value))
+		.replace(SMART_UI_TOKEN_RE, " ")
+		.replace(/^["'`]+|["'`]+$/g, "")
+		.replace(/[.!?。]+$/g, "")
+		.replace(/\s+/g, " ")
+		.trim();
+	if (!text || BAD_SMART_BULLET_RE.test(text)) return "";
+	if (SMART_INCOMPLETE_TAIL_RE.test(text)) return "";
+	if (!isMeaningfulSmartContentText(text, isKo)) return "";
+	if (smartTextRepeatsSourceTitle(text, section)) return "";
+	const maxLength = isKo ? 74 : 105;
+	if (text.length <= maxLength) return text;
+	const firstSentence = text.split(/[.!?。;]/)[0]?.trim() ?? "";
+	if (firstSentence.length >= (isKo ? 10 : 24) && firstSentence.length <= maxLength) {
+		return firstSentence;
+	}
+	return "";
+};
+
+const formatSmartGeneratedBullet = (fact, label) =>
+	label ? `${label}: ${fact}` : fact;
+
+const normalizeSmartGeneratedBullets = (value, section, isKo) => {
+	const bullets = [];
+	const facts = [];
+	const labels = getSmartBulletLabels(section, isKo);
+	for (const item of Array.isArray(value) ? value : []) {
+		const fact = cleanSmartGeneratedFact(
+			getSmartGeneratedBulletValue(item),
+			section,
+			isKo,
+		);
+		if (!fact || facts.some((existing) => areSimilarBullets(existing, fact))) {
+			continue;
+		}
+		facts.push(fact);
+		bullets.push(formatSmartGeneratedBullet(fact, labels[bullets.length]));
+		if (bullets.length >= 5) break;
+	}
+	return bullets;
+};
+
+const fallbackSmartBulletsFromEvidence = (section, isKo) => {
+	const evidence = getSmartSectionEvidence(section, isKo);
+	return normalizeSmartGeneratedBullets(
+		evidence.map((item) => item.text),
+		section,
+		isKo,
+	);
+};
+
+const cleanSmartGeneratedSummary = (value, section, isKo) => {
+	const text = cleanSmartSummary(value, isKo);
+	if (!text || SMART_INCOMPLETE_TAIL_RE.test(text)) return "";
+	if (smartSummaryRepeatsTitle(text, section)) return "";
+	return text;
+};
+
+const getSmartSectionDetails = (section, isKo) => {
+	const seen = new Set();
+	const details = [];
+	for (const item of section.items ?? []) {
+		const detail = getSmartItemSummaryText(item, isKo, 260);
+		const key = normalizeSmartSearchText(detail).slice(0, 90);
+		if (!detail || key.length < 10 || seen.has(key)) continue;
+		seen.add(key);
+		details.push(detail);
+		if (details.length >= 3) break;
+	}
+	return details;
+};
+
+function getSmartBulletLabels(section, isKo) {
+	const ko = {
+		profile: ["이름/나이", "분야", "대표작", "최근 활동", "핵심"],
+		overview: ["정체", "핵심", "특징", "최근 변화", "체크포인트"],
+		brand_info: ["브랜드", "대표 항목", "특징", "최근 변화", "체크포인트"],
+		updates: ["최신 소식", "변화", "대상", "날짜", "핵심"],
+		release: ["발매", "날짜", "제품", "변화", "체크포인트"],
+		collab: ["콜라보", "파트너", "제품", "일정", "핵심"],
+		nutrition: ["영양", "칼로리", "성분", "주의점", "팁"],
+		recipe: ["재료", "방법", "시간", "맛 포인트", "팁"],
+		local_spots: ["지역", "장소", "특징", "메뉴", "팁"],
+		video: ["영상", "주제", "핵심", "팁", "볼거리"],
+		blog: ["후기", "핵심", "장점", "주의점", "팁"],
+		reviews: ["평가", "장점", "단점", "반응", "핵심"],
+		tips: ["팁", "방법", "주의점", "효과", "핵심"],
+		products: ["제품", "특징", "스펙", "리뷰", "체크포인트"],
+		deals: ["가격", "할인", "시기", "재고", "체크포인트"],
+	};
+	const en = {
+		profile: ["Name/Age", "Field", "Known for", "Recent work", "Key note"],
+		overview: ["Identity", "Key fact", "Feature", "Recent change", "Watchpoint"],
+		brand_info: ["Brand", "Signature", "Feature", "Recent change", "Watchpoint"],
+		updates: ["Latest", "Change", "Subject", "Date", "Key note"],
+		release: ["Release", "Date", "Product", "Change", "Watchpoint"],
+		collab: ["Collab", "Partner", "Product", "Timing", "Key note"],
+		nutrition: ["Nutrition", "Calories", "Ingredient", "Caution", "Tip"],
+		recipe: ["Ingredient", "Method", "Time", "Flavor", "Tip"],
+		local_spots: ["Area", "Place", "Feature", "Menu", "Tip"],
+		video: ["Video", "Topic", "Key point", "Tip", "Highlight"],
+		blog: ["Review", "Key point", "Pro", "Caution", "Tip"],
+		reviews: ["Review", "Pro", "Con", "Reaction", "Key note"],
+		tips: ["Tip", "Method", "Caution", "Effect", "Key note"],
+		products: ["Product", "Feature", "Spec", "Review", "Watchpoint"],
+		deals: ["Price", "Discount", "Timing", "Stock", "Watchpoint"],
+	};
+	const fallback = isKo
+		? ["핵심", "특징", "최근", "활용", "체크포인트"]
+		: ["Key fact", "Feature", "Recent", "Use case", "Watchpoint"];
+	const map = isKo ? ko : en;
+	return map[section?.type] ?? fallback;
+}
+
+const synthesizeSmartSections = async ({ keyword, category, sections, isKo }) => {
+	return sections.map((section) => {
+		return {
+			type: section.type,
+			title: section.title,
+			linkOnly: section.linkOnly,
+			details: [],
+			items: section.items,
+		};
+	});
+};
+
+const ensureKoreanSmartText = async (sections) => {
+	const targets = [];
+	sections.forEach((section, sectionIndex) => {
+		(section.bullets ?? []).forEach((bullet, bulletIndex) => {
+			if (!_HANGUL.test(bullet)) {
+				targets.push({
+					kind: "bullet",
+					sectionIndex,
+					bulletIndex,
+					text: bullet,
+				});
+			}
+		});
+		(section.details ?? []).forEach((detail, detailIndex) => {
+			if (detail && !_HANGUL.test(detail)) {
+				targets.push({
+					kind: "detail",
+					sectionIndex,
+					detailIndex,
+					text: detail,
+				});
+			}
+		});
+		(section.items ?? []).forEach((item, itemIndex) => {
+			if (item.title && !_HANGUL.test(item.title)) {
+				targets.push({
+					kind: "itemTitle",
+					sectionIndex,
+					itemIndex,
+					text: item.title,
+				});
+			}
+		});
+	});
+	if (targets.length === 0) return sections;
+
+	const data = await invokeFunction("groq", {
+		system: [
+			"You translate smart-widget UI text into natural Korean.",
+			"Return only valid JSON array. No markdown, no commentary.",
+			"Preserve kind, sectionIndex, bulletIndex, detailIndex, and itemIndex when provided.",
+		].join("\n"),
+		prompt: [
+			"Translate each text to Korean.",
+			"Keep product names, brand names, model names, and proper nouns recognizable.",
+			'Return shape: [{"kind":"bullet","sectionIndex":0,"bulletIndex":0,"text":"..."},{"kind":"detail","sectionIndex":0,"detailIndex":0,"text":"..."},{"kind":"itemTitle","sectionIndex":0,"itemIndex":0,"text":"..."}]',
+			JSON.stringify(targets, null, 2),
+		].join("\n"),
+		temperature: 0.1,
+	});
+
+	const parsed = parseJsonFromText(data?.text);
+	const translations = Array.isArray(parsed) ? parsed : [];
+	if (translations.length === 0) return sections;
+
+	const next = sections.map((section) => ({
+		...section,
+		details: [...(section.details ?? [])],
+		items: (section.items ?? []).map((item) => ({ ...item })),
+	}));
+	for (const item of translations) {
+		const kind = item?.kind;
+		const sectionIndex = Number(item?.sectionIndex);
+		const bulletIndex = Number(item?.bulletIndex);
+		const detailIndex = Number(item?.detailIndex);
+		const itemIndex = Number(item?.itemIndex);
+		if (!Number.isInteger(sectionIndex) || !next[sectionIndex]) continue;
+
+		if (kind === "bullet") {
+			const text = cleanSmartBullet(item?.text);
+			if (
+				Number.isInteger(bulletIndex) &&
+				next[sectionIndex]?.bullets?.[bulletIndex] &&
+				_HANGUL.test(text)
+			) {
+				next[sectionIndex].bullets[bulletIndex] = text;
+			}
+			continue;
+		}
+		if (kind === "detail") {
+			const text = cleanSmartDetail(item?.text, 220);
+			if (
+				Number.isInteger(detailIndex) &&
+				next[sectionIndex]?.details?.[detailIndex] &&
+				_HANGUL.test(text)
+			) {
+				next[sectionIndex].details[detailIndex] = text;
+			}
+			continue;
+		}
+		if (kind === "itemTitle") {
+			const text = cleanSmartTitle(item?.text, true);
+			if (
+				Number.isInteger(itemIndex) &&
+				next[sectionIndex]?.items?.[itemIndex] &&
+				_HANGUL.test(text)
+			) {
+				next[sectionIndex].items[itemIndex].title = text;
+			}
+		}
+	}
+	return next;
+};
+
 export async function generateSmartWidgetData(keyword, context = {}) {
 	const { lang } = getLangConfig();
 	const isKo = lang === "ko";
-
-	// ─── Step 1: Tavily 검색 (언어별 쿼리, 도메인 제한 없이 넓게 검색) ──
-	const tavilyQuery = isKo
-		? `${keyword} 최신 정보 동향 뉴스`
-		: `${keyword} latest news trends updates`;
-
-	const tavilyData = await invokeFunction("tavily", { query: tavilyQuery });
-
-	let rawResults = tavilyData?.results ?? [];
-	let langFiltered = filterSmartResults(rawResults, isKo);
-
-	// 문제 2 fix: 한국어 모드인데 한국어 결과가 2개 미만이면 KO_NEWS_DOMAINS 화이트리스트로
-	// 2단계 재호출. 첫 호출 결과와 머지 후 다시 필터링.
-	if (isKo) {
-		const koCount = rawResults.filter((r) => _HANGUL.test(r?.title ?? "")).length;
-		if (koCount < 2) {
-			const retry = await invokeFunction("tavily", {
-				query: tavilyQuery,
-				include_domains: KO_NEWS_DOMAINS,
-			});
-			const retryResults = retry?.results ?? [];
-			if (retryResults.length > 0) {
-				rawResults = dedupeByUrl([...retryResults, ...rawResults]);
-				langFiltered = filterSmartResults(rawResults, isKo);
-			}
+	const categoryOverride = SMART_CATEGORY_IDS.includes(context?.categoryOverride)
+		? context.categoryOverride
+		: null;
+	const classified = categoryOverride
+		? {
+			category: categoryOverride,
+			emoji: SMART_CATEGORY_CONFIGS[categoryOverride]?.emoji || "🔎",
 		}
-	}
-
-	const newsItems = langFiltered
-		.slice(0, 3)
-		.map((r) => {
-			let source = r.url ?? "";
-			try {
-				source = new URL(r.url).hostname.replace(/^www\./, "");
-			} catch {}
-			return {
-				title: r.title ?? r.url ?? "",
-				url: r.url ?? "",
-				source,
-				time: isKo ? "최근" : "recent",
-			};
-		})
-		.filter((r) => r.title);
-
-	// ─── Step 2: Groq — emoji + 3-4 bullet 요약 (뉴스 내용 기반, 언어 맞춤) ─────────
-	const contextLines = [
-		tavilyData?.answer ? `개요: ${tavilyData.answer}` : "",
-		...langFiltered.slice(0, 3).map((r) => {
-			const snippet = r.content?.trim();
-			return snippet ? `[${r.title}]\n${snippet}` : `[${r.title}]`;
-		}),
-	].filter(Boolean);
-	const tavilyContext = contextLines.join("\n\n");
-
-	const groqPromptBase = isKo
-		? `'${keyword}'에 대해 아래 뉴스 본문을 읽고 핵심 내용을 한국어 bullet 3-4개로 요약하세요. 각 bullet은 뉴스 내용에서 파악한 실질적인 정보를 담아야 합니다. 단순히 제목을 나열하지 말고, 내용을 읽고 요약하세요. 참고 내용이 없으면 일반적인 지식으로 답하세요.`
-		: `Read the news content below about '${keyword}' and summarize the key insights in 3-4 English bullet points. Each bullet must contain substantive information synthesized from the content — do not just restate headlines. Use general knowledge if no content is provided.`;
-
-	const groqData = await invokeFunction("groq", {
-		system: isKo
-			? "당신은 뉴스 분석 전문가입니다. 반드시 JSON만 반환하고 다른 텍스트는 포함하지 마세요."
-			: "You are a news analyst. Return only valid JSON. No other text.",
-		prompt: [
-			groqPromptBase,
-			`{ "emoji": "...", "bullets": ["...", "...", "..."] }`,
-			"- emoji: single emoji best representing the keyword",
-			isKo
-				? "- bullets: 각 bullet은 뉴스 내용을 바탕으로 1-2문장, 핵심 정보만, 한국어로"
-				: "- bullets: each bullet is 1-2 sentences synthesizing content, in English",
-			tavilyContext ? `\n뉴스 참고:\n${tavilyContext}` : "",
-		].join("\n"),
-		temperature: 0.5,
+		: await classifySmartKeyword(keyword, isKo);
+	const { category, emoji } = classified;
+	const sectionPlan = buildSmartSectionPlan(keyword, category, isKo);
+	const searchedSections = await Promise.all(
+		sectionPlan.map((section) => searchSmartSection(section, isKo)),
+	);
+	const synthesizedSections = await synthesizeSmartSections({
+		keyword,
+		category,
+		sections: searchedSections,
+		isKo,
 	});
-
-	let emoji = "🔍";
-	let bullets = [];
-
-	if (groqData?.text) {
-		try {
-			const match = groqData.text.trim().match(/\{[\s\S]*\}/);
-			const parsed = JSON.parse(match ? match[0] : groqData.text.trim());
-			if (parsed?.emoji) emoji = parsed.emoji;
-			if (Array.isArray(parsed?.bullets)) {
-				bullets = parsed.bullets
-					.map((b) => String(b).trim())
-					.filter((b) => b.length > 3)
-					.slice(0, 4);
-			}
-		} catch {
-			// 파싱 실패 시 Tavily answer 문장 분리로 fallback
-			if (tavilyData?.answer) {
-				bullets = tavilyData.answer
-					.split(/(?<=[.!?。])\s+/)
-					.map((s) => s.trim())
-					.filter((s) => s.length > 5)
-					.slice(0, 4);
-			}
-		}
-	}
-
-	// Groq 완전 실패 시 뉴스 제목으로 최후 fallback
-	if (bullets.length === 0 && newsItems.length > 0) {
-		bullets = newsItems.map((n) => n.title).slice(0, 3);
-	}
-
-	// 문제 3 fix: Groq 응답 언어 검증.
-	// 한국어 모드인데 bullets에 한글이 전혀 없으면(Tavily context가 영어라서 끌려간 경우)
-	// Groq에 번역 재요청해서 한국어로 변환.
-	if (isKo && bullets.length > 0) {
-		const hasHangul = bullets.some((b) => _HANGUL.test(b));
-		if (!hasHangul) {
-			const translated = await invokeFunction("groq", {
-				system: [
-					"You translate English bullet points into natural, formal Korean.",
-					"Return only valid JSON: an array of translated Korean strings.",
-					"Preserve order and meaning. No code fences, no extra text.",
-				].join("\n"),
-				prompt: `Translate to Korean and return JSON only:\n${JSON.stringify(bullets)}`,
-				temperature: 0.1,
-			});
-			if (translated?.text) {
-				try {
-					const match = translated.text.trim().match(/\[[\s\S]*\]/);
-					const parsed = JSON.parse(match ? match[0] : translated.text.trim());
-					if (Array.isArray(parsed) && parsed.length > 0) {
-						const koBullets = parsed
-							.map((b) => String(b).trim())
-							.filter((b) => b.length > 3 && _HANGUL.test(b));
-						if (koBullets.length > 0) bullets = koBullets.slice(0, 4);
-					}
-				} catch {
-					/* translation parse failed — keep English bullets as last resort */
-				}
-			}
-		}
-	}
-
-	// ─── Step 3: SmartWidgetContent 포맷으로 조합 ───────────────────
-	const sections = [];
-
-	if (bullets.length > 0) {
-		sections.push({
-			type: "summary",
-			title: isKo ? "맞춤 검색" : "Personalized Search",
-			bullets,
-		});
-	}
-
-	if (newsItems.length > 0) {
-		sections.push({
-			type: "news",
-			title: isKo ? "관련 정보" : "Related Info",
-			items: newsItems,
-		});
-	}
-
-	if (sections.length === 0) return null;
+	const sections = isKo
+		? await ensureKoreanSmartText(synthesizedSections)
+		: synthesizedSections;
 
 	const now = new Date();
 	const lastUpdated = isKo
 		? `${now.getHours().toString().padStart(2, "0")}:${now.getMinutes().toString().padStart(2, "0")} 업데이트`
 		: `Updated ${now.getHours().toString().padStart(2, "0")}:${now.getMinutes().toString().padStart(2, "0")}`;
+	const lastUpdatedAt = now.toISOString();
 
-	return { emoji, lastUpdated, sections };
+	return {
+		keyword,
+		emoji,
+		category,
+		categoryLabel:
+			SMART_CATEGORY_CONFIGS[category]?.label?.[lang] ??
+			SMART_CATEGORY_CONFIGS.general.label[lang],
+		lastUpdated,
+		lastUpdatedAt,
+		sections,
+	};
 }
 
 /**

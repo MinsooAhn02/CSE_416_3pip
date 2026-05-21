@@ -4,19 +4,34 @@ import { useDataStore } from "../store/useDataStore";
 import { useTodoStore } from "../store/useTodoStore";
 import { useDiaryStore } from "../store/useDiaryStore";
 import { useAuthStore } from "../store/useAuthStore";
-import { useWidgetStore } from "../store/useWidgetStore";
+import { getSmartWidgetCacheKey, useWidgetStore } from "../store/useWidgetStore";
 import { mergeInterestLists } from "../utils/interests";
 import { shiftDateString, formatLocalDate } from "../utils/date";
+import { getCurrentLanguage } from "../l10n/i18n";
 
-export const buildSmartSummaries = (keywords, data) =>
-	(keywords ?? [])
-		.filter((kw) => data?.[kw])
+const resolveSmartSummaryLang = () =>
+	String(getCurrentLanguage() || "en").toLowerCase().startsWith("ko")
+		? "ko"
+		: "en";
+
+const findSmartWidgetData = (data, keyword, lang) =>
+	data?.[getSmartWidgetCacheKey(keyword, lang)] ??
+	data?.[`${keyword}_${lang}`] ??
+	data?.[keyword] ??
+	Object.entries(data ?? {}).find(([key]) => key.startsWith(`${keyword}_`))?.[1];
+
+export const buildSmartSummaries = (keywords, data) => {
+	const lang = resolveSmartSummaryLang();
+	return (keywords ?? [])
+		.map((kw) => ({ keyword: kw, data: findSmartWidgetData(data, kw, lang) }))
+		.filter((entry) => entry.data)
 		.slice(0, 3)
-		.map((kw) => ({
-			keyword: kw,
+		.map(({ keyword, data: widgetData }) => ({
+			keyword,
 			bullets:
-				data[kw]?.sections?.flatMap((s) => s.bullets ?? []).slice(0, 3) ?? [],
+				widgetData?.sections?.flatMap((s) => s.bullets ?? []).slice(0, 3) ?? [],
 		}));
+};
 
 /**
  * Shared hook — subscribes to all stores needed for briefing generation.

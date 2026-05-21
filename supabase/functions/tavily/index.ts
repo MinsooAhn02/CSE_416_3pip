@@ -22,29 +22,35 @@ serve(async (req) => {
 	try {
 		const {
 			query = "대한민국 실시간 이슈, 기술, 경제, 라이프스타일 트렌드 7개",
-			mode = "trends", // "trends" | "news"
+			mode = "trends", // "trends" | "news" | "search"
 			max_results: maxResults,
 			location = null,
 			include_domains = [],
+			search_topic = null,
+			time_range = null,
 		} = await req.json();
 
 		const apiKey = Deno.env.get("TAVILY_API_KEY");
 		if (!apiKey) throw new Error("TAVILY_API_KEY not set");
 
 		const isNews = mode === "news";
-		const resultCount = maxResults ?? (isNews ? 10 : 8);
+		const isSearch = mode === "search";
+		const resultCount = maxResults ?? (isNews || isSearch ? 10 : 8);
 
 		const tavilyBody: Record<string, unknown> = {
 			api_key: apiKey,
 			query,
-			topic: "news",
+			topic: search_topic ?? (isSearch ? "general" : "news"),
 			search_depth: "advanced",
 			max_results: resultCount,
 			include_answer: true,
-			include_images: isNews,
+			include_images: isNews || isSearch,
 		};
 		if (Array.isArray(include_domains) && include_domains.length > 0) {
 			tavilyBody.include_domains = include_domains;
+		}
+		if (typeof time_range === "string" && time_range.trim()) {
+			tavilyBody.time_range = time_range.trim();
 		}
 		// 위치 정보가 있으면 Tavily에 전달 (지역 뉴스 관련성 향상)
 		if (location && typeof location === "object" &&
@@ -63,7 +69,7 @@ serve(async (req) => {
 		if (!res.ok) throw new Error(`Tavily ${res.status}: ${await res.text()}`);
 		const data = await res.json();
 
-		if (isNews) {
+		if (isNews || isSearch) {
 			const topImages: string[] = Array.isArray(data.images)
 				? data.images.slice(0, 10)
 				: [];
@@ -75,6 +81,7 @@ serve(async (req) => {
 						url?: string;
 						content?: string;
 						published_date?: string;
+						score?: number;
 					},
 					i: number,
 				) => ({
@@ -82,6 +89,7 @@ serve(async (req) => {
 					url: item.url ?? "",
 					content: item.content ?? "",
 					published_date: item.published_date ?? null,
+					score: typeof item.score === "number" ? item.score : null,
 					image: topImages[i] ?? null,
 				}),
 			);
