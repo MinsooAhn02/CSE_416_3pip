@@ -235,8 +235,7 @@ For security-sensitive issues, do not open a public issue — contact the team d
 
 | File | Purpose |
 |------|---------|
-| [DOCS.md](./DOCS.md) | Architecture reference (English) — stores, caching, widgets, Edge Functions, DB schema, personalization |
-| [DOCS_kor.md](./DOCS_kor.md) | Korean version of the architecture reference |
+| [DOCS.md](./DOCS.md) | Architecture reference — stores, caching, widgets, Edge Functions, DB schema, personalization |
 | [CHANGELOG.md](./CHANGELOG.md) | Dated change log (fix rounds, feature releases) |
 | [ProjectMilestones.md](./ProjectMilestones.md) | CSE 416 course assignment specification (milestones 1–4) |
 | `todo.md` | Working notes and manual test checklist |

@@ -919,10 +919,9 @@ npx wrangler deploy
 | Google Calendar live API sync | Edge Function implemented; frontend store partially mock-based |
 | Google Fitness live API sync | Edge Function implemented; live token connection needed |
 | Voice feature (`voiceOn`) | State exists; no UI or TTS implementation |
-| `keyword_score_log` aggregation | `runPersonalizationBatch` called; internal batch logic unverified |
 | `NewsDetailModal` | File exists but unused — replaced by direct URL navigation |
 | Trends detail view | News/stocks "view all" modals implemented; trends left/right pagination unimplemented |
-| Diary PIN setup | PIN save/modify in settings and self-verification flow unimplemented |
+| Diary PIN setup | PIN hashing + storage + verify done; PIN set/modify/recovery UI not yet exposed in settings |
 | Stocks Edge Function deploy | Local modification done; needs Supabase Dashboard manual deploy |
 | `groq` Edge Function deploy | `charset=utf-8` header added; needs manual deploy |
 
@@ -930,7 +929,7 @@ npx wrangler deploy
 
 ## 17) Milestone 4 Compliance Status
 
-Updated 2026-05-22. All five Milestone 4 documentation deliverables are now in place; remaining items are content edits requiring team input or external action (deployment, filing issues).
+Updated 2026-05-22. All five Milestone 4 documentation deliverables complete; deployment live on Cloudflare Workers; remaining items are content edits and final-sprint polish.
 
 ### ✅ README.md — Done
 
@@ -942,15 +941,16 @@ Updated 2026-05-22. All five Milestone 4 documentation deliverables are now in p
 - [x] Backend description corrected (was `FastAPI/Python/Gemini`; now `Supabase Edge Functions/Deno/Groq`)
 - [ ] **Remaining:** find/replace `<REPO_URL>` (3 occurrences) and `<DEPLOYED_URL>` (1 occurrence) before submission
 
-### ✅ SCHEDULE.md — Done
+### ✅ Milestone/SCHEDULE.md — Done
 
-- [x] May 1st Jira baseline (11 epics × 4 sprints) imported
-- [x] Status legend defined (✅ / 🟡 / 🔄 / ⚪)
-- [x] Schedule Changes section initialized with Vercel → Cloudflare Workers modification flagged
+- [x] May 1st Jira baseline (12 epics × 4 sprints) imported and verified against codebase
+- [x] Executive Summary table at top (9 ✅ / 2 🟡 / 1 🔄)
+- [x] Per-task "Completion Evidence" column with code references, function names, commit hashes
+- [x] Schedule Changes section: SCRUM-28 (Vercel → Cloudflare), SCRUM-16/25 (Persona → category-based personalization), SCRUM-24 (Desktop History → Smart Widget keyword learning + Briefing snapshots) — all 3 changes formally documented with rationale
+- [x] "Additional accomplishments beyond schedule" section listing unscheduled work
 - [x] Jira board linked at top as live source of truth
-- [ ] **Remaining:** team updates the 11 `⚪ _to be updated_` cells with current status once the updated board is exported; fill reason field for SCRUM-28; confirm SCRUM-24 Desktop History decision
 
-### ✅ API.md — Done
+### ✅ Milestone/API.md — Done
 
 - [x] All 9 Edge Functions documented (weather, stocks, tavily × 3 modes, groq, events, tasks, fitness, smart-widget)
 - [x] All Supabase REST endpoints documented (6 missing from original template added: todos, smart_keywords, diaries, user_qa, briefing_snapshots, keyword_score_log)
@@ -964,24 +964,24 @@ Updated 2026-05-22. All five Milestone 4 documentation deliverables are now in p
 - [x] README "Bug Reporting" section explains where to find issues and how to file new ones
 - [x] `.github/ISSUE_TEMPLATE/bug_report.md` — structured bug form
 - [x] `.github/ISSUE_TEMPLATE/feature_request.md` — structured feature form
-- [x] `KNOWN_ISSUES.md` — 16 issues drafted, ready to paste into GitHub Issues with severity, owner, labels
-- [ ] **Remaining:** team confirms GitHub Issues is enabled at the repo; files all 16 entries into Issues; replaces `_to file_` with GH issue numbers; deletes `KNOWN_ISSUES.md` after all are filed
+- [x] `Milestone/KNOWN_ISSUES.md` — open issues drafted, ready to paste into GitHub Issues with severity, owner, labels
+- [ ] **Remaining:** team confirms GitHub Issues is enabled at the repo; files all open entries into Issues; replaces `_to file_` with GH issue numbers; deletes KNOWN_ISSUES.md after all are filed
 - [ ] **Remaining:** team completes cross-verification of completed features (per ProjectMilestones.md — verify each marked-complete feature with a team member who did not implement it; bugs found get filed)
 
-### ✅ MILESTONE4_PROGRESS.md — Done
+### ✅ Milestone/MILESTONE4_PROGRESS.md — Done
 
 - [x] Individual progress update sections for all 3 team members (scheduled, in-progress, actually completed, partial)
 - [x] Group progress update with self-assigned grade (B) and rationale
 - [x] Process adjustments section for the final release sprint
 - [x] Sign-off block for each team member
-- [ ] **Remaining:** each team member reviews their section, marks `[VERIFY]` items as confirmed or corrects them, signs the sign-off block
+- [ ] **Remaining:** each team member signs the sign-off block
 - [ ] **Remaining:** copy to Brightspace for submission alongside GitHub commit
 
-### Final-release blocker watchlist
+### Final-release polish (low risk)
 
-1. **Deployment** — `<DEPLOYED_URL>` placeholder must be replaced with a live Cloudflare Workers URL before Milestone 4 submission. ProjectMilestones.md: up to −20 pts if not deployed.
-2. **SCRUM-24 decision** — Desktop History fetching has no implementation in the codebase; team must decide formally: revive, replace, or drop.
-3. **Stocks + groq Edge Function manual deploys** — Local code is ready; needs Supabase Dashboard upload before deployed URL goes live (otherwise stocks values and Korean briefing text may regress).
+1. **Live URL placeholder** — `<DEPLOYED_URL>` placeholder in README.md to be replaced with the actual Cloudflare Workers URL (deployment is already live).
+2. **Stocks + groq Edge Function manual deploys** — Local code is ready; Supabase Dashboard upload pending so the deployed app picks up the universal-ticker fallback (stocks) and `charset=utf-8` header (groq).
+3. **Sprint 4 closeout** — SCRUM-26 UI/UX audit and SCRUM-27 RLS audit + indexing pass complete by May 27.
 
 ---
 

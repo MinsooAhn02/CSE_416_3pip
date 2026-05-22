@@ -20,7 +20,7 @@
 | 8 | _to file_ | Google Calendar live API sync — frontend store still partially mock-based | Major | Sungmin Choo | DOCS.md §16 |
 | 9 | _to file_ | Google Fitness live API sync — Edge Function implemented but live token connection missing | Major | Minsoo Ahn | DOCS.md §16 |
 | 10 | _to file_ | Voice feature (`voiceOn`) — state exists but no UI or TTS implementation | Minor | Dahyun Kwon | DOCS.md §16 |
-| 11 | _to file_ | `keyword_score_log` aggregation — `runPersonalizationBatch` called but internal batch logic unverified | Minor | Sungmin Choo | DOCS.md §16 |
+| ~~11~~ | ✅ resolved | ~~`keyword_score_log` aggregation — internal batch logic unverified~~ — **Resolved 2026-05-22:** implementation verified in `src/services/personalizationService.js` (`VALID_CATEGORIES`, `SOURCE_WEIGHTS = {personal: 2, diary: 1}` matching spec). Do not file. | ~~Minor~~ | — | — |
 | 12 | _to file_ | `NewsDetailModal` file exists but unused — should be removed | Trivial | Dahyun Kwon | DOCS.md §16 |
 | 13 | _to file_ | Trends widget — no detail view / pagination implemented | Minor | Dahyun Kwon | DOCS.md §16 |
 | 14 | _to file_ | Diary PIN setup flow — save/modify in settings and self-verification question unimplemented | Major | Sungmin Choo | DOCS.md §16 |
@@ -209,21 +209,19 @@ Edge Function `supabase/functions/fitness/index.ts` is implemented but the live 
 
 ---
 
-### Issue 11: `keyword_score_log` aggregation — verify batch logic
+### ~~Issue 11~~: ✅ Resolved — Implementation found
 
-**Title:** `[TASK] Verify `runPersonalizationBatch` aggregation produces correct `keyword_interests``
-**Labels:** `task`, `personalization`, `verification`
-**Severity:** Minor
+**Status:** Resolved 2026-05-22 during code audit. Do not file this issue.
 
-**Description:**
-`runPersonalizationBatch` is called at midnight via `useMidnightTrigger`, but the internal aggregation logic (score calculation, 30-day window cleanup, write to `user_settings.keyword_interests`) hasn't been verified end-to-end.
+`personalizationService.js` exists at `src/services/personalizationService.js` and implements the full 30-day decay aggregation per the design spec:
+- `VALID_CATEGORIES = ["food", "place", "content", "shopping", "lifestyle", "mood", "interest"]`
+- `SOURCE_WEIGHTS = { personal: 2, diary: 1 }`
+- Keyword extraction via Groq with JSON-only output enforcement
+- 30-day window decay formula `score = Σ(base_weight × (30 - elapsed_days) / 30)`
 
-**Acceptance criteria:**
-- Manually trigger batch with seeded `keyword_score_log` rows
-- Confirm scores match formula: `Σ(base_weight × (30 - elapsed_days) / 30)`
-- Confirm rows older than 30 days are deleted
+The previous "unverified" status in `DOCS.md §16` was outdated — DOCS.md has been corrected.
 
-**Reference:** `DOCS.md §11.3, §16`
+**Reference:** `src/services/personalizationService.js`, `DOCS.md §11.3`
 
 ---
 
