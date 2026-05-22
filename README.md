@@ -252,4 +252,4 @@ For security-sensitive issues, do not open a public issue — contact the team d
 
 This project is managed using **Jira**.
 
-- Scrum Board: [Jira Board](https://stonybrook-team-3pip.atlassian.net/jira/software/projects/SCRUM/boards/1?atlOrigin=eyJpIjoiNTI4OTI0MWU4ZDIwNDJhNmFhYmU1OWM0MmNjYmZkNjQiLCJwIjoiaiJ9)
+- Scrum Board: [Jira Board](https://stonybrook-team-3pip.atlassian.net/jira/software/projects/SCRUM/boards/1?atlOrigin=eyJpIjoiNTI4OTI0MWU4ZDIwNDJhNmFhYmU1OWM0MmNjYmZkNjQiLCJwIjoiaiJ9) | [Jira Timeline](https://stonybrook-team-3pip.atlassian.net/jira/software/projects/SCRUM/boards/1/timeline)
