@@ -55,3 +55,9 @@ smart widgets (난이도: 상):
 - After the entire execution, update in @DOCS.md
 
 
+
+Briefing: 
+ - Today's latest info가 키워드에 대한 일반적인 정의가 나옴. 각 smart widgets에서 personalized search의 내용을 display 해야 함.
+ - Today's latest info Smart keywords: No keyword info collected yet. 라고 뜨는데 이건 시간이 지나야 뜨는 건지
+
+Tavily: 쓸데없는 콜이 많은 듯. 토큰 소진이 엄청남.
