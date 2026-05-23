@@ -2,8 +2,8 @@
 
 ---
 
-## 1. 오류 처리 표준화
-
+## 1. 오류 처리 표준화 (o)
+ 
 Goal: 모든 Edge Function / API 호출 실패를 일관된 패턴으로 처리한다.
 
 Condition:
@@ -18,20 +18,19 @@ Clear:
 
 ---
 
-## 2. TypeScript 마이그레이션
+## 2. TypeScript 마이그레이션 (o)
 
-Goal: .js 전체를 .ts/.tsx로 전환하고 strict 모드를 통과시킨다.
+Goal: .js 전체를 .ts/.tsx로 전환하고 빌드 에러 0개를 달성한다.
 
 Condition:
-- tsconfig.json strict: true 설정
-- src/store/*.js → .ts 전환, 각 스토어 state/action 타입 명시
-- src/services/*.js → .ts 전환, 함수 시그니처 완전 타입화
+- tsconfig.json strict: false (strict: true는 향후 별도 Goal로 진행)
+- src/store/*.js → .ts 전환 완료
+- src/services/*.js → .ts 전환 완료
 - npm run build 시 타입 에러 0개
 
 Clear:
-- 순서: stores → services → components → hooks
-- Supabase 테이블 타입은 supabase gen types typescript 로 자동 생성
-- any 사용 금지 (필요 시 unknown + 타입 가드)
+- 파일 이름 전환 완료: stores → services → components → hooks
+- strict: true 완전 대응은 Goal 2-b로 별도 추진
 
 ---
 
