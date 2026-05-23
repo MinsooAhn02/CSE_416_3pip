@@ -1,4 +1,4 @@
-import { motion, AnimatePresence } from "framer-motion";
+﻿import { motion, AnimatePresence } from "framer-motion";
 import { useTranslation } from "react-i18next";
 import { useTheme } from "../../hooks/useTheme";
 import { useFontSize } from "../../hooks/useFontSize";
@@ -95,6 +95,11 @@ const BriefingSectionsView = ({
 															line && typeof line === "object" ? (
 																<div key={idx} className="space-y-0.5">
 																	<p style={modalBodyFontStyle}>
+																		{line.keyword && (
+																			<span className={`text-[10px] font-semibold mr-1 ${muted}`}>
+																				[{line.keyword}]
+																			</span>
+																		)}
 																		<a
 																			href={line.url}
 																			target="_blank"

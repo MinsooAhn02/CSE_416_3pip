@@ -26,11 +26,17 @@ export const buildSmartSummaries = (keywords, data) => {
 		.map((kw) => ({ keyword: kw, data: findSmartWidgetData(data, kw, lang) }))
 		.filter((entry) => entry.data)
 		.slice(0, 3)
-		.map(({ keyword, data: widgetData }) => ({
-			keyword,
-			bullets:
-				widgetData?.sections?.flatMap((s) => s.bullets ?? []).slice(0, 3) ?? [],
-		}));
+		.map(({ keyword, data: widgetData }) => {
+			const allItems = (widgetData?.sections ?? []).flatMap((s) => s.items ?? []);
+			const firstItem = allItems.find((item) => item?.title && item?.url) ?? null;
+			return {
+				keyword,
+				bullets: widgetData?.sections?.flatMap((s) => s.bullets ?? []).slice(0, 3) ?? [],
+				latestArticle: firstItem
+					? { title: firstItem.title, url: firstItem.url, source: firstItem.source ?? "" }
+					: null,
+			};
+		});
 };
 
 /**

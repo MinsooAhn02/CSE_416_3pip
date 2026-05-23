@@ -205,6 +205,17 @@ If any check fails, see `todo.md` for known issues or file a bug (see below).
 
 For local testing, you can register with any Google account. User data is isolated by `auth.uid()` via Row-Level Security — no cross-user data leakage.
 
+### Google sign-in warning ("App not verified")
+
+When signing in for the first time, Google may display a warning:
+**"Google hasn't verified this app"**
+
+This is expected. The app is in GCP **Testing** mode — full OAuth verification (which requires a CASA security assessment for the Fitness scope) has not been pursued for this academic project.
+
+**To proceed:** click **Advanced** → **Continue to [app name] (unsafe)**. This bypasses the warning and grants the requested permissions normally. The warning is a Google policy gate for unverified apps, not an indicator of any security issue with this application.
+
+> Note: In Testing mode, OAuth tokens may expire after 7 days. If you are signed out unexpectedly, simply sign in again.
+
 ---
 
 ## 🐞 Bug Reporting

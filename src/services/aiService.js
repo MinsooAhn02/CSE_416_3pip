@@ -1038,16 +1038,10 @@ export async function generateDetailedBriefing({ tone, length, context }) {
 	const trendsArticles = (Array.isArray(context?.trendsResults) ? context.trendsResults : []).slice(0, 3);
 	const allArticles = [...newsArticles, ...trendsArticles];
 
-	const [diaryRewrite, smartSummary, articleSummaries] = await Promise.all([
+	const [diaryRewrite, articleSummaries] = await Promise.all([
 		rewriteYesterdayDiary({
 			diaryText: context?.yesterdayDiary,
 			memoText: context?.yesterdayMemo,
-			tone,
-			lang,
-			langInstruction,
-		}),
-		summarizeSmartWidgets({
-			smartSummaries: context?.smartSummaries,
 			tone,
 			lang,
 			langInstruction,
@@ -1085,9 +1079,16 @@ export async function generateDetailedBriefing({ tone, length, context }) {
 
 	// ── 5) 오늘 최신 정보 — 스마트 키워드 + 주요 뉴스 Top 3 + 트렌드 Top 3 ─
 	{
-		const smartLine =
-			smartSummary ||
-			(isKo ? "수집된 키워드 정보가 없습니다." : "No keyword info collected yet.");
+		// Build latest_smart lines: one hyperlinked article per smart keyword
+		const smartLines = (context?.smartSummaries ?? [])
+			.filter((s) => s.latestArticle?.url && s.latestArticle?.title)
+			.map((s) => ({
+				keyword: s.keyword,
+				title: s.latestArticle.title,
+				url: s.latestArticle.url,
+				source: s.latestArticle.source ?? "",
+			}));
+		const smartFallback = isKo ? "수집된 키워드 정보가 없습니다." : "No keyword info collected yet.";
 
 		// News: structured objects { title, url, summary, source }
 		const newsLines =
@@ -1120,12 +1121,16 @@ export async function generateDetailedBriefing({ tone, length, context }) {
 		sections.push({
 			id: "latest_info",
 			title: isKo ? "오늘 최신 정보" : "Today's latest info",
-			lines: [smartLine, ...newsLines.map(toPlainLine), ...trendsLines.map(toPlainLine)],
+			lines: [
+				...(smartLines.length > 0 ? smartLines.map(toPlainLine) : [smartFallback]),
+				...newsLines.map(toPlainLine),
+				...trendsLines.map(toPlainLine),
+			],
 			subBlocks: [
 				{
 					id: "latest_smart",
 					title: isKo ? "관심 키워드" : "Smart keywords",
-					lines: [smartLine],
+					lines: smartLines.length > 0 ? smartLines : [smartFallback],
 				},
 				{
 					id: "latest_news",
@@ -4379,14 +4384,32 @@ export async function generateDiary({
 		language: resolvedLanguage,
 	});
 
-	// 시간대별 브리핑 스냅샷 요약 (최대 6개, 텍스트 앞 200자)
+	// 브리핑 스냅샷에서 뉴스/트렌드/스마트 키워드 헤드라인 추출
+	const extractHeadlinesFromSnapshot = (snapshot) => {
+		const latestInfo = (snapshot.sections ?? []).find((sec) => sec.id === "latest_info");
+		if (!latestInfo) return "";
+		const allLines = [
+			...(latestInfo.subBlocks?.find((sb) => sb.id === "latest_news")?.lines ?? []),
+			...(latestInfo.subBlocks?.find((sb) => sb.id === "latest_trends")?.lines ?? []),
+			...(latestInfo.subBlocks?.find((sb) => sb.id === "latest_smart")?.lines ?? []),
+		];
+		const titles = allLines
+			.filter((l) => typeof l === "object" && l?.title)
+			.map((l) => `- ${l.title}`)
+			.slice(0, 8);
+		return titles.join("\n");
+	};
+
+	// 시간대별 브리핑 스냅샷 요약 (최대 6개, 텍스트 앞 200자 + 헤드라인)
 	const snapshotLines = Array.isArray(briefingSnapshots)
 		? briefingSnapshots.slice(0, 6).map((s) => {
 				const time = s.capturedAt
 					? new Date(s.capturedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
 					: "";
 				const text = (s.text || s.summary || "").slice(0, 200);
-				return time ? `[${time}] ${text}` : text;
+				const headlines = extractHeadlinesFromSnapshot(s);
+				const body = headlines ? `${text}\n[Headlines]\n${headlines}` : text;
+				return time ? `[${time}] ${body}` : body;
 			})
 		: [];
 

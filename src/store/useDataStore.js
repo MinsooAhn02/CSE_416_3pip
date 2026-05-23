@@ -14,7 +14,7 @@ const EDGE_TIMEOUT_MS = 25000;
 /* ────────────────────────────────────────────
    4-hour Access-Time-based Caching
    ──────────────────────────────────────────── */
-const CACHE_THRESHOLD_MS = 4 * 60 * 60 * 1000; // 4시간
+const CACHE_THRESHOLD_MS = 6 * 60 * 60 * 1000; // 6시간 (raised from 4h to reduce Tavily API cost)
 
 // 언어별 in-memory 캐시 — 언어 전환 시 로딩 없이 즉시 표시
 const _trendsMemCache = {}; // { ko: { trends, trendsResults }, en: {...} }
@@ -2063,10 +2063,10 @@ i18n.on("languageChanged", () => {
 		store.clearFeedForLanguageSwitch();
 	}
 	if (hasNews) {
-		store.fetchNews(userId, true);
+		store.fetchNews(userId, false);
 	}
 	if (hasTrends) {
-		store.fetchTrends(userId, true);
+		store.fetchTrends(userId, false);
 	}
 });
 

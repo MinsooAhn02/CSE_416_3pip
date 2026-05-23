@@ -376,7 +376,7 @@ Legacy `[MB_META]...[/MB_META]` task metadata is stripped on read; no longer wri
 1. Memory cache  : Geolocation (GEO_CACHE_MS = 5 min)
                    Trends in-memory map (_trendsMemCache) — checked before DB
 2. localStorage  : mb_cache_{key} (fallback when DB unavailable)
-3. DB cache      : api_cache table (1-hour TTL, app-level check)
+3. DB cache      : api_cache table (6-hour TTL, app-level check via CACHE_THRESHOLD_MS)
 ```
 
 ### Cache key patterns
@@ -397,7 +397,7 @@ Legacy `[MB_META]...[/MB_META]` task metadata is stripped on read; no longer wri
 
 ```
 1. Compute cacheKey
-2. If force=false → check readApiCache (DB, 1-hour TTL)
+2. If force=false → check readApiCache (DB, 6-hour TTL)
 3. Cache hit → update state, return (markFetched(key, fetchedAt))
 4. Cache miss → call Edge Function (25s timeout)
 5. Success → normalize + writeApiCache + update state + apiStatus="ok"
@@ -408,9 +408,9 @@ Legacy `[MB_META]...[/MB_META]` task metadata is stripped on read; no longer wri
 
 | Trigger | Scope | Mode |
 |---------|-------|------|
-| Language change | News + Trends + Smart Widget | `force=true`, per-language cache key |
+| Language change | News + Trends + Smart Widget | `force=false`, per-language cache key (reuses same-language cache within 6h) |
 | Interest change | News only | `force=true`, fingerprint-diffed subscription |
-| Tab visibility return | All | `force=false`, 1-hour stale check |
+| Tab visibility return | All | `force=false`, 6-hour stale check |
 | 5-minute poll | All | `force=false` |
 | Manual refresh button | Individual widget | `force=true` |
 
@@ -503,15 +503,15 @@ Legacy `[MB_META]...[/MB_META]` task metadata is stripped on read; no longer wri
 
 - Data inputs: weather, stocks, trends, calEvents (future-only), tomorrowEvents, todos, newsResults, trendsResults, smartSummaries, keywordInterests, fixedInterestIds, persona
 - **Deterministic sections + narrow AI augmentation** pattern (`aiService.generateDetailedBriefing`):
-  - JS controls section structure and order; Groq called for 3 tasks only (`temperature: 0.1`)
-  - 3 parallel Groq calls: diary rewrite, smart keyword summary, article batch summary (news + trends)
+  - JS controls section structure and order; Groq called for 2 tasks only (`temperature: 0.1`)
+  - 2 parallel Groq calls: diary rewrite, article batch summary (news + trends). Smart keyword block built directly in JS — no Groq call.
 - **Section order:**
   1. `header` — Date + weather in one line
   2. `schedule` — Morning (5–12): today's events; Afternoon/evening (≥12): remaining today + tomorrow events
   3. `yesterday` — Yesterday's diary rewritten to 1–2 past-tense sentences (Groq #1)
-  4. `latest_info` — sub-blocks: `latest_smart` (keyword bullets), `latest_news` (Top 3 news + AI 1-sentence summary + link), `latest_trends` (Top 3 trends + AI 1-sentence summary + link)
+  4. `latest_info` — sub-blocks: `latest_smart` (one hyperlinked latest article per smart keyword, with `[keyword]` prefix), `latest_news` (Top 3 news + AI 1-sentence summary + link), `latest_trends` (Top 3 trends + AI 1-sentence summary + link)
 - **Return shape:** `{ summary, detail, sections, timeMode }`. `sections: [{id, title, lines, subBlocks?}]`
-- `section.lines` is polymorphic: `string` (plain text) | `{title, url, summary, source}` (news/trends article)
+- `section.lines` is polymorphic: `string` (plain text) | `{title, url, summary, source, keyword?}` (news/trends/smart article)
 - Auto-saves snapshot to `useBriefingHistoryStore` (3-hour interval or on manual refresh)
 - Language change → `briefingVersions` cache cleared → immediate re-generation
 
@@ -742,7 +742,7 @@ New day, first login
           ├─ 0 snapshots → skip (no access that day)
           └─ Snapshots present → generateAndSaveDiaryForDate(date, { briefingSnapshots })
               └─ buildDiaryGenerationContext():
-                  - briefingSnapshots: time-stamped texts (max 6, first 200 chars each)
+                  - briefingSnapshots: time-stamped texts (max 6, first 200 chars each) + up to 8 `[Headlines]` lines extracted from `snapshot.sections.latest_info` (news + trends + smart titles)
                   - previousDayDiary: prior day diary (max 400 chars)
                   - previousDayFeedback: prior day cumulative feedback (max 200 chars)
               └─ aiService.generateDiary() → Groq → diaryText
@@ -876,9 +876,8 @@ npx wrangler deploy
 `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` are hardcoded into the JS bundle at build time. Cloudflare Workers runtime does not read `.env`. Running `wrangler deploy` without `npm run build` first deploys a stale bundle.
 
 **GCP OAuth app verification:**
-- App in "Testing" status → non-test users see "unverified app" warning
-- Calendar/Tasks (sensitive) + Fitness (restricted) scopes require Google verification; Fitness requires annual CASA security assessment
-- Workaround: remove `fitness.*` scopes → sensitive-only verification (easier)
+- App remains in **Testing** status — full verification deferred (academic project). Calendar/Tasks (sensitive) + Fitness (restricted) scopes each require separate Google review; Fitness additionally requires an annual CASA Tier 2 security assessment.
+- All users see an "unverified app" warning on first login. **Workaround:** click **Advanced → Continue (unsafe)**. See README §Testing → "Google sign-in warning" for full instructions.
 
 ---
 
