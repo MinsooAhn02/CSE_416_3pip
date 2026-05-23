@@ -21,6 +21,7 @@
 | SCRUM-23 | Modal portals + Diary feedback UI | Dahyun Kwon | Minsoo Ahn | ⬜ Pending | — | — |
 | SCRUM-25 | Persona → Groq API bridge + error handling | Minsoo Ahn | Sungmin Choo | ⬜ Pending | — | — |
 | SCRUM-28 | Cloudflare Workers deployment (live) | Minsoo Ahn | Sungmin Choo | ⬜ Pending | — | — |
+| BUG-15b | Tomorrow-schedule timezone bug fix (briefing "Tomorrow" section) | Minsoo Ahn | — | ⬜ Pending | — | Issue #15b |
 
 **Legend:** ⬜ Pending · ✅ Pass · ❌ Fail (bug filed) · 🟡 Partial
 
@@ -147,9 +148,22 @@
 
 ---
 
+### BUG-15b — Tomorrow-schedule timezone bug fix
+**Implementer:** Minsoo Ahn · **Tester:** (팀원 배정 필요)
+
+- [ ] 오후 모드 (12시 이후): 브리핑 "Tomorrow" 섹션에 내일 Google Calendar 일정 표시 확인
+- [ ] 내일 00:00~09:00 KST 일정도 포함되는지 확인 (timezone fix 핵심 검증)
+- [ ] 오전 모드 (12시 이전): "Tomorrow" 섹션 미표시 확인 (morning-mode 정책 유지)
+- [ ] 설정에서 Calendar 위젯 숨김 → 새로고침 → 브리핑 "Tomorrow" 섹션 여전히 표시 (visibility gate 분리 검증)
+
+**Tester notes:**
+
+---
+
 ## Change Log
 
 | Date | Editor | What was changed | Related Issue |
 |------|--------|-----------------|---------------|
 | 2026-05-23 | Sungmin Choo | Created this file; 9 features assigned for cross-verification; 15 GitHub Issues filed | GH #1–15 |
+| 2026-05-24 | Minsoo Ahn | Added BUG-15b: Tomorrow-schedule timezone bug fix verification entry | Issue #15b |
 

@@ -517,7 +517,7 @@ Legacy `[MB_META]...[/MB_META]` task metadata is stripped on read; no longer wri
   - 2 parallel Groq calls: diary rewrite, article batch summary (news + trends). Smart keyword block built directly in JS — no Groq call.
 - **Section order:**
   1. `header` — Date + weather in one line
-  2. `schedule` — Morning (5–12): today's events; Afternoon/evening (≥12): remaining today + tomorrow events
+  2. `schedule` — Morning (5–12): today's events; Afternoon/evening (≥12): remaining today + tomorrow events. Tomorrow events fetched via explicit local-timezone `timeMin/timeMax` (not UTC-bound `date`), always fetched after login regardless of calendar widget visibility.
   3. `yesterday` — Yesterday's diary rewritten to 1–2 past-tense sentences (Groq #1)
   4. `latest_info` — sub-blocks: `latest_smart` (one hyperlinked latest article per smart keyword, with `[keyword]` prefix), `latest_news` (Top 3 news + AI 1-sentence summary + link), `latest_trends` (Top 3 trends + AI 1-sentence summary + link)
 - **Return shape:** `{ summary, detail, sections, timeMode }`. `sections: [{id, title, lines, subBlocks?}]`

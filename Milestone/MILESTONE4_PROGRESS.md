@@ -89,7 +89,7 @@ _None as of 2026-05-22._
 
 ### Items actually completed beyond the schedule
 
-- Multi-source stocks pipeline (TwelveData → Stooq CSV → ER-API fallback chain) with universal index ticker support via `^${symbol}` auto-retry (CHANGELOG 2026-05-16)
+- Stocks widget overhaul: 8 fixed indices (SP500/KOSPI/NASDAQ/USDKRW/VIX/CRUDE/DXY/DJI) + user-added tickers, strict ticker validation, `type`/`currency` metadata from Edge Function, optimistic confirm-dialog dismiss (CHANGELOG 2026-05-16)
 - Tavily Korean post-processing pipeline (`translateArticlesToKorean()` + `buildLocalizedTrendTitles()` + `api_cache` translation backfill)
 - Groq Edge Function `charset=utf-8` header fix for Korean text
 - Briefing widget article batch summarization (`summarizeArticlesBatch` — single Groq call for up to 6 articles instead of N parallel calls)

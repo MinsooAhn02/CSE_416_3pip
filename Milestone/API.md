@@ -111,20 +111,21 @@
     symbol: string,
     price: number,
     change: number,         // absolute change
-    changePercent: number   // percent change
+    changePercent: number,  // percent change
+    type: string,           // "index" | "stock" | "etf" | "currency" | "unknown"
+    currency: string        // ISO code (e.g. "USD", "KRW") or ""
   },
   ...
 ]
 ```
 
 **Flow / Reason:**
-`useDataStore.fetchStocks({symbols})` → Edge Function `stocks/index.ts` → Twelve Data API (primary). On failure or `price <= 0`, falls back to Stooq CSV; for `USDKRW` specifically, also falls back to `open.er-api.com`.
+`useDataStore.fetchStocks({symbols})` → Edge Function `stocks/index.ts` → Yahoo Finance (primary). Strict validation: `price > 0` required. `type` and `currency` metadata auto-detected from Yahoo response.
 
 **Notes:**
 - Symbols normalized to uppercase.
-- Twelve Data symbol map: `KOSPI→KS11/XKOS`, `NASDAQ→IXIC`, `SP500→SPX`, `USDKRW→USD/KRW`.
-- Stooq fallback: tries `sym.us` → `^sym` → bare `sym` (first positive price wins).
-- `open.er-api.com` fallback timeout: 7s.
+- 8 fixed index symbols: `SP500→^GSPC`, `KOSPI→^KS11`, `NASDAQ→^IXIC`, `USDKRW→KRW=X`, `VIX→^VIX`, `CRUDE→CL=F`, `DXY→DX=F`, `DJI→^DJI`.
+- User-added tickers validated strictly (price > 0); invalid tickers rejected.
 - ⚠️ Edge Function changes require **manual redeploy** via Supabase Dashboard.
 
 ---

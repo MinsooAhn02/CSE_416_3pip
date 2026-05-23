@@ -281,14 +281,41 @@ Diary PIN is currently hashed with SHA-256 on save (good), but there's no UI to:
 **Severity:** Major
 
 **Description:**
-Local changes to `supabase/functions/stocks/index.ts` (universal index ticker support via `^${symbol}` fallback for Yahoo/Stooq) are committed but not deployed to Supabase. Until deployed, custom index symbols (VIX, DJI, RUT, etc.) still return `--`.
+Local `supabase/functions/stocks/index.ts` has been significantly overhauled but not yet deployed to Supabase. Current local state includes:
+- Strict ticker validation (`price > 0` required; invalid tickers rejected)
+- `type` + `currency` metadata fields in Edge response
+- 8 hardcoded fixed indices (`fixedIndexSymbols`): SP500, KOSPI, NASDAQ, USDKRW, VIX, CRUDE, DXY, DJI
+- Updated symbol mappings: VIX→^VIX, CRUDE→CL=F, DXY→DX=F (was DX-Y.NYB), DJI→^DJI
+- Resolved: KOSDAQ-style invalid-ticker bug, confirm-delete-dialog non-dismiss bug, hardcoded `CURRENCY_MAP` scaling issue
 
-**Action:** `supabase functions deploy stocks` via CLI, OR upload via Supabase Dashboard.
+**Production status:** Still running the old TwelveData→Stooq→ER-API fallback chain. Manual deploy required.
+
+**Action:** Upload `supabase/functions/stocks/index.ts` via Supabase Dashboard.
 
 **Acceptance criteria:**
-- After deploy, add VIX or DJI as a custom symbol in StocksWidget → confirm price displays correctly.
+- After deploy, fixed indices (VIX, CRUDE, DXY, DJI) show prices correctly.
+- User-added invalid ticker is rejected with error state (not `--`).
 
 **Reference:** `CHANGELOG.md 2026-05-16 Widget Round 4`, `DOCS.md §16`
+
+---
+
+### Issue 15b: Tomorrow-schedule timezone bug — fixed locally
+
+**Title:** `[BUG] Briefing "Tomorrow" section empty for non-UTC users`
+**Labels:** `bug`, `briefing`, `calendar`
+**Severity:** Major
+**Status:** ✅ Fixed in `src/store/useDataStore.js` (2026-05-24)
+
+**Description:**
+`fetchTomorrowCalendar` passed `date: tomorrowStr` to the Edge Function, which runs in UTC (Deno). For KST (UTC+9) users, events between local midnight–09:00 fell outside the UTC window and were silently dropped by Google Calendar API.
+
+**Fix applied:**
+- `fetchTomorrowCalendar`: switched to explicit `timeMin/timeMax` using local-timezone ISO strings (client-side `new Date("YYYY-MM-DDT00:00:00")` → `.toISOString()`). No Edge Function change required.
+- `fetchCalendar`: same fix applied for symmetry.
+- `fetchAll`: `fetchTomorrowCalendar` moved outside `visibleWidgets.includes("calendar")` gate — briefing is a fixed widget and always needs tomorrow events.
+
+**Reference:** `DOCS.md §7.3`
 
 ---
 

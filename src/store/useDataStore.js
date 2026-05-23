@@ -1463,6 +1463,41 @@ export const useDataStore = create((set, get) => ({
 			}
 		}
 
+		// ✅ 3순위: 이미 로드된 news 결과에서 트렌드 파생 (Tavily 호출 절약)
+		if (!force) {
+			const currentNewsResults = get().newsResults ?? [];
+			const newsLang = get().fetchedLanguage?.news;
+			if (currentNewsResults.length >= 3 && newsLang === lang) {
+				try {
+					const derivedTrends = await buildLocalizedTrendTitles(
+						currentNewsResults,
+						[],
+						lang,
+						8,
+					);
+					if (derivedTrends.length >= 2) {
+						const trendsResults = currentNewsResults.slice(0, 7);
+						_trendsMemCache[lang] = { trends: derivedTrends, trendsResults };
+						set({
+							trends: derivedTrends,
+							trendsResults,
+							fetchedLanguage: { ...get().fetchedLanguage, trends: lang },
+						});
+						await writeApiCache(
+							cacheKey,
+							{ trends: derivedTrends, results: trendsResults },
+							userId,
+						);
+						get().markFetched("trends");
+						get().setApiStatus("trends", "ok");
+						return;
+					}
+				} catch (e) {
+					console.warn("fetchTrends: news-derived trends failed:", e?.message);
+				}
+			}
+		}
+
 		// ✅ 캐시 없으면 여기서 loading: true
 		set((s) => ({
 			loading: { ...s.loading, trends: true },
@@ -1621,20 +1656,19 @@ export const useDataStore = create((set, get) => ({
 				invokeEdgeDetailed("tavily", {
 					query: localQuery,
 					mode: "news",
-					max_results: 5,
+					max_results: 12,
 					...(includeDomains.length > 0 ? { include_domains: includeDomains } : {}),
 				}),
 				invokeEdgeDetailed("tavily", {
 					query: globalNewsQuery,
 					mode: "news",
 					max_results: 5,
-					...(includeDomains.length > 0 ? { include_domains: includeDomains } : {}),
 				}),
 			]);
 
-			const localResults = localEdge?.ok
-				? filterLocalizedArticles(localEdge.data?.results ?? [], lang, 5)
-				: [];
+			const localRawResults = localEdge?.ok ? (localEdge.data?.results ?? []) : [];
+			const localResults = filterLocalizedArticles(localRawResults, lang, 5);
+			const localExtendedResults = filterLocalizedArticles(localRawResults, lang, 12);
 			const globalResults = globalEdge?.ok
 				? filterLocalizedArticles(globalEdge.data?.results ?? [], lang, 5)
 				: [];
@@ -1661,6 +1695,41 @@ export const useDataStore = create((set, get) => ({
 				get().markFetched("news");
 				get().setApiStatus("news", "ok");
 				set((s) => ({ fetchedLanguage: { ...s.fetchedLanguage, news: lang } }));
+
+				// trends 상태가 비어 있으면 local 확장 결과(12건)에서 파생 — 별도 Tavily 호출 절약
+				if ((get().trends ?? []).length === 0 && localExtendedResults.length > 0) {
+					try {
+						const translatedExtended =
+							lang === "ko"
+								? await translateArticlesToKorean(localExtendedResults)
+								: localExtendedResults;
+						const derivedTrends = await buildLocalizedTrendTitles(
+							translatedExtended,
+							[],
+							lang,
+							8,
+						);
+						if (derivedTrends.length > 0) {
+							const trendsResults = translatedExtended.slice(0, 7);
+							const trendsCacheKey = `trends_full_${lang}`;
+							_trendsMemCache[lang] = { trends: derivedTrends, trendsResults };
+							set({ trends: derivedTrends, trendsResults });
+							await writeApiCache(
+								trendsCacheKey,
+								{ trends: derivedTrends, results: trendsResults },
+								userId,
+							);
+							get().markFetched("trends");
+							get().setApiStatus("trends", "ok");
+							set((s) => ({
+								fetchedLanguage: { ...s.fetchedLanguage, trends: lang },
+							}));
+						}
+					} catch (e) {
+						console.warn("fetchNews: trends derivation failed:", e?.message);
+					}
+				}
+
 				return;
 			}
 
@@ -1745,10 +1814,16 @@ export const useDataStore = create((set, get) => ({
 				return;
 			}
 
-			const data = await invokeEdge("events", { token, todayOnly: true });
+			const todayStr = formatLocalDate();
+			const startLocalToday = new Date(`${todayStr}T00:00:00`);
+			const endLocalToday = new Date(startLocalToday.getTime() + 24 * 60 * 60 * 1000);
+			const data = await invokeEdge("events", {
+				token,
+				timeMin: startLocalToday.toISOString(),
+				timeMax: endLocalToday.toISOString(),
+			});
 			if (data && Array.isArray(data)) {
 				// 프론트에서도 오늘 일정만 필터링 (안전장치)
-				const todayStr = formatLocalDate();
 				const todayEvents = data.filter((ev) => {
 					const start = ev.start;
 					if (!start) return false;
@@ -1800,7 +1875,13 @@ export const useDataStore = create((set, get) => ({
 				return;
 			}
 
-			const data = await invokeEdge("events", { token, date: tomorrowStr });
+			const startLocal = new Date(`${tomorrowStr}T00:00:00`);
+			const endLocal = new Date(startLocal.getTime() + 24 * 60 * 60 * 1000);
+			const data = await invokeEdge("events", {
+				token,
+				timeMin: startLocal.toISOString(),
+				timeMax: endLocal.toISOString(),
+			});
 			if (data && Array.isArray(data)) {
 				const filtered = data.filter((ev) =>
 					String(ev?.start ?? "").startsWith(tomorrowStr),
@@ -2011,22 +2092,34 @@ export const useDataStore = create((set, get) => ({
 						console.warn("fetchStocks failed in fetchAll:", e?.message),
 					),
 			);
-		if (visibleWidgets.includes("trends"))
-			jobs.push(
-				store
-					.fetchTrends(userId, shouldForceRefresh)
-					.catch((e) =>
-						console.warn("fetchTrends failed in fetchAll:", e?.message),
-					),
-			);
-		if (visibleWidgets.includes("news"))
+		// news → trends 순서로 실행: fetchNews가 trends를 파생하면 Tavily 호출 1회 절약
+		if (visibleWidgets.includes("trends") && visibleWidgets.includes("news")) {
 			jobs.push(
 				store
 					.fetchNews(userId, shouldForceRefresh)
+					.then(() => store.fetchTrends(userId, shouldForceRefresh))
 					.catch((e) =>
-						console.warn("fetchNews failed in fetchAll:", e?.message),
+						console.warn("fetchNews/fetchTrends failed in fetchAll:", e?.message),
 					),
 			);
+		} else {
+			if (visibleWidgets.includes("trends"))
+				jobs.push(
+					store
+						.fetchTrends(userId, shouldForceRefresh)
+						.catch((e) =>
+							console.warn("fetchTrends failed in fetchAll:", e?.message),
+						),
+				);
+			if (visibleWidgets.includes("news"))
+				jobs.push(
+					store
+						.fetchNews(userId, shouldForceRefresh)
+						.catch((e) =>
+							console.warn("fetchNews failed in fetchAll:", e?.message),
+						),
+				);
+		}
 		if (visibleWidgets.includes("calendar")) {
 			jobs.push(
 				store
@@ -2035,17 +2128,18 @@ export const useDataStore = create((set, get) => ({
 						console.warn("fetchCalendar failed in fetchAll:", e?.message),
 					),
 			);
-			jobs.push(
-				store
-					.fetchTomorrowCalendar(userId, shouldForceRefresh)
-					.catch((e) =>
-						console.warn(
-							"fetchTomorrowCalendar failed in fetchAll:",
-							e?.message,
-						),
-					),
-			);
 		}
+		// 브리핑은 FIXED_WIDGET이므로 calendar 위젯 표시 여부와 무관하게 항상 fetch
+		jobs.push(
+			store
+				.fetchTomorrowCalendar(userId, shouldForceRefresh)
+				.catch((e) =>
+					console.warn(
+						"fetchTomorrowCalendar failed in fetchAll:",
+						e?.message,
+					),
+				),
+		);
 		if (visibleWidgets.includes("health"))
 			jobs.push(
 				store
@@ -2071,10 +2165,12 @@ i18n.on("languageChanged", () => {
 	if (hasNews || hasTrends) {
 		store.clearFeedForLanguageSwitch();
 	}
+	// news 먼저 완료 후 trends 실행 — fetchNews가 trends를 파생하면 Tavily 1회 절약
 	if (hasNews) {
-		store.fetchNews(userId, false);
-	}
-	if (hasTrends) {
+		store.fetchNews(userId, false).then(() => {
+			if (hasTrends) store.fetchTrends(userId, false);
+		});
+	} else if (hasTrends) {
 		store.fetchTrends(userId, false);
 	}
 });

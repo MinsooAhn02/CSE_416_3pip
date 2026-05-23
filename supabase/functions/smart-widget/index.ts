@@ -62,7 +62,7 @@ const callTavily = async (apiKey: string, query: string) => {
 			query,
 			topic: "general",
 			search_depth: "advanced",
-			max_results: 3,
+			max_results: 5,
 			include_answer: true,
 		}),
 	});
@@ -397,7 +397,7 @@ serve(async (req) => {
 			{
 				role: "system",
 				content:
-					"당신은 사용자 맞춤 리서치 플래너입니다. 반드시 JSON만 반환하세요. 형식: { personaSummary: string, points: [{ label: string, query: string, reason: string }], tags: string[] }. points는 정확히 3개를 반환하세요.",
+					"당신은 사용자 맞춤 리서치 플래너입니다. 반드시 JSON만 반환하세요. 형식: { personaSummary: string, points: [{ label: string, query: string, reason: string }], tags: string[] }. points는 정확히 2개를 반환하세요.",
 			},
 			{
 				role: "user",
@@ -411,7 +411,7 @@ serve(async (req) => {
 						(p: { label?: string; query?: string }) =>
 							typeof p?.label === "string" && typeof p?.query === "string",
 					)
-					.slice(0, 3)
+					.slice(0, 2)
 			: [];
 		if (points.length === 0) throw new Error("No search points generated");
 

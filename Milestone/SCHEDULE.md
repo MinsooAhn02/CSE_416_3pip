@@ -105,7 +105,7 @@ The team also shipped the following work that was not in the May 1st plan but ma
 | Diary | Like/Dislike + Rewrite feedback loop with `pendingRewrite` preview and confirmation | DiaryPanel + `useDiaryStore.applyFeedbackRewrite/confirmRewrite` |
 | Smart Widget | 17-category content taxonomy with per-category section planning | `aiService.js` + `SmartWidgetContent.jsx` |
 | i18n | Tavily Korean post-processing pipeline (`translateArticlesToKorean`, `buildLocalizedTrendTitles`) + `api_cache` translation backfill | `useDataStore.js` |
-| Stocks | Universal index ticker support — TwelveData → Stooq → ER-API fallback chain with `^${symbol}` auto-retry | `supabase/functions/stocks/index.ts` |
+| Stocks | 8 fixed indices (SP500/KOSPI/NASDAQ/USDKRW/VIX/CRUDE/DXY/DJI) + user-added tickers split into widget (2+4) and modal (8+N) sections. Strict ticker validation, auto-detect index/stock/currency via Edge Function `type`/`currency` metadata, optimistic confirm-dialog dismiss. | `supabase/functions/stocks/index.ts`, `StocksWidget.jsx` |
 | Briefing | Single-batch Groq summarization (`summarizeArticlesBatch`) for up to 6 articles per briefing | `aiService.js` |
 | Calendar | 3-level header drill-down (month → year → decade) + blue-dot diary day indicators | `CalendarWidget.jsx` |
 | Documentation | Full developer reference suite: DOCS.md (EN), DOCS_kor.md (KO), API.md (25 endpoints), CHANGELOG.md (26 fix rounds), KNOWN_ISSUES.md, ISSUE_TEMPLATEs | `/`, `/.github/ISSUE_TEMPLATE/` |
