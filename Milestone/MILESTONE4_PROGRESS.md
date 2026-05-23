@@ -1,7 +1,7 @@
 # Milestone 4 Progress Update — MorningBriefing.AI
 
-> **Date:** 2026-05-22
-> **Team:** 3pip (Ahn Minsoo, Choo Sungmin, Kwon Dahyun)
+> **Date:** 2026-06-01
+> **Team:** Ahn Minsoo, Choo Sungmin, Kwon Dahyun
 > **Course:** CSE 416, Stony Brook
 >
 > **Status markers:** ✅ Completed · 🟡 In progress · 🔄 Modified from original plan (see [SCHEDULE.md](./SCHEDULE.md) Schedule Changes)
@@ -39,7 +39,7 @@ _None as of 2026-05-22._
 
 ---
 
-## 1.2 Choo Sungmin — Backend Developer
+## 1.2 Choo Sungmin — Backend Developer & UI/UX Designer
 
 ### Items scheduled to complete by Milestone 4
 
@@ -71,7 +71,7 @@ _None as of 2026-05-22._
 
 ---
 
-## 1.3 Ahn Minsoo — Infrastructure & DevOps
+## 1.3 Ahn Minsoo — Infrastructure & DevOps & Backend Developer
 
 ### Items scheduled to complete by Milestone 4
 
