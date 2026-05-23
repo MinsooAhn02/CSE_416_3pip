@@ -863,12 +863,18 @@ const normalizeStockItem = (item) => {
 
 	return {
 		symbol: item.symbol,
-		name: item.symbol === "SP500" ? "S&P 500" : item.symbol,
+		name: item.symbol === "SP500" ? "S&P 500" :
+			item.symbol === "CRUDE" ? "WTI Crude" :
+			item.symbol === "DXY" ? "Dollar Index" :
+			item.symbol === "DJI" ? "Dow Jones" :
+			item.symbol,
 		value: toStockDisplayValue(numericPrice),
 		change:
 			normalizedPercent ??
 			`${numericChange >= 0 ? "+" : ""}${numberFormatter.format(numericChange)}`,
 		up: numericChange >= 0,
+		...(item.type != null && { type: item.type }),
+		...(item.currency != null && { currency: item.currency }),
 	};
 };
 
@@ -1368,9 +1374,7 @@ export const useDataStore = create((set, get) => ({
 			if (!edge?.ok || !Array.isArray(edge.data) || edge.data.length === 0) return false;
 			const row = edge.data[0];
 			if (!row || typeof row !== "object") return false;
-			if (Number(row.price ?? 0) > 0) return true;
-			// Upstream temporarily returning 0 — accept if the symbol round-trips correctly.
-			return String(row.symbol ?? "").toUpperCase() === String(symbol).toUpperCase();
+			return Number(row.price ?? 0) > 0;
 		} catch {
 			return false;
 		}
@@ -1984,6 +1988,11 @@ export const useDataStore = create((set, get) => ({
 
 		const stockSymbols =
 			useSettingsStore?.getState?.()?.stockSymbols ?? defaultStockSymbols;
+		const fixedIndexSymbols =
+			useSettingsStore?.getState?.()?.fixedIndexSymbols ?? [];
+		const allStockSymbols = [
+			...new Set([...fixedIndexSymbols, ...stockSymbols]),
+		];
 
 		const jobs = [];
 		if (visibleWidgets.includes("weather"))
@@ -1997,7 +2006,7 @@ export const useDataStore = create((set, get) => ({
 		if (visibleWidgets.includes("stocks"))
 			jobs.push(
 				store
-					.fetchStocks(stockSymbols, userId, shouldForceRefresh)
+					.fetchStocks(allStockSymbols, userId, shouldForceRefresh)
 					.catch((e) =>
 						console.warn("fetchStocks failed in fetchAll:", e?.message),
 					),

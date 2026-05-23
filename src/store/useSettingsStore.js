@@ -97,6 +97,16 @@ export const useSettingsStore = create((set, get) => ({
 		"SP500",
 		"USDKRW",
 	]),
+	fixedIndexSymbols: load("mb_fixed_index_symbols", [
+		"SP500",
+		"KOSPI",
+		"NASDAQ",
+		"USDKRW",
+		"VIX",
+		"CRUDE",
+		"DXY",
+		"DJI",
+	]),
 	showSettings: false,
 	settingsTab: "widgets",
 	tone: load("mb_tone", "friendly"),
@@ -272,6 +282,10 @@ export const useSettingsStore = create((set, get) => ({
 		save("mb_stock_symbols", symbols);
 		syncSettings({ stock_symbols: symbols });
 		notifySaved();
+	},
+	setFixedIndexSymbols: (symbols) => {
+		set({ fixedIndexSymbols: symbols });
+		save("mb_fixed_index_symbols", symbols);
 	},
 
 	// Data Priority (REQ-US-006)

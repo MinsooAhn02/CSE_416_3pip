@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { TrendingUp, RefreshCw, X, GripVertical, Plus } from "lucide-react";
@@ -11,8 +11,10 @@ import { useFontSize } from "../../hooks/useFontSize";
 import { useSettingsStore } from "../../store/useSettingsStore";
 import WidgetCard from "../common/WidgetCard";
 
-const WIDGET_LIMIT = 6;
 const MODAL_GRID_COLUMNS = 4;
+const WIDGET_FIXED_VISIBLE = 2;
+const WIDGET_USER_VISIBLE = 4;
+
 const SYMBOL_ALIAS_MAP = {
 	KOSPI: "KOSPI",
 	KS11: "KOSPI",
@@ -30,6 +32,18 @@ const SYMBOL_ALIAS_MAP = {
 	USDKRW: "USDKRW",
 	"USD/KRW": "USDKRW",
 	"USD-KRW": "USDKRW",
+	VIX: "VIX",
+	"^VIX": "VIX",
+	CRUDE: "CRUDE",
+	USOIL: "CRUDE",
+	WTI: "CRUDE",
+	DXY: "DXY",
+	"^DXY": "DXY",
+	"DX-Y.NYB": "DXY",
+	"DX=F": "DXY",
+	DJI: "DJI",
+	"^DJI": "DJI",
+	DJIA: "DJI",
 };
 
 const normalizeWidgetSymbol = (value) => {
@@ -52,17 +66,24 @@ const normalizeWidgetSymbols = (symbols) =>
 const getStockKey = (stock) =>
 	normalizeWidgetSymbol(stock?.symbol ?? stock?.name ?? "");
 
-const getStockNumericValue = (stock) => {
-	const raw = stock?.value ?? stock?.price;
-	if (typeof raw === "number") return Number.isFinite(raw) ? raw : 0;
-	if (typeof raw !== "string") return 0;
-	const parsed = Number(raw.replace(/[^0-9.\-]/g, ""));
-	return Number.isFinite(parsed) ? parsed : 0;
+const CURRENCY_SYMBOL = { USD: "$", KRW: "₩", JPY: "¥", EUR: "€", GBP: "£", CNY: "¥", HKD: "HK$" };
+const LEGACY_INDEX_SYMBOLS = new Set(["KOSPI", "NASDAQ", "SP500", "VIX", "DXY", "DJI"]);
+const LEGACY_RATE_SYMBOLS = new Set(["USDKRW"]);
+
+const getCurrency = (s) => {
+	if (s?.type === "index") return "Index";
+	if (s?.type === "currency") return "Rate";
+	if (s?.currency && CURRENCY_SYMBOL[s.currency]) return s.currency;
+	const sym = String(s?.symbol ?? "").toUpperCase();
+	if (LEGACY_INDEX_SYMBOLS.has(sym)) return "Index";
+	if (LEGACY_RATE_SYMBOLS.has(sym)) return "Rate";
+	if (String(s?.name ?? "").includes("KRW")) return "KRW";
+	return "USD";
 };
 
 const StockCard = ({ s, isDark, secondaryBgCls, bodyStyle }) => {
 	const cur = getCurrency(s);
-	const curSymbol = cur === "KRW" ? "₩" : cur === "USD" ? "$" : "";
+	const curSymbol = CURRENCY_SYMBOL[cur] ?? "";
 	return (
 		<div className={`p-3 rounded-xl ${secondaryBgCls}`}>
 			<div className="flex justify-between items-center mb-1">
@@ -89,17 +110,15 @@ const StockCard = ({ s, isDark, secondaryBgCls, bodyStyle }) => {
 	);
 };
 
-const CURRENCY_MAP = {
-	KOSPI: "Index",
-	NASDAQ: "Index",
-	SP500: "Index",
-	USDKRW: "Rate",
-};
-const getCurrency = (s) =>
-	CURRENCY_MAP[s.symbol] ?? (String(s.name ?? "").includes("KRW") ? "KRW" : "USD");
+const PlaceholderCard = ({ secondaryBgCls }) => (
+	<div className={`p-3 rounded-xl ${secondaryBgCls} animate-pulse`}>
+		<div className="h-3 rounded bg-white/10 mb-2 w-2/3"></div>
+		<div className="h-6 rounded bg-white/10 w-1/2"></div>
+	</div>
+);
 
 const StocksWidget = () => {
-	const { isDark, hoverCls, secondaryBgCls, borderCls } = useTheme();
+	const { isDark, hoverCls, secondaryBgCls } = useTheme();
 	const { body: bodyStyle } = useFontSize();
 	const { t } = useTranslation();
 	const [showModal, setShowModal] = useState(false);
@@ -108,7 +127,6 @@ const StocksWidget = () => {
 	const [validating, setValidating] = useState(false);
 	const [validationError, setValidationError] = useState(null);
 	const stocks = useDataStore((s) => s.stocks);
-	const [orderedStocks, setOrderedStocks] = useState([]);
 	const loading = useDataStore((s) => s.loading.stocks);
 	const error = useDataStore((s) => s.errors.stocks);
 	const apiStatus = useDataStore((s) => s.apiStatus.stocks ?? null);
@@ -117,6 +135,8 @@ const StocksWidget = () => {
 	const getLastUpdatedMinutes = useDataStore((s) => s.getLastUpdatedMinutes);
 	const stockSymbols = useSettingsStore((s) => s.stockSymbols);
 	const setStockSymbols = useSettingsStore((s) => s.setStockSymbols);
+	const fixedIndexSymbols = useSettingsStore((s) => s.fixedIndexSymbols);
+	const setFixedIndexSymbols = useSettingsStore((s) => s.setFixedIndexSymbols);
 
 	const formatLastUpdated = (minutes) => {
 		if (minutes == null) return t("common.before_refresh");
@@ -125,57 +145,82 @@ const StocksWidget = () => {
 	};
 
 	const lastUpdatedText = formatLastUpdated(getLastUpdatedMinutes("stocks"));
+
 	const normalizedStockSymbols = useMemo(
 		() => normalizeWidgetSymbols(stockSymbols),
 		[stockSymbols],
 	);
+
+	const allSymbols = useMemo(
+		() => [...new Set([...fixedIndexSymbols, ...normalizedStockSymbols])],
+		[fixedIndexSymbols, normalizedStockSymbols],
+	);
+
+	const stocksBySymbol = useMemo(() => {
+		const map = new Map();
+		(stocks || []).forEach((item) => {
+			const key = getStockKey(item);
+			if (key) map.set(key, item);
+		});
+		return map;
+	}, [stocks]);
+
+	const orderedFixedIndices = useMemo(
+		() =>
+			fixedIndexSymbols
+				.map((sym) => stocksBySymbol.get(normalizeWidgetSymbol(sym)) ?? null)
+				.filter(Boolean),
+		[fixedIndexSymbols, stocksBySymbol],
+	);
+
+	const orderedUserStocks = useMemo(
+		() =>
+			normalizedStockSymbols
+				.map((sym) => stocksBySymbol.get(sym) ?? null)
+				.filter(Boolean),
+		[normalizedStockSymbols, stocksBySymbol],
+	);
+
+	const fixedIndexRows = useMemo(() => {
+		const rows = [];
+		for (let i = 0; i < orderedFixedIndices.length; i += MODAL_GRID_COLUMNS) {
+			rows.push(orderedFixedIndices.slice(i, i + MODAL_GRID_COLUMNS));
+		}
+		return rows;
+	}, [orderedFixedIndices]);
+
+	const userStockRows = useMemo(() => {
+		const rows = [];
+		for (let i = 0; i < orderedUserStocks.length; i += MODAL_GRID_COLUMNS) {
+			rows.push(orderedUserStocks.slice(i, i + MODAL_GRID_COLUMNS));
+		}
+		return rows;
+	}, [orderedUserStocks]);
+
 	const selectedSet = useMemo(
 		() => new Set(normalizedStockSymbols),
 		[normalizedStockSymbols],
 	);
 
-	const visibleStocks = orderedStocks.slice(0, WIDGET_LIMIT);
-	const totalStockCount = Math.max(
-		orderedStocks.length,
-		normalizedStockSymbols.length,
+	const fixedSet = useMemo(
+		() => new Set(fixedIndexSymbols.map((s) => normalizeWidgetSymbol(s))),
+		[fixedIndexSymbols],
 	);
-	const hasMore = totalStockCount > WIDGET_LIMIT;
-	const modalStockRows = useMemo(() => {
-		const rows = [];
-		for (let i = 0; i < orderedStocks.length; i += MODAL_GRID_COLUMNS) {
-			rows.push(orderedStocks.slice(i, i + MODAL_GRID_COLUMNS));
-		}
-		return rows;
-	}, [orderedStocks]);
 
-	// Sync orderedStocks from store (preserves drag order until next fetch)
+	const didInitialFetch = useRef(false);
 	useEffect(() => {
-		setOrderedStocks((prev) => {
-			const prevByKey = new Map(
-				(prev || [])
-					.map((item) => [getStockKey(item), item])
-					.filter(([key]) => Boolean(key)),
-			);
-			return (stocks || []).map((item) => {
-				const key = getStockKey(item);
-				const prevItem = prevByKey.get(key);
-				if (!prevItem) return item;
-				return getStockNumericValue(item) > 0 ? item : prevItem;
-			});
-		});
-	}, [stocks]);
+		if (didInitialFetch.current || allSymbols.length === 0) return;
+		didInitialFetch.current = true;
+		void fetchStocks(allSymbols, undefined, false);
+	}, [allSymbols, fetchStocks]);
 
+	const prevUserSymbols = useRef(normalizedStockSymbols);
 	useEffect(() => {
-		if (normalizedStockSymbols.length === 0) return;
-		const isSameOrderAndValue =
-			normalizedStockSymbols.length === stockSymbols.length &&
-			normalizedStockSymbols.every((s, i) => s === stockSymbols[i]);
-		if (isSameOrderAndValue) return;
-		setStockSymbols(normalizedStockSymbols);
-		void fetchStocks(normalizedStockSymbols, undefined, true);
-	}, [normalizedStockSymbols, stockSymbols, setStockSymbols, fetchStocks]);
+		if (prevUserSymbols.current === normalizedStockSymbols) return;
+		prevUserSymbols.current = normalizedStockSymbols;
+		void fetchStocks(allSymbols, undefined, true);
+	}, [normalizedStockSymbols, allSymbols, fetchStocks]);
 
-	// Prevent body scroll when modal is open
 	useEffect(() => {
 		if (showModal) {
 			const scrollbarWidth =
@@ -189,42 +234,66 @@ const StocksWidget = () => {
 		};
 	}, [showModal]);
 
-	const onDragEnd = (result) => {
+	const onFixedDragEnd = (result) => {
 		if (!result.destination) return;
-		const parseRowIndex = (droppableId) => {
-			const prefix = "stocks-modal-row-";
-			if (!droppableId.startsWith(prefix)) return 0;
-			const value = Number(droppableId.slice(prefix.length));
-			return Number.isFinite(value) ? value : 0;
+		const parseRowIndex = (id) => {
+			const prefix = "stocks-fixed-row-";
+			if (!id.startsWith(prefix)) return 0;
+			const v = Number(id.slice(prefix.length));
+			return Number.isFinite(v) ? v : 0;
 		};
-		const src =
-			parseRowIndex(result.source.droppableId) * MODAL_GRID_COLUMNS +
-			result.source.index;
-		const dst =
-			parseRowIndex(result.destination.droppableId) * MODAL_GRID_COLUMNS +
-			result.destination.index;
+		const src = parseRowIndex(result.source.droppableId) * MODAL_GRID_COLUMNS + result.source.index;
+		const dst = parseRowIndex(result.destination.droppableId) * MODAL_GRID_COLUMNS + result.destination.index;
 		if (src === dst) return;
-		const newStocks = Array.from(orderedStocks);
-		const [moved] = newStocks.splice(src, 1);
-		newStocks.splice(dst, 0, moved);
-		setOrderedStocks(newStocks);
-		const newSymbols = normalizeWidgetSymbols(
-			newStocks.map((s) => s?.symbol ?? s?.name),
-		);
-		if (newSymbols.length > 0) setStockSymbols(newSymbols);
+		const next = Array.from(fixedIndexSymbols);
+		const [moved] = next.splice(src, 1);
+		next.splice(dst, 0, moved);
+		setFixedIndexSymbols(next);
+	};
+
+	const onUserDragEnd = (result) => {
+		if (!result.destination) return;
+		const parseRowIndex = (id) => {
+			const prefix = "stocks-user-row-";
+			if (!id.startsWith(prefix)) return 0;
+			const v = Number(id.slice(prefix.length));
+			return Number.isFinite(v) ? v : 0;
+		};
+		const src = parseRowIndex(result.source.droppableId) * MODAL_GRID_COLUMNS + result.source.index;
+		const dst = parseRowIndex(result.destination.droppableId) * MODAL_GRID_COLUMNS + result.destination.index;
+		if (src === dst) return;
+		const next = Array.from(normalizedStockSymbols);
+		const [moved] = next.splice(src, 1);
+		next.splice(dst, 0, moved);
+		setStockSymbols(next);
 	};
 
 	const removeSymbol = async (symbol) => {
 		const normalized = normalizeWidgetSymbol(symbol);
 		const next = normalizedStockSymbols.filter((s) => s !== normalized);
-		if (next.length === 0) return;
 		setStockSymbols(next);
-		await fetchStocks(next, undefined, true);
+		if (next.length > 0) await fetchStocks([...fixedIndexSymbols, ...next], undefined, true);
+	};
+
+	const handleConfirmDelete = async () => {
+		const symbol = confirmDelete.symbol;
+		setConfirmDelete({ open: false, symbol: null });
+		if (!symbol) return;
+		try {
+			await removeSymbol(symbol);
+		} catch (err) {
+			console.warn("Failed to remove stock:", err);
+		}
 	};
 
 	const addCustomSymbol = async () => {
 		const symbol = normalizeWidgetSymbol(customSymbol);
 		if (!symbol) return;
+		if (fixedSet.has(symbol)) {
+			setCustomSymbol("");
+			setValidationError(null);
+			return;
+		}
 		if (selectedSet.has(symbol)) {
 			setCustomSymbol("");
 			setValidationError(null);
@@ -241,8 +310,12 @@ const StocksWidget = () => {
 		const next = [...normalizedStockSymbols, symbol];
 		setStockSymbols(next);
 		setCustomSymbol("");
-		await fetchStocks(next, undefined, true);
+		await fetchStocks([...fixedIndexSymbols, ...next], undefined, true);
 	};
+
+	const visibleFixed = orderedFixedIndices.slice(0, WIDGET_FIXED_VISIBLE);
+	const visibleUser = orderedUserStocks.slice(0, WIDGET_USER_VISIBLE);
+	const hasMoreUser = orderedUserStocks.length > WIDGET_USER_VISIBLE;
 
 	return (
 		<>
@@ -251,7 +324,7 @@ const StocksWidget = () => {
 				icon={TrendingUp}
 				widgetId="stocks"
 				headerMeta={lastUpdatedText}
-				onRefresh={() => fetchStocks(normalizedStockSymbols, undefined, true)}
+				onRefresh={() => fetchStocks(allSymbols, undefined, true)}
 				refreshing={!!loading}
 				refreshIcon={RefreshCw}
 				apiStatus={apiStatus}
@@ -267,14 +340,33 @@ const StocksWidget = () => {
 					</button>
 				</div>
 
-				{loading ? (
+				{loading && orderedFixedIndices.length === 0 ? (
 					<p className="text-sm opacity-60">{t("widgets.stocks.loading")}</p>
-				) : visibleStocks.length > 0 ? (
+				) : (
 					<>
+						{/* Top 2 fixed index slots */}
 						<div className="grid grid-cols-2 gap-2">
-							{visibleStocks.map((s, i) => (
+							{Array.from({ length: WIDGET_FIXED_VISIBLE }).map((_, i) =>
+								visibleFixed[i] ? (
+									<StockCard
+										key={visibleFixed[i].symbol ?? i}
+										s={visibleFixed[i]}
+										isDark={isDark}
+										secondaryBgCls={secondaryBgCls}
+										bodyStyle={bodyStyle}
+									/>
+								) : (
+									<PlaceholderCard key={`ph-${i}`} secondaryBgCls={secondaryBgCls} />
+								),
+							)}
+						</div>
+						{/* Separator between fixed indices and user stocks */}
+						<hr className={`my-2 ${isDark ? "border-white/10" : "border-black/10"}`} />
+						{/* User stock slots */}
+						<div className="grid grid-cols-2 gap-2">
+							{visibleUser.map((s, i) => (
 								<StockCard
-									key={i}
+									key={s.symbol ?? i}
 									s={s}
 									isDark={isDark}
 									secondaryBgCls={secondaryBgCls}
@@ -282,23 +374,17 @@ const StocksWidget = () => {
 								/>
 							))}
 						</div>
-						{hasMore && (
+						{hasMoreUser && (
 							<button
 								onClick={() => setShowModal(true)}
 								className={`mt-2 w-full text-xs py-1.5 rounded-lg ${hoverCls} opacity-70`}
 							>
 								{t("common.view_more", {
-									count: Math.max(totalStockCount - WIDGET_LIMIT, 0),
+									count: orderedUserStocks.length - WIDGET_USER_VISIBLE,
 								})}
 							</button>
 						)}
 					</>
-				) : error ? (
-					<p className="text-[11px] text-red-400">{error}</p>
-				) : (
-					<p className="text-[11px] text-red-400">
-						{t("widgets.stocks.no_data")}
-					</p>
 				)}
 			</WidgetCard>
 
@@ -330,6 +416,7 @@ const StocksWidget = () => {
 										}`}
 									onClick={(e) => e.stopPropagation()}
 								>
+									{/* Modal header */}
 									<div
 										className={`flex items-center justify-between p-4 border-b ${
 											isDark
@@ -354,152 +441,272 @@ const StocksWidget = () => {
 											<X size={18} />
 										</button>
 									</div>
-									{/* Ticker input */}
-									<div className={`flex-shrink-0 px-4 py-3 border-b ${isDark ? "border-morning-dark-hover" : "border-morning-light-hover/30"}`}>
-										<div className="flex items-center gap-2">
-											<input
-												type="text"
-												value={customSymbol}
-												onChange={(e) => {
-													setCustomSymbol(e.target.value);
-													setValidationError(null);
-												}}
-												onKeyDown={(e) => {
-													if (e.key === "Enter") {
-														e.preventDefault();
-														void addCustomSymbol();
-													}
-												}}
-												placeholder={t("widgets.stocks.custom_input")}
-												className={`flex-grow text-xs rounded-md px-2 py-1.5 border outline-none ${
-													validationError
-														? "border-red-400"
-														: isDark
-															? "bg-white/5 border-white/20"
-															: "bg-white border-gray-300"
-												}`}
-											/>
-											<button
-												onClick={() => void addCustomSymbol()}
-												disabled={validating}
-												className="text-xs px-3 py-1.5 rounded-md border border-blue-400 text-blue-400 disabled:opacity-50 whitespace-nowrap"
-											>
-												{validating ? "..." : t("common.add")}
-											</button>
-										</div>
-										{validationError && (
-											<p className="text-[10px] text-red-400 mt-1">{validationError}</p>
-										)}
-									</div>
 
 									<div className="flex-1 overflow-y-auto p-4">
-										<p className="text-[10px] mb-3 opacity-40 flex items-center gap-1">
-											<GripVertical size={10} />
-											{t("widgets.stocks.drag_to_reorder")}
-										</p>
-										<DragDropContext onDragEnd={onDragEnd}>
-											<div className="overflow-auto pb-1">
-												<div className="space-y-2 min-w-[900px]">
-												{modalStockRows.map((row, rowIndex) => (
-													<Droppable
-														key={`stocks-modal-row-${rowIndex}`}
-														droppableId={`stocks-modal-row-${rowIndex}`}
-														direction="horizontal"
-														type="stocks-modal-grid"
-													>
-														{(provided, dropSnapshot) => (
-															<div
-																ref={provided.innerRef}
-																{...provided.droppableProps}
-																className={`grid grid-cols-4 gap-2 rounded-xl ${
-																	dropSnapshot.isDraggingOver
-																		? "bg-blue-500/5"
-																		: ""
-																}`}
+										{/* Fixed indices section */}
+										<div className="mb-1">
+											<p className="text-[11px] font-semibold opacity-60 uppercase tracking-wider mb-1">
+												Major Indices
+											</p>
+											<p className="text-[10px] mb-3 opacity-40 flex items-center gap-1">
+												<GripVertical size={10} />
+												{t("widgets.stocks.drag_to_reorder")}
+											</p>
+											<DragDropContext onDragEnd={onFixedDragEnd}>
+												<div className="overflow-auto pb-1">
+													<div className="space-y-2 min-w-[900px]">
+														{fixedIndexRows.map((row, rowIndex) => (
+															<Droppable
+																key={`stocks-fixed-row-${rowIndex}`}
+																droppableId={`stocks-fixed-row-${rowIndex}`}
+																direction="horizontal"
+																type="stocks-fixed-grid"
 															>
-																{row.map((s, colIndex) => {
-																	const globalIndex =
-																		rowIndex * MODAL_GRID_COLUMNS + colIndex;
-																	const stableId = s.symbol ?? s.name ?? globalIndex;
-																	return (
-																		<Draggable
-																			key={stableId}
-																			draggableId={`stock-${stableId}`}
-																			index={colIndex}
-																		>
-																			{(dragProvided, snapshot) => (
-																				<div
-																					ref={dragProvided.innerRef}
-																					{...dragProvided.draggableProps}
-																					{...dragProvided.dragHandleProps}
-																					style={{
-																						...dragProvided.draggableProps.style,
-																						...(snapshot.isDropAnimating
-																							? {
-																									transitionDuration: "0.001s",
-																									transitionTimingFunction: "linear",
-																								}
-																							: {}),
-																						...(snapshot.isDragging
-																							? { zIndex: 10001 }
-																							: {}),
-																					}}
-																					className={`relative p-3 rounded-xl cursor-grab active:cursor-grabbing select-none min-h-[74px] ${secondaryBgCls} ${
-																						snapshot.isDragging
-																							? "shadow-xl ring-1 ring-blue-400/50"
-																							: ""
-																					}`}
+																{(provided, dropSnapshot) => (
+																	<div
+																		ref={provided.innerRef}
+																		{...provided.droppableProps}
+																		className={`grid grid-cols-4 gap-2 rounded-xl ${
+																			dropSnapshot.isDraggingOver
+																				? "bg-blue-500/5"
+																				: ""
+																		}`}
+																	>
+																		{row.map((s, colIndex) => {
+																			const stableId = s?.symbol ?? colIndex;
+																			return (
+																				<Draggable
+																					key={stableId}
+																					draggableId={`fixed-${stableId}`}
+																					index={colIndex}
 																				>
-																					{/* X delete button */}
-																					<button
-																						onMouseDown={(e) => e.stopPropagation()}
-																						onPointerDown={(e) => e.stopPropagation()}
-																						onClick={(e) => {
-																							e.stopPropagation();
-																							setConfirmDelete({ open: true, symbol: s.symbol ?? s.name });
-																						}}
-																						className={`absolute top-1.5 right-1.5 p-0.5 rounded-full opacity-30 hover:opacity-100 transition-opacity ${isDark ? "hover:bg-red-500/20" : "hover:bg-red-500/10"}`}
-																					>
-																						<X size={11} />
-																					</button>
-																					<GripVertical
-																						size={11}
-																						className="absolute bottom-2 right-2 opacity-20 pointer-events-none"
-																					/>
-																					<div className="flex justify-between items-center mb-1 pr-3">
-																						<span
-																							className={`text-[10px] truncate ${isDark ? "text-gray-400" : "text-slate-500"}`}
+																					{(dragProvided, snapshot) => (
+																						<div
+																							ref={dragProvided.innerRef}
+																							{...dragProvided.draggableProps}
+																							{...dragProvided.dragHandleProps}
+																							style={{
+																								...dragProvided.draggableProps.style,
+																								...(snapshot.isDropAnimating
+																									? {
+																											transitionDuration: "0.001s",
+																											transitionTimingFunction: "linear",
+																										}
+																									: {}),
+																								...(snapshot.isDragging
+																									? { zIndex: 10001 }
+																									: {}),
+																							}}
+																							className={`relative p-3 rounded-xl cursor-grab active:cursor-grabbing select-none min-h-[74px] ${secondaryBgCls} ${
+																								snapshot.isDragging
+																									? "shadow-xl ring-1 ring-blue-400/50"
+																									: ""
+																							}`}
 																						>
-																							{s.name}
-																						</span>
-																						<span
-																							className={`text-[10px] ${s.up ? "text-red-400" : "text-blue-400"}`}
-																						>
-																							{s.up ? "▲" : "▼"} {s.change}
-																						</span>
-																					</div>
-																					<p className="text-lg font-bold">
-																						{(() => {
-																							const cur = getCurrency(s);
-																							const sym = cur === "KRW" ? "₩" : cur === "USD" ? "$" : "";
-																							return sym ? (
-																								<><span className="text-[9px] font-normal opacity-50 mr-0.5">{sym}</span>{s.value}</>
-																							) : s.value;
-																						})()}
-																					</p>
-																				</div>
-																			)}
-																		</Draggable>
-																	);
-																})}
-																{provided.placeholder}
-															</div>
-														)}
-													</Droppable>
-												))}
+																							<GripVertical
+																								size={11}
+																								className="absolute bottom-2 right-2 opacity-20 pointer-events-none"
+																							/>
+																							<div className="flex justify-between items-center mb-1">
+																								<span
+																									className={`text-[10px] truncate ${isDark ? "text-gray-400" : "text-slate-500"}`}
+																								>
+																									{s?.name}
+																								</span>
+																								<span
+																									className={`text-[10px] ${s?.up ? "text-red-400" : "text-blue-400"}`}
+																								>
+																									{s?.up ? "▲" : "▼"} {s?.change}
+																								</span>
+																							</div>
+																							<p className="text-lg font-bold">
+																								{(() => {
+																									const sym = CURRENCY_SYMBOL[getCurrency(s)] ?? "";
+																									return sym ? (
+																										<><span className="text-[9px] font-normal opacity-50 mr-0.5">{sym}</span>{s?.value}</>
+																									) : s?.value;
+																								})()}
+																							</p>
+																						</div>
+																					)}
+																				</Draggable>
+																			);
+																		})}
+																		{provided.placeholder}
+																	</div>
+																)}
+															</Droppable>
+														))}
+													</div>
 												</div>
+											</DragDropContext>
+										</div>
+
+										{/* Separator */}
+										<hr
+											className={`my-4 ${
+												isDark
+													? "border-morning-dark-hover"
+													: "border-morning-light-hover/30"
+											}`}
+										/>
+
+										{/* User stocks section */}
+										<div>
+											<p className="text-[11px] font-semibold opacity-60 uppercase tracking-wider mb-1">
+												My Stocks
+											</p>
+											{/* Ticker input */}
+											<div className="flex-shrink-0 py-2 mb-3">
+												<div className="flex items-center gap-2">
+													<input
+														type="text"
+														value={customSymbol}
+														onChange={(e) => {
+															setCustomSymbol(e.target.value);
+															setValidationError(null);
+														}}
+														onKeyDown={(e) => {
+															if (e.key === "Enter") {
+																e.preventDefault();
+																void addCustomSymbol();
+															}
+														}}
+														placeholder={t("widgets.stocks.custom_input")}
+														className={`flex-grow text-xs rounded-md px-2 py-1.5 border outline-none ${
+															validationError
+																? "border-red-400"
+																: isDark
+																	? "bg-white/5 border-white/20"
+																	: "bg-white border-gray-300"
+														}`}
+													/>
+													<button
+														onClick={() => void addCustomSymbol()}
+														disabled={validating}
+														className="text-xs px-3 py-1.5 rounded-md border border-blue-400 text-blue-400 disabled:opacity-50 whitespace-nowrap"
+													>
+														{validating ? "..." : t("common.add")}
+													</button>
+												</div>
+												{validationError && (
+													<p className="text-[10px] text-red-400 mt-1">{validationError}</p>
+												)}
 											</div>
-										</DragDropContext>
+
+											{orderedUserStocks.length === 0 ? (
+												<p className="text-[11px] opacity-40 text-center py-4">
+													{t("widgets.stocks.no_data")}
+												</p>
+											) : (
+												<>
+													<p className="text-[10px] mb-3 opacity-40 flex items-center gap-1">
+														<GripVertical size={10} />
+														{t("widgets.stocks.drag_to_reorder")}
+													</p>
+													<DragDropContext onDragEnd={onUserDragEnd}>
+														<div className="overflow-auto pb-1">
+															<div className="space-y-2 min-w-[900px]">
+																{userStockRows.map((row, rowIndex) => (
+																	<Droppable
+																		key={`stocks-user-row-${rowIndex}`}
+																		droppableId={`stocks-user-row-${rowIndex}`}
+																		direction="horizontal"
+																		type="stocks-user-grid"
+																	>
+																		{(provided, dropSnapshot) => (
+																			<div
+																				ref={provided.innerRef}
+																				{...provided.droppableProps}
+																				className={`grid grid-cols-4 gap-2 rounded-xl ${
+																					dropSnapshot.isDraggingOver
+																						? "bg-blue-500/5"
+																						: ""
+																				}`}
+																			>
+																				{row.map((s, colIndex) => {
+																					const stableId = s?.symbol ?? s?.name ?? colIndex;
+																					return (
+																						<Draggable
+																							key={stableId}
+																							draggableId={`stock-${stableId}`}
+																							index={colIndex}
+																						>
+																							{(dragProvided, snapshot) => (
+																								<div
+																									ref={dragProvided.innerRef}
+																									{...dragProvided.draggableProps}
+																									{...dragProvided.dragHandleProps}
+																									style={{
+																										...dragProvided.draggableProps.style,
+																										...(snapshot.isDropAnimating
+																											? {
+																													transitionDuration: "0.001s",
+																													transitionTimingFunction: "linear",
+																												}
+																											: {}),
+																										...(snapshot.isDragging
+																											? { zIndex: 10001 }
+																											: {}),
+																									}}
+																									className={`relative p-3 rounded-xl cursor-grab active:cursor-grabbing select-none min-h-[74px] ${secondaryBgCls} ${
+																										snapshot.isDragging
+																											? "shadow-xl ring-1 ring-blue-400/50"
+																											: ""
+																									}`}
+																								>
+																									{/* X delete button */}
+																									<button
+																										onMouseDown={(e) => e.stopPropagation()}
+																										onPointerDown={(e) => e.stopPropagation()}
+																										onClick={(e) => {
+																											e.stopPropagation();
+																											setConfirmDelete({ open: true, symbol: s?.symbol ?? s?.name });
+																										}}
+																										className={`absolute top-1.5 right-1.5 p-0.5 rounded-full opacity-30 hover:opacity-100 transition-opacity ${isDark ? "hover:bg-red-500/20" : "hover:bg-red-500/10"}`}
+																									>
+																										<X size={11} />
+																									</button>
+																									<GripVertical
+																										size={11}
+																										className="absolute bottom-2 right-2 opacity-20 pointer-events-none"
+																									/>
+																									<div className="flex justify-between items-center mb-1 pr-3">
+																										<span
+																											className={`text-[10px] truncate ${isDark ? "text-gray-400" : "text-slate-500"}`}
+																										>
+																											{s?.name}
+																										</span>
+																										<span
+																											className={`text-[10px] ${s?.up ? "text-red-400" : "text-blue-400"}`}
+																										>
+																											{s?.up ? "▲" : "▼"} {s?.change}
+																										</span>
+																									</div>
+																									<p className="text-lg font-bold">
+																										{(() => {
+																											const sym = CURRENCY_SYMBOL[getCurrency(s)] ?? "";
+																											return sym ? (
+																												<><span className="text-[9px] font-normal opacity-50 mr-0.5">{sym}</span>{s?.value}</>
+																											) : s?.value;
+																										})()}
+																									</p>
+																								</div>
+																							)}
+																						</Draggable>
+																					);
+																				})}
+																				{provided.placeholder}
+																			</div>
+																		)}
+																	</Droppable>
+																))}
+															</div>
+														</div>
+													</DragDropContext>
+												</>
+											)}
+										</div>
 									</div>
 								</div>
 							</motion.div>
@@ -513,10 +720,7 @@ const StocksWidget = () => {
 				<ConfirmDialog
 					title={t("widgets.stocks.confirm_delete_title")}
 					message={t("widgets.stocks.confirm_delete_message", { symbol: confirmDelete.symbol })}
-					onConfirm={async () => {
-						await removeSymbol(confirmDelete.symbol);
-						setConfirmDelete({ open: false, symbol: null });
-					}}
+					onConfirm={handleConfirmDelete}
 					onCancel={() => setConfirmDelete({ open: false, symbol: null })}
 				/>
 			)}

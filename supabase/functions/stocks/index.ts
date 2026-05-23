@@ -42,6 +42,30 @@ function isTwelveError(payload: any) {
 	);
 }
 
+const normalizeTwelveDataType = (type: string | undefined, symbol: string): string => {
+	if (!type) {
+		if (symbol.includes("/")) return "currency";
+		return "unknown";
+	}
+	const t = type.toLowerCase();
+	if (t.includes("index")) return "index";
+	if (t.includes("physical currency") || t.includes("currency")) return "currency";
+	if (t.includes("etf")) return "etf";
+	if (t.includes("common stock") || t.includes("equity")) return "stock";
+	return "unknown";
+};
+
+const normalizeYahooType = (instrumentType: string | undefined): string => {
+	if (!instrumentType) return "unknown";
+	switch (instrumentType.toUpperCase()) {
+		case "INDEX":    return "index";
+		case "CURRENCY": return "currency";
+		case "ETF":      return "etf";
+		case "EQUITY":   return "stock";
+		default:         return "unknown";
+	}
+};
+
 const yahooSymbolMap: Record<string, string> = {
 	KS11: "^KS11",
 	IXIC: "^IXIC",
@@ -60,11 +84,13 @@ const yahooSymbolMap: Record<string, string> = {
 	"USD/KRW": "KRW=X",
 	"EUR/USD": "EURUSD=X",
 	"JPY/USD": "JPY=X",
+	USOIL: "CL=F",
+	DXY: "DX=F",
 };
 
 async function fetchYahooQuote(
 	alphaSymbol: string,
-): Promise<{ price: number; change: number; changePercent: string } | null> {
+): Promise<{ price: number; change: number; changePercent: string; quoteType?: string; currency?: string } | null> {
 	const primary = yahooSymbolMap[alphaSymbol] ?? alphaSymbol;
 	// For unknown symbols, also try the ^PREFIX variant that Yahoo uses for indices.
 	const candidates: string[] = [primary];
@@ -90,6 +116,8 @@ async function fetchYahooQuote(
 				price,
 				change: Number.isFinite(change) ? change : 0,
 				changePercent,
+				quoteType: quote?.quoteType,
+				currency: quote?.currency,
 			};
 		} catch {
 			continue;
@@ -101,7 +129,7 @@ async function fetchYahooQuote(
 // Yahoo Finance v8 chart endpoint — more reliably accessible than v7 for server-side calls.
 async function fetchYahooChart(
 	symbol: string,
-): Promise<{ price: number; change: number; changePercent: string } | null> {
+): Promise<{ price: number; change: number; changePercent: string; instrumentType?: string; currency?: string } | null> {
 	try {
 		const url = `https://query2.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=1d`;
 		const data = await fetchJsonWithTimeout(url, YAHOO_TIMEOUT_MS);
@@ -116,6 +144,8 @@ async function fetchYahooChart(
 			price,
 			change,
 			changePercent: toPercentString(changePercent),
+			instrumentType: meta?.instrumentType,
+			currency: meta?.currency,
 		};
 	} catch {
 		return null;
@@ -137,6 +167,8 @@ async function fetchStooqPrice(alphaSymbol: string): Promise<number | null> {
 		EWY: ["ewy.us"],
 		QQQ: ["qqq.us"],
 		SPY: ["spy.us"],
+		USOIL: ["usoil", "cl.f"],
+		DXY: ["dxy", "^dxy"],
 	};
 	const sym = alphaSymbol.toLowerCase();
 	const candidates = map[alphaSymbol]
@@ -198,6 +230,10 @@ serve(async (req) => {
 			NASDAQ: "IXIC",     // NASDAQ Composite
 			SP500:  "SPX",      // S&P 500 Index
 			USDKRW: "USD/KRW",
+			VIX:    "VIX",      // CBOE Volatility Index
+			CRUDE:  "USOIL",    // WTI Crude Oil
+			DXY:    "DXY",      // US Dollar Index
+			DJI:    "DJI",      // Dow Jones Industrial Average
 		};
 
 		const results = await Promise.all(
@@ -220,17 +256,29 @@ serve(async (req) => {
 										price,
 										change: Number.isFinite(change) ? change : 0,
 										changePercent: percent,
+										type: normalizeTwelveDataType(data?.type, tdSymbol),
+										currency: String(data?.currency ?? "KRW").toUpperCase(),
 									};
 								}
 							}
 						}
 						const yahooFx = await fetchYahooQuote(tdSymbol).catch(() => null);
 						if (yahooFx) {
-							return { symbol: sym, ...yahooFx };
+							return {
+								symbol: sym,
+								...yahooFx,
+								type: normalizeYahooType(yahooFx.quoteType),
+								currency: String(yahooFx.currency ?? "KRW").toUpperCase(),
+							};
 						}
 						const fxChart = await fetchYahooChart(tdSymbol).catch(() => null);
 						if (fxChart) {
-							return { symbol: sym, ...fxChart };
+							return {
+								symbol: sym,
+								...fxChart,
+								type: normalizeYahooType(fxChart.instrumentType),
+								currency: String(fxChart.currency ?? "KRW").toUpperCase(),
+							};
 						}
 						const fallback = await fetchUsdKrwFallback().catch(() => null);
 						if (fallback) {
@@ -239,9 +287,11 @@ serve(async (req) => {
 								price: fallback,
 								change: 0,
 								changePercent: "0%",
+								type: "currency",
+								currency: "KRW",
 							};
 						}
-						return { symbol: sym, ...ZERO };
+						return { symbol: sym, ...ZERO, type: "currency", currency: "KRW" };
 					}
 
 					// For stocks/ETFs (KS11 needs the exchange qualifier for TwelveData)
@@ -259,21 +309,38 @@ serve(async (req) => {
 									price,
 									change: Number.isFinite(change) ? change : 0,
 									changePercent: percent,
+									type: normalizeTwelveDataType(data?.type, tdSymbol),
+									currency: String(data?.currency ?? "").toUpperCase(),
 								};
 							}
 						}
 					}
 					const yahooQuote = await fetchYahooQuote(tdSymbol).catch(() => null);
 					if (yahooQuote) {
-						return { symbol: sym, ...yahooQuote };
+						return {
+							symbol: sym,
+							...yahooQuote,
+							type: normalizeYahooType(yahooQuote.quoteType),
+							currency: String(yahooQuote.currency ?? "").toUpperCase(),
+						};
 					}
 					// v8 chart — try both the mapped symbol (e.g. "^GSPC") and original (e.g. "SPX")
 					for (const c of [...new Set([tdSymbol, sym])]) {
 						const chart = await fetchYahooChart(c).catch(() => null);
-						if (chart) return { symbol: sym, ...chart };
+						if (chart) return {
+							symbol: sym,
+							...chart,
+							type: normalizeYahooType(chart.instrumentType),
+							currency: String(chart.currency ?? "").toUpperCase(),
+						};
 						if (!c.startsWith("^")) {
 							const chartCaret = await fetchYahooChart(`^${c}`).catch(() => null);
-							if (chartCaret) return { symbol: sym, ...chartCaret };
+							if (chartCaret) return {
+								symbol: sym,
+								...chartCaret,
+								type: normalizeYahooType(chartCaret.instrumentType),
+								currency: String(chartCaret.currency ?? "").toUpperCase(),
+							};
 						}
 					}
 					const fallbackPrice = await fetchStooqPrice(tdSymbol).catch(
@@ -285,11 +352,13 @@ serve(async (req) => {
 							price: fallbackPrice,
 							change: 0,
 							changePercent: "0%",
+							type: "unknown",
+							currency: "",
 						};
 					}
-					return { symbol: sym, ...ZERO };
+					return { symbol: sym, ...ZERO, type: "unknown", currency: "" };
 				} catch {
-					return { symbol: sym, ...ZERO };
+					return { symbol: sym, ...ZERO, type: "unknown", currency: "" };
 				}
 			}),
 		);

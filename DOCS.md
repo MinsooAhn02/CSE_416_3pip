@@ -230,7 +230,8 @@ Nine Zustand stores. All use localStorage for persistence unless noted.
 | `bgImage` | string \| null | localStorage |
 | `clockStyle` | `"digital"\|"analog"` | localStorage |
 | `tempUnit` | `"c"\|"f"` | localStorage |
-| `stockSymbols` | string[] | localStorage |
+| `stockSymbols` | string[] | localStorage | User-added custom tickers (default `["KOSPI","NASDAQ","SP500","USDKRW"]`). |
+| `fixedIndexSymbols` | string[] | localStorage | 8 hardcoded indices (`["SP500","KOSPI","NASDAQ","USDKRW","VIX","CRUDE","DXY","DJI"]`); user can drag-reorder in the modal but cannot add or remove. |
 | `tone` | `"friendly"\|"formal"\|"casual"` | localStorage |
 | `bLen` | `"short"\|"medium"\|"long"` | localStorage |
 | `priorityOrder` | string[] | localStorage |
@@ -477,14 +478,23 @@ Legacy `[MB_META]...[/MB_META]` task metadata is stripped on read; no longer wri
 
 #### StocksWidget
 
-- Data: `stocks [{symbol, name, value, change, up}]`
-- Widget body shows up to `WIDGET_LIMIT = 6`; "View More" → read-only `StocksViewAllModal`
-- **Unified modal** (+ icon): ticker input + DnD reorder grid (@hello-pangea/dnd) + X delete (with ConfirmDialog)
-- Index symbols (KOSPI, NASDAQ, SP500) show no currency symbol (`CURRENCY_MAP` value: `"Index"`)
-- **Edge Function fetch strategy:**
-  1. TwelveData (primary)
-  2. TwelveData failure or `price <= 0` → Stooq CSV fallback (custom symbol: `sym.us` → `sym`)
-  3. USD/KRW: Stooq failure → `open.er-api.com` fallback
+- Data: `stocks [{symbol, name, value, change, up, type?, currency?}]`
+- **Widget body layout** (`grid-cols-2`): top row = first 2 entries of `fixedIndexSymbols` (placeholder cards while loading); `<hr>` separator; bottom = up to 4 user stocks from `stockSymbols`. "View More" button surfaces the unified modal when user stocks exceed 4.
+- **Unified modal** (+ icon, two sections separated by `<hr>`):
+  - **Major Indices** — all 8 entries from `fixedIndexSymbols`; drag-to-reorder only (no add/delete; reorder persists to localStorage via `setFixedIndexSymbols`).
+  - **My Stocks** — ticker input (Enter or Add button), drag-to-reorder grid (@hello-pangea/dnd), X-to-delete with ConfirmDialog (optimistic dismiss — closes before the network call resolves).
+- **Currency/type detection** (`getCurrency`, priority order):
+  1. `s.type === "index"` → `"Index"` (no symbol prefix); `s.type === "currency"` → `"Rate"` (no symbol prefix)
+  2. `s.currency` code → `CURRENCY_SYMBOL` map (USD→`$`, KRW→`₩`, JPY→`¥`, EUR→`€`, GBP→`£`, CNY→`¥`, HKD→`HK$`)
+  3. Legacy fallback: `LEGACY_INDEX_SYMBOLS` set (KOSPI/NASDAQ/SP500/VIX/DXY/DJI), `LEGACY_RATE_SYMBOLS` set (USDKRW)
+  4. Name contains `"KRW"` → KRW; default → USD
+- **Ticker validation**: strict — `validateStockSymbol` returns true only when Edge response has `price > 0`. Garbage tickers (e.g. `KOSDAQ`, `ZZZZ`) → Edge returns `price: 0` → UI shows "Invalid ticker: {symbol}". Adding a symbol that is already a fixed index or already in `stockSymbols` silently clears the input.
+- **Fetch trigger**: widget mounts → `fetchStocks([...fixedIndexSymbols, ...normalizedStockSymbols])`; `fetchAll` in `useDataStore` unions the two lists; adding/removing user stocks triggers a forced refetch of the combined list.
+- **Edge Function fetch strategy** (`supabase/functions/stocks/index.ts`):
+  1. TwelveData (primary) — returns `type`, `currency` fields from Twelve Data JSON response
+  2. Yahoo Finance v7/v8 (secondary) — returns `quoteType`/`instrumentType` + `currency`
+  3. Stooq CSV fallback — no metadata, returns `type: "unknown", currency: ""`
+  4. USD/KRW exhausted → `open.er-api.com` fallback
 - ⚠️ After modifying `supabase/functions/stocks/index.ts`, redeploy manually via Supabase Dashboard
 
 #### HealthWidget
@@ -617,7 +627,7 @@ Legacy `[MB_META]...[/MB_META]` task metadata is stripped on read; no longer wri
 | Function | Endpoint | Auth | Input | Output |
 |----------|----------|------|-------|--------|
 | `weather` | `/functions/v1/weather` | — | `{lat, lon}` | `{temp, city, condition, humidity, precipitation, airQuality}` |
-| `stocks` | `/functions/v1/stocks` | — | `{symbols: string[]}` | `[{symbol, price, change, changePercent}]` |
+| `stocks` | `/functions/v1/stocks` | — | `{symbols: string[]}` | `[{symbol, price, change, changePercent, type, currency}]` — `type`: `"index"\|"stock"\|"etf"\|"currency"\|"unknown"`; `currency`: ISO code (e.g. `"USD"`, `"KRW"`) or `""`. Supported internal symbols: `KOSPI`, `NASDAQ`, `SP500`, `USDKRW`, `VIX`, `CRUDE` (WTI, → `USOIL`/`CL=F`), `DXY` (Dollar Index, → `DX=F` on Yahoo), `DJI`. Other tickers pass through to Twelve Data / Yahoo / Stooq as-is. |
 | `tavily` | `/functions/v1/tavily` | — | `{query, mode, max_results, location?, include_domains?}` | News: `{answer, results, location}` / Trends: `{trends, answer, results}` |
 | `groq` | `/functions/v1/groq` | — | `{system, prompt, model?, temperature?}` | `{text}` — `Content-Type: application/json; charset=utf-8` |
 | `events` 🔒 | `/functions/v1/events` | JWT | `{token, action?, ...}` | Google Calendar CRUD. `action`: `list` (default) / `create` / `update` / `delete` / `read` |
@@ -921,7 +931,7 @@ npx wrangler deploy
 | `NewsDetailModal` | File exists but unused — replaced by direct URL navigation |
 | Trends detail view | News/stocks "view all" modals implemented; trends left/right pagination unimplemented |
 | Diary PIN setup | PIN hashing + storage + verify done; PIN set/modify/recovery UI not yet exposed in settings |
-| Stocks Edge Function deploy | Local modification done; needs Supabase Dashboard manual deploy |
+| Stocks Edge Function deploy | Local modification done (type/currency metadata + validation fixes); needs Supabase Dashboard manual deploy |
 | `groq` Edge Function deploy | `charset=utf-8` header added; needs manual deploy |
 
 ---
