@@ -7,6 +7,7 @@ import { getInterestFingerprint, getTopInterestKeywords } from "../utils/interes
 import { useSettingsStore } from "./useSettingsStore";
 import { useAuthStore } from "./useAuthStore";
 import i18n from "../l10n/i18n";
+import { handleApiError } from "../utils/errorHandler";
 
 const DEBUG_FLOW = import.meta.env.VITE_DEBUG_FLOW === "1";
 const EDGE_TIMEOUT_MS = 25000;
@@ -73,11 +74,16 @@ const invokeEdgeDetailed = async (fnName, body = {}) => {
 
 		if (!res.ok) {
 			const text = await res.text().catch(() => "");
-			console.warn(`[edge] ${fnName} HTTP ${res.status}:`, text);
+			handleApiError(
+				{ message: `HTTP ${res.status}: ${text}` },
+				`edge:${fnName}`,
+				{ httpStatus: res.status },
+			);
 			return {
 				ok: false,
 				data: null,
 				error: `HTTP ${res.status}: ${text}`,
+				errorType: res.status >= 500 ? "http_5xx" : "http_4xx",
 				timedOut: false,
 				elapsedMs: Date.now() - startedAt,
 			};
@@ -89,26 +95,29 @@ const invokeEdgeDetailed = async (fnName, body = {}) => {
 			ok: true,
 			data,
 			error: null,
+			errorType: null,
 			timedOut: false,
 			elapsedMs: Date.now() - startedAt,
 		};
 	} catch (e) {
 		clearTimeout(timer);
 		if (e.name === "AbortError") {
-			console.warn(`[edge] ${fnName} timed out after ${EDGE_TIMEOUT_MS}ms`);
+			handleApiError(e, `edge:${fnName}`, { userVisible: true });
 			return {
 				ok: false,
 				data: null,
 				error: `timeout ${EDGE_TIMEOUT_MS}ms`,
+				errorType: "timeout",
 				timedOut: true,
 				elapsedMs: Date.now() - startedAt,
 			};
 		}
-		console.warn(`[edge] ${fnName} failed:`, e.message);
+		handleApiError(e, `edge:${fnName}`);
 		return {
 			ok: false,
 			data: null,
 			error: e.message || "Edge invoke failed",
+			errorType: "network",
 			timedOut: false,
 			elapsedMs: Date.now() - startedAt,
 		};
@@ -273,7 +282,7 @@ const readApiCache = async (cacheKey, userIdArg, forceRefresh = false) => {
 
 	if (error) {
 		if (error.code !== "PGRST116") {
-			console.warn(`api_cache read failed [${cacheKey}]:`, error.message);
+			handleApiError(error, `cache_read:${cacheKey}`);
 		}
 		return null;
 	}
@@ -355,7 +364,7 @@ const writeApiCache = async (cacheKey, payload, userIdArg, fetchedAtArg = null) 
 	});
 
 	if (error) {
-		console.warn(`api_cache write failed [${cacheKey}]:`, error.message);
+		handleApiError(error, `cache_write:${cacheKey}`);
 	}
 };
 
@@ -1186,7 +1195,7 @@ export const useDataStore = create((set, get) => ({
 			get().markFetched("weather");
 			get().setApiStatus("weather", "error");
 		} catch (e) {
-			console.warn("fetchWeather failed:", e?.message || e);
+			handleApiError(e, "fetchWeather");
 			set((s) => ({
 				errors: {
 					...s.errors,
@@ -1328,7 +1337,7 @@ export const useDataStore = create((set, get) => ({
 			get().markFetched("stocks");
 			get().setApiStatus("stocks", "error");
 		} catch (e) {
-			console.warn("fetchStocks failed:", e?.message || e);
+			handleApiError(e, "fetchStocks");
 
 			const fallbackRows = pickBestStockRowsForSymbols(
 				normalizedSymbols,
@@ -1493,7 +1502,7 @@ export const useDataStore = create((set, get) => ({
 						return;
 					}
 				} catch (e) {
-					console.warn("fetchTrends: news-derived trends failed:", e?.message);
+					handleApiError(e, "fetchTrends:derive");
 				}
 			}
 		}
@@ -1562,7 +1571,7 @@ export const useDataStore = create((set, get) => ({
 			get().markFetched("trends");
 			get().setApiStatus("trends", "error");
 		} catch (e) {
-			console.warn("fetchTrends failed:", e?.message || e);
+			handleApiError(e, "fetchTrends");
 			set((s) => ({
 				errors: {
 					...s.errors,
@@ -1726,7 +1735,7 @@ export const useDataStore = create((set, get) => ({
 							}));
 						}
 					} catch (e) {
-						console.warn("fetchNews: trends derivation failed:", e?.message);
+						handleApiError(e, "fetchNews:trends");
 					}
 				}
 
@@ -1765,7 +1774,7 @@ export const useDataStore = create((set, get) => ({
 			get().markFetched("news");
 			get().setApiStatus("news", "error");
 		} catch (e) {
-			console.warn("fetchNews failed:", e?.message || e);
+			handleApiError(e, "fetchNews");
 			set((s) => ({
 				errors: {
 					...s.errors,
@@ -1838,7 +1847,7 @@ export const useDataStore = create((set, get) => ({
 				get().markFetched("calendar");
 			}
 		} catch (e) {
-			console.warn("fetchCalendar failed:", e?.message || e);
+			handleApiError(e, "fetchCalendar");
 			set({ calEvents: cached("calendar", []) });
 			get().markFetched("calendar");
 		}
@@ -1892,7 +1901,7 @@ export const useDataStore = create((set, get) => ({
 				set({ tomorrowEvents: [] });
 			}
 		} catch (e) {
-			console.warn("fetchTomorrowCalendar failed:", e?.message || e);
+			handleApiError(e, "fetchTomorrowCalendar");
 			set({ tomorrowEvents: [] });
 		}
 	},
@@ -1972,7 +1981,7 @@ export const useDataStore = create((set, get) => ({
 				get().setApiStatus("health", "error");
 			}
 		} catch (e) {
-			console.warn("fetchHealth failed:", e?.message || e);
+			handleApiError(e, "fetchHealth");
 			set((s) => ({
 				errors: {
 					...s.errors,
@@ -2055,7 +2064,7 @@ export const useDataStore = create((set, get) => ({
 					];
 				}
 			} catch (dbErr) {
-				console.warn("[fetchAll] DB query failed, using defaults:", dbErr?.message);
+				handleApiError(dbErr, "fetchAll:db");
 			}
 		}
 
@@ -2081,7 +2090,7 @@ export const useDataStore = create((set, get) => ({
 				store
 					.fetchWeather(undefined, undefined, userId, shouldForceRefresh)
 					.catch((e) =>
-						console.warn("fetchWeather failed in fetchAll:", e?.message),
+						handleApiError(e, "fetchAll:weather"),
 					),
 			);
 		if (visibleWidgets.includes("stocks"))
@@ -2089,7 +2098,7 @@ export const useDataStore = create((set, get) => ({
 				store
 					.fetchStocks(allStockSymbols, userId, shouldForceRefresh)
 					.catch((e) =>
-						console.warn("fetchStocks failed in fetchAll:", e?.message),
+						handleApiError(e, "fetchAll:stocks"),
 					),
 			);
 		// news → trends 순서로 실행: fetchNews가 trends를 파생하면 Tavily 호출 1회 절약
@@ -2099,7 +2108,7 @@ export const useDataStore = create((set, get) => ({
 					.fetchNews(userId, shouldForceRefresh)
 					.then(() => store.fetchTrends(userId, shouldForceRefresh))
 					.catch((e) =>
-						console.warn("fetchNews/fetchTrends failed in fetchAll:", e?.message),
+						handleApiError(e, "fetchAll:news+trends"),
 					),
 			);
 		} else {
@@ -2108,7 +2117,7 @@ export const useDataStore = create((set, get) => ({
 					store
 						.fetchTrends(userId, shouldForceRefresh)
 						.catch((e) =>
-							console.warn("fetchTrends failed in fetchAll:", e?.message),
+							handleApiError(e, "fetchAll:trends"),
 						),
 				);
 			if (visibleWidgets.includes("news"))
@@ -2116,7 +2125,7 @@ export const useDataStore = create((set, get) => ({
 					store
 						.fetchNews(userId, shouldForceRefresh)
 						.catch((e) =>
-							console.warn("fetchNews failed in fetchAll:", e?.message),
+							handleApiError(e, "fetchAll:news"),
 						),
 				);
 		}
@@ -2125,7 +2134,7 @@ export const useDataStore = create((set, get) => ({
 				store
 					.fetchCalendar(userId, shouldForceRefresh)
 					.catch((e) =>
-						console.warn("fetchCalendar failed in fetchAll:", e?.message),
+						handleApiError(e, "fetchAll:calendar"),
 					),
 			);
 		}
@@ -2134,10 +2143,7 @@ export const useDataStore = create((set, get) => ({
 			store
 				.fetchTomorrowCalendar(userId, shouldForceRefresh)
 				.catch((e) =>
-					console.warn(
-						"fetchTomorrowCalendar failed in fetchAll:",
-						e?.message,
-					),
+					handleApiError(e, "fetchAll:tomorrow"),
 				),
 		);
 		if (visibleWidgets.includes("health"))
@@ -2145,7 +2151,7 @@ export const useDataStore = create((set, get) => ({
 				store
 					.fetchHealth(userId, shouldForceRefresh)
 					.catch((e) =>
-						console.warn("fetchHealth failed in fetchAll:", e?.message),
+						handleApiError(e, "fetchAll:health"),
 					),
 			);
 

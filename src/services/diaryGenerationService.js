@@ -7,6 +7,7 @@ import { formatLocalDate, isSameLocalDate, shiftDateString } from "../utils/date
 import { materializeTasksForDate } from "../utils/taskRecurrence";
 import { generateDiary } from "./aiService";
 import { mergeInterestLists } from "../utils/interests";
+import { handleApiError } from "../utils/errorHandler";
 
 export const resolveDiaryGenerationLanguage = () => {
 	const diaryLanguage = useSettingsStore.getState().diaryLanguage || "app";
@@ -38,10 +39,7 @@ const fetchCalendarEventsForDate = async (dateStr) => {
 				dateStr,
 			);
 		} catch (error) {
-			console.warn(
-				`[Diary] Failed to fetch calendar events for ${dateStr}:`,
-				error?.message || error,
-			);
+			handleApiError(error, `diary:calendar:${dateStr}`);
 		}
 	}
 
@@ -56,10 +54,7 @@ const fetchCompletedTasksForDate = async (dateStr) => {
 			await useGoogleCalendarStore.getState().fetchTasks({ skipLoading: true });
 			tasks = useGoogleCalendarStore.getState().tasks || [];
 		} catch (error) {
-			console.warn(
-				`[Diary] Failed to fetch tasks for ${dateStr}:`,
-				error?.message || error,
-			);
+			handleApiError(error, `diary:tasks:${dateStr}`);
 		}
 	}
 

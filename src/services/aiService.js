@@ -1,4 +1,5 @@
 import { getCurrentLanguage } from "../l10n/i18n";
+import { handleApiError } from "../utils/errorHandler";
 
 const getLangConfig = () => {
 	const raw = String(getCurrentLanguage() || "en").toLowerCase();
@@ -338,7 +339,11 @@ const invokeFunction = async (name, body) => {
 		clearTimeout(timer);
 		if (!res.ok) {
 			const text = await res.text().catch(() => "");
-			console.warn(`[ai] ${name} HTTP ${res.status}:`, text);
+			handleApiError(
+				{ message: `HTTP ${res.status}: ${text}` },
+				`ai:${name}`,
+				{ httpStatus: res.status },
+			);
 			return null;
 		}
 		const data = await res.json();
@@ -348,11 +353,7 @@ const invokeFunction = async (name, body) => {
 		return data;
 	} catch (e) {
 		clearTimeout(timer);
-		if (e.name === "AbortError") {
-			console.warn(`[ai] ${name} timed out after ${AI_TIMEOUT_MS}ms`);
-		} else {
-			console.warn(`[ai] ${name} failed:`, e.message);
-		}
+		handleApiError(e, `ai:${name}`);
 		return null;
 	}
 };
@@ -3926,7 +3927,7 @@ export async function generateAiTodo(calEvents = [], existingTodos = []) {
 			}));
 		}
 	} catch {
-		console.warn("AI Todo 파싱 실패:", data.text);
+		handleApiError({ message: "AI Todo parse failed" }, "ai:todo_parse");
 	}
 	return [];
 }
@@ -4519,7 +4520,7 @@ export async function generateDiary({
 			const summaryHasForeign = containsForeignScripts(summary, resolvedLanguage);
 
 			if (titleHasForeign || summaryHasForeign) {
-				console.warn(`[Diary] AI output contained foreign script (lang=${resolvedLanguage}); falling back.`);
+				handleApiError({ message: `foreign script in AI output (lang=${resolvedLanguage})` }, "ai:diary_script");
 				return buildDiaryTextForLanguage({
 					title: titleHasForeign ? fallbackTitle : title,
 					formattedDate,
@@ -4539,7 +4540,7 @@ export async function generateDiary({
 				language: resolvedLanguage,
 			});
 		} catch (error) {
-			console.warn("AI Diary 파싱 실패:", error?.message || error);
+			handleApiError(error, "ai:diary_parse");
 		}
 	}
 
