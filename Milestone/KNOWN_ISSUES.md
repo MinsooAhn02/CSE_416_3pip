@@ -10,22 +10,22 @@
 
 | # | GH# | Title | Severity | Suggested Owner | Source |
 |---|-----|-------|----------|-----------------|--------|
-| 1 | _to file_ | Smart Widget Korean mode: Latest Updates / Latest Coverage not loading | Major | Minsoo Ahn | todo.md |
-| 2 | _to file_ | Diary feedback rewrite not applying | Major | Sungmin Choo | todo.md |
-| 3 | _to file_ | Tavily token overuse — too many redundant calls | Major | Minsoo Ahn | todo.md |
-| 4 | _to file_ | Briefing "Today's latest info" shows generic definitions instead of personalized search | Major | Minsoo Ahn | todo.md |
-| 5 | _to file_ | Briefing "Smart keywords: No keyword info collected yet" — unclear when it populates | Minor | Sungmin Choo | todo.md |
-| 6 | _to file_ | Google integration toggle (연동 끄기) not working; consider removing the option | Minor | Sungmin Choo | todo.md |
-| 7 | _to file_ | Verify smart widget keywords are reflected in personalization context | Minor | Sungmin Choo | todo.md |
-| 8 | _to file_ | Google Calendar live API sync — frontend store still partially mock-based | Major | Sungmin Choo | DOCS.md §16 |
-| 9 | _to file_ | Google Fitness live API sync — Edge Function implemented but live token connection missing | Major | Minsoo Ahn | DOCS.md §16 |
-| 10 | _to file_ | Voice feature (`voiceOn`) — state exists but no UI or TTS implementation | Minor | Dahyun Kwon | DOCS.md §16 |
+| 1 | [#1](https://github.com/MinsooAhn02/CSE_416_3pip/issues/1) | Smart Widget Korean mode: Latest Updates / Latest Coverage not loading | Major | Minsoo Ahn | todo.md |
+| 2 | [#2](https://github.com/MinsooAhn02/CSE_416_3pip/issues/2) | Diary feedback rewrite not applying | Major | Sungmin Choo | todo.md |
+| 3 | [#3](https://github.com/MinsooAhn02/CSE_416_3pip/issues/3) | Tavily token overuse — too many redundant calls | Major | Minsoo Ahn | todo.md |
+| 4 | [#4](https://github.com/MinsooAhn02/CSE_416_3pip/issues/4) | Briefing "Today's latest info" shows generic definitions instead of personalized search | Major | Minsoo Ahn | todo.md |
+| 5 | [#5](https://github.com/MinsooAhn02/CSE_416_3pip/issues/5) | Briefing "Smart keywords: No keyword info collected yet" — unclear when it populates | Minor | Sungmin Choo | todo.md |
+| 6 | [#6](https://github.com/MinsooAhn02/CSE_416_3pip/issues/6) | Google integration toggle (연동 끄기) not working; consider removing the option | Minor | Sungmin Choo | todo.md |
+| 7 | [#7](https://github.com/MinsooAhn02/CSE_416_3pip/issues/7) | Verify smart widget keywords are reflected in personalization context | Minor | Sungmin Choo | todo.md |
+| 8 | [#8](https://github.com/MinsooAhn02/CSE_416_3pip/issues/8) | Google Calendar live API sync — frontend store still partially mock-based | Major | Sungmin Choo | DOCS.md §16 |
+| 9 | [#9](https://github.com/MinsooAhn02/CSE_416_3pip/issues/9) | Google Fitness live API sync — Edge Function implemented but live token connection missing | Major | Minsoo Ahn | DOCS.md §16 |
+| 10 | [#10](https://github.com/MinsooAhn02/CSE_416_3pip/issues/10) | Voice feature (`voiceOn`) — state exists but no UI or TTS implementation | Minor | Dahyun Kwon | DOCS.md §16 |
 | ~~11~~ | ✅ resolved | ~~`keyword_score_log` aggregation — internal batch logic unverified~~ — **Resolved 2026-05-22:** implementation verified in `src/services/personalizationService.js` (`VALID_CATEGORIES`, `SOURCE_WEIGHTS = {personal: 2, diary: 1}` matching spec). Do not file. | ~~Minor~~ | — | — |
-| 12 | _to file_ | `NewsDetailModal` file exists but unused — should be removed | Trivial | Dahyun Kwon | DOCS.md §16 |
-| 13 | _to file_ | Trends widget — no detail view / pagination implemented | Minor | Dahyun Kwon | DOCS.md §16 |
-| 14 | _to file_ | Diary PIN setup flow — save/modify in settings and self-verification question unimplemented | Major | Sungmin Choo | DOCS.md §16 |
-| 15 | _to file_ | Stocks Edge Function — local changes pending manual deploy via Supabase Dashboard | Major | Minsoo Ahn | DOCS.md §16 |
-| 16 | _to file_ | `groq` Edge Function — `charset=utf-8` header pending manual deploy | Minor | Minsoo Ahn | DOCS.md §16 |
+| 12 | [#11](https://github.com/MinsooAhn02/CSE_416_3pip/issues/11) | `NewsDetailModal` file exists but unused — should be removed | Trivial | Dahyun Kwon | DOCS.md §16 |
+| 13 | [#12](https://github.com/MinsooAhn02/CSE_416_3pip/issues/12) | Trends widget — no detail view / pagination implemented | Minor | Dahyun Kwon | DOCS.md §16 |
+| 14 | [#13](https://github.com/MinsooAhn02/CSE_416_3pip/issues/13) | Diary PIN setup flow — save/modify in settings and self-verification question unimplemented | Major | Sungmin Choo | DOCS.md §16 |
+| 15 | [#14](https://github.com/MinsooAhn02/CSE_416_3pip/issues/14) | Stocks Edge Function — local changes pending manual deploy via Supabase Dashboard | Major | Minsoo Ahn | DOCS.md §16 |
+| 16 | [#15](https://github.com/MinsooAhn02/CSE_416_3pip/issues/15) | `groq` Edge Function — `charset=utf-8` header pending manual deploy | Minor | Minsoo Ahn | DOCS.md §16 |
 
 ---
 

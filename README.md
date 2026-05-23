@@ -1,7 +1,7 @@
 # MorningBriefing.AI
 
-> **Live demo:** `<DEPLOYED_URL>` _(Cloudflare Workers; replace with actual deployment URL)_
-> **Repository:** `<REPO_URL>` _(replace with actual GitHub URL)_
+> **Live demo:** `https://morningbriefing.dksalstn0621.workers.dev` _(Cloudflare Workers; replace with actual deployment URL)_
+> **Repository:** `https://github.com/MinsooAhn02/CSE_416_3pip` _(replace with actual GitHub URL)_
 
 ## 🚩 Problem Statement
 
@@ -71,7 +71,7 @@ For full architecture details, see [DOCS.md](./DOCS.md) (English) or [DOCS_kor.m
 The latest stable code lives on the `main` branch.
 
 ```powershell
-git clone <REPO_URL>
+git clone https://github.com/MinsooAhn02/CSE_416_3pip
 cd CSE_416_3pip
 ```
 
@@ -220,15 +220,19 @@ This is expected. The app is in GCP **Testing** mode — full OAuth verification
 
 ## 🐞 Bug Reporting
 
+### Bug tracking history
+
+Bugs were tracked in **Jira** throughout development (Sprint 1–4, May 6–27, 2026). Issues were migrated to GitHub Issues on 2026-05-23 to comply with the CSE 416 Milestone 4 submission format. The original Jira board remains the live source of truth for sprint history: [Jira Scrum Board](https://stonybrook-team-3pip.atlassian.net/jira/software/projects/SCRUM/boards/1). See GitHub [issue #16](https://github.com/MinsooAhn02/CSE_416_3pip/issues/16) for the full migration notice including original discovery dates.
+
 ### Where to find open bugs
 
-Open issues are tracked in the **GitHub Issues** tab of this repository: `<REPO_URL>/issues`
+Open issues are tracked in the **GitHub Issues** tab of this repository: `https://github.com/MinsooAhn02/CSE_416_3pip/issues`
 
 Browse all open bugs there to see what's known. If your issue matches an existing one, please add a comment with reproduction details rather than filing a duplicate.
 
 ### How to report a new bug
 
-1. Go to `<REPO_URL>/issues/new`
+1. Go to `https://github.com/MinsooAhn02/CSE_416_3pip/issues/new`
 2. Use the title format: `[BUG] <short description>`
 3. Include:
    - **Steps to reproduce** (numbered list)

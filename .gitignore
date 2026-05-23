@@ -10,7 +10,7 @@ dist/
 package-lock.json
 .package-lock.json
 .vite/
-CHANGELOG.md
+# CHANGELOG.md
 claude.md
 .claude/
 .claude-ignore

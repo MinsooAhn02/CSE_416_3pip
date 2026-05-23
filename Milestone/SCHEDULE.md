@@ -62,7 +62,7 @@
 |-----|-------|------|--------|---------------------------|
 | SCRUM-26 | Dahyun Kwon | Final UI/UX audit and resolution of front-end design inconsistencies | 🟡 In Progress | Smart Widget section title fix (commit `a288d8f`), Smart Widget fashion search tuning (commit `f0e2649`), Korean hardcoding cleanup (commit `56b8a3f`) all landed in Sprint 4 so far. Remaining: full audit pass + minor polish items. |
 | SCRUM-27 | Sungmin Choo | Database indexing for performance; finalize secure data isolation (RLS) audits | 🟡 In Progress | Indexes already in place on `keyword_score_log(user_id, logged_date)` + `user_qa(user_id, asked_date)`. RLS policies on all user-scoped tables already verified. Remaining: final audit checklist + any additional indexes identified during load testing. |
-| SCRUM-28 | Minsoo Ahn | ~~Execute Vercel deployment~~ → **Execute Cloudflare Workers deployment**; set up monitoring for API usage and maintenance | ✅ Deployment Done · 🟡 Monitoring polish ongoing | **Cloudflare Workers deployment live** (`wrangler.jsonc` configured; build + deploy pipeline working — commits `934df36` + `9bf683a`). Live URL: `<DEPLOYED_URL>` _(team to provide)_. Monitoring: Supabase Dashboard logs + Cloudflare Analytics in use; dedicated alerting dashboard pending. |
+| SCRUM-28 | Minsoo Ahn | ~~Execute Vercel deployment~~ → **Execute Cloudflare Workers deployment**; set up monitoring for API usage and maintenance | ✅ Deployment Done · 🟡 Monitoring polish ongoing | **Cloudflare Workers deployment live** (`wrangler.jsonc` configured; build + deploy pipeline working — commits `934df36` + `9bf683a`). Live URL: `https://morningbriefing.dksalstn0621.workers.dev` _(team to provide)_. Monitoring: Supabase Dashboard logs + Cloudflare Analytics in use; dedicated alerting dashboard pending. |
 
 ---
 
@@ -118,7 +118,7 @@ The team also shipped the following work that was not in the May 1st plan but ma
 1. **Complete Sprint 4 by May 27**
    - SCRUM-26: finish UI/UX audit checklist
    - SCRUM-27: final RLS audit pass + any additional indexes
-   - SCRUM-28: replace `<DEPLOYED_URL>` placeholder once team confirms the live link
+   - SCRUM-28: replace `https://morningbriefing.dksalstn0621.workers.dev` placeholder once team confirms the live link
 2. **Triage [KNOWN_ISSUES.md](./KNOWN_ISSUES.md)** — file all 16 issues into GitHub Issues; assign owners; reserve ~20% Sprint 5 capacity for bug fixes.
 3. **Cross-verification pass** — each completed feature verified by a team member who did not implement it (per ProjectMilestones.md); bugs found get filed as GitHub Issues.
 4. **Final release tag** — once Sprint 4 closes, tag a v1.0 release on GitHub.
