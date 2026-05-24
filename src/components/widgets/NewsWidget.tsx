@@ -1,8 +1,9 @@
-import React, { useState } from "react";
+import React, { memo, useState } from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { Newspaper, RefreshCw, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { useShallow } from "zustand/react/shallow";
 import { useTheme } from "../../hooks/useTheme";
 import { useDataStore, type ArticleItem } from "../../store/useDataStore";
 import { useWidgetStore } from "../../store/useWidgetStore";
@@ -20,9 +21,13 @@ const NewsWidget = () => {
 	const { isDark, listItemBgCls, secondaryBgCls, muted } = useTheme();
 	const { t } = useTranslation();
 
-	const newsResults = useDataStore((s) => s.newsResults);
-	const loading = useDataStore((s) => s.loading.news);
-	const error = useDataStore((s) => s.errors.news);
+	// Consolidated data-field selector — one subscription, shallow equality
+	const { newsResults, loading, error } = useDataStore(useShallow((s) => ({
+		newsResults: s.newsResults,
+		loading: s.loading.news,
+		error: s.errors.news,
+	})));
+	// Actions are stable Zustand references — separate subscriptions cause no extra renders
 	const fetchNews = useDataStore((s) => s.fetchNews);
 	const getLastUpdatedMinutes = useDataStore((s) => s.getLastUpdatedMinutes);
 
@@ -318,4 +323,4 @@ const NewsWidget = () => {
 	);
 };
 
-export default NewsWidget;
+export default memo(NewsWidget);

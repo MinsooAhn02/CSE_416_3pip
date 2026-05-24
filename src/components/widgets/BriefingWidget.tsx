@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { Sparkles, RefreshCw, X } from "lucide-react";
@@ -399,4 +399,4 @@ const BriefingWidget = () => {
 	);
 };
 
-export default BriefingWidget;
+export default memo(BriefingWidget);

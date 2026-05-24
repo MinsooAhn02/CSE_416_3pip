@@ -1,19 +1,24 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useTheme } from "../../hooks/useTheme";
 import { useSettingsStore } from "../../store/useSettingsStore";
 import { useWidgetStore } from "../../store/useWidgetStore";
 import { useDiaryStore } from "../../store/useDiaryStore";
 import { DEFAULT_PRIORITY_ORDER } from "../../constants";
 
-import BriefingWidget from "../widgets/BriefingWidget";
-import DiaryCard from "../widgets/DiaryCard";
-import CalendarWidget from "../widgets/CalendarWidget";
-import WeatherWidget from "../widgets/WeatherWidget";
-import StocksWidget from "../widgets/StocksWidget";
-import TrendsWidget from "../widgets/TrendsWidget";
-import HealthWidget from "../widgets/HealthWidget";
-import NewsWidget from "../widgets/NewsWidget";
-import SmartWidgetContent from "../widgets/SmartWidgetContent";
+const BriefingWidget = lazy(() => import("../widgets/BriefingWidget"));
+const DiaryCard = lazy(() => import("../widgets/DiaryCard"));
+const CalendarWidget = lazy(() => import("../widgets/CalendarWidget"));
+const WeatherWidget = lazy(() => import("../widgets/WeatherWidget"));
+const StocksWidget = lazy(() => import("../widgets/StocksWidget"));
+const TrendsWidget = lazy(() => import("../widgets/TrendsWidget"));
+const HealthWidget = lazy(() => import("../widgets/HealthWidget"));
+const NewsWidget = lazy(() => import("../widgets/NewsWidget"));
+const SmartWidgetContent = lazy(() => import("../widgets/SmartWidgetContent"));
+
+/* ── Suspense fallback skeleton ── */
+const WidgetSkeleton = () => (
+	<div className="animate-pulse rounded-xl h-24 bg-gray-200 dark:bg-gray-700 w-full" />
+);
 
 /* ── Standard widget registry ── */
 const STANDARD_WIDGET_COMPONENTS: Record<string, React.ComponentType> = {
@@ -80,7 +85,9 @@ const DashboardLayout = () => {
 		if (!Component) return null;
 		return (
 			<div key={id} className="min-w-0">
-				<Component />
+				<Suspense fallback={<WidgetSkeleton />}>
+					<Component />
+				</Suspense>
 			</div>
 		);
 	}, []);
@@ -98,10 +105,14 @@ const DashboardLayout = () => {
 					style={{ flex: 3, minWidth: 0, height: DASHBOARD_VIEWPORT_H }}
 				>
 					<div className="basis-3/5 min-h-0">
-						<BriefingWidget />
+						<Suspense fallback={<WidgetSkeleton />}>
+							<BriefingWidget />
+						</Suspense>
 					</div>
 					<div className="basis-2/5 min-h-0">
-						<DiaryCard />
+						<Suspense fallback={<WidgetSkeleton />}>
+							<DiaryCard />
+						</Suspense>
 					</div>
 				</div>
 
@@ -110,7 +121,9 @@ const DashboardLayout = () => {
 					className={`min-w-0 ${pinModalVisible ? "" : "sticky top-[3.75rem]"}`}
 					style={{ flex: 5 }}
 				>
-					<CalendarWidget />
+					<Suspense fallback={<WidgetSkeleton />}>
+						<CalendarWidget />
+					</Suspense>
 				</div>
 
 				{/* Col C: Collapsible widget panel — 20%, collapses to 0 */}

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Search, X, RefreshCw, Pencil, Check } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -538,4 +538,4 @@ const SmartWidgetContent = ({ keyword }: SmartWidgetContentProps) => {
 	);
 };
 
-export default SmartWidgetContent;
+export default memo(SmartWidgetContent);

@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { memo, useState } from "react";
+import { useShallow } from "zustand/react/shallow";
 import { TrendingUp, RefreshCw } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useTheme } from "../../hooks/useTheme";
@@ -17,9 +18,13 @@ const TrendsWidget = () => {
 	const { isDark, secondaryBgCls, borderCls, muted } = useTheme();
 	const { t } = useTranslation();
 
-	const trendsResults = useDataStore((s) => s.trendsResults);
-	const loading       = useDataStore((s) => s.loading.trends);
-	const error         = useDataStore((s) => s.errors.trends);
+	// Consolidated data-field selector — one subscription, shallow equality
+	const { trendsResults, loading, error } = useDataStore(useShallow((s) => ({
+		trendsResults: s.trendsResults,
+		loading: s.loading.trends,
+		error: s.errors.trends,
+	})));
+	// Actions are stable Zustand references — separate subscriptions cause no extra renders
 	const fetchTrends   = useDataStore((s) => s.fetchTrends);
 	const getLastUpdatedMinutes = useDataStore((s) => s.getLastUpdatedMinutes);
 
@@ -101,4 +106,4 @@ const TrendsWidget = () => {
 	);
 };
 
-export default TrendsWidget;
+export default memo(TrendsWidget);

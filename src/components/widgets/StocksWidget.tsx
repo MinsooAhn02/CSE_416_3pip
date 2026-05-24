@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
+import { useShallow } from "zustand/react/shallow";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { TrendingUp, RefreshCw, X, GripVertical, Plus } from "lucide-react";
@@ -138,10 +139,14 @@ const StocksWidget = () => {
 	const [confirmDelete, setConfirmDelete] = useState<{ open: boolean; symbol: string | null }>({ open: false, symbol: null });
 	const [validating, setValidating] = useState(false);
 	const [validationError, setValidationError] = useState<string | null>(null);
-	const stocks = useDataStore((s) => s.stocks);
-	const loading = useDataStore((s) => s.loading.stocks);
-	const error = useDataStore((s) => s.errors.stocks);
-	const apiStatus = useDataStore((s) => s.apiStatus.stocks ?? null);
+	// Consolidated data-field selector — one subscription, shallow equality
+	const { stocks, loading, error, apiStatus } = useDataStore(useShallow((s) => ({
+		stocks: s.stocks,
+		loading: s.loading.stocks,
+		error: s.errors.stocks,
+		apiStatus: s.apiStatus.stocks ?? null,
+	})));
+	// Actions are stable Zustand references — separate subscriptions cause no extra renders
 	const fetchStocks = useDataStore((s) => s.fetchStocks);
 	const validateStockSymbol = useDataStore((s) => s.validateStockSymbol);
 	const getLastUpdatedMinutes = useDataStore((s) => s.getLastUpdatedMinutes);
@@ -740,4 +745,4 @@ const StocksWidget = () => {
 	);
 };
 
-export default StocksWidget;
+export default memo(StocksWidget);

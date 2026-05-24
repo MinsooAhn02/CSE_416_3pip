@@ -1,5 +1,7 @@
+import { memo } from "react";
 import { Activity, RefreshCw } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { useShallow } from "zustand/react/shallow";
 import { useTheme } from "../../hooks/useTheme";
 import { useDataStore } from "../../store/useDataStore";
 import { useFontSize } from "../../hooks/useFontSize";
@@ -9,10 +11,14 @@ const HealthWidget = () => {
 	const { isDark, muted, secondaryBgCls } = useTheme();
 	const { body: bodyStyle } = useFontSize();
 	const { t } = useTranslation();
-	const healthData = useDataStore((s) => s.healthData);
-	const loading = useDataStore((s) => s.loading.health);
-	const error = useDataStore((s) => s.errors.health);
-	const apiStatus = useDataStore((s) => s.apiStatus.health ?? null);
+	// Consolidated data-field selector — one subscription, shallow equality
+	const { healthData, loading, error, apiStatus } = useDataStore(useShallow((s) => ({
+		healthData: s.healthData,
+		loading: s.loading.health,
+		error: s.errors.health,
+		apiStatus: s.apiStatus.health ?? null,
+	})));
+	// Actions are stable Zustand references — separate subscriptions cause no extra renders
 	const fetchHealth = useDataStore((s) => s.fetchHealth);
 	const getLastUpdatedMinutes = useDataStore((s) => s.getLastUpdatedMinutes);
 	const isRealData = apiStatus === "ok";
@@ -103,4 +109,4 @@ const HealthWidget = () => {
 	);
 };
 
-export default HealthWidget;
+export default memo(HealthWidget);

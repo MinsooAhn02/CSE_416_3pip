@@ -1,6 +1,7 @@
-import React, { useState } from "react";
+import React, { memo, useState } from "react";
 import { Sun, Droplets, Wind, Cloud, RefreshCw, MapPin } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { useShallow } from "zustand/react/shallow";
 import { useTheme } from "../../hooks/useTheme";
 import { useDataStore } from "../../store/useDataStore";
 import { useSettingsStore } from "../../store/useSettingsStore";
@@ -13,14 +14,17 @@ const WeatherWidget = () => {
 	const { isDark, secondaryBgCls } = useTheme();
 	const { body: bodyStyle } = useFontSize();
 	const { t } = useTranslation();
-	const weather = useDataStore((s) => s.weather);
-	const loading = useDataStore((s) => s.loading.weather);
-	const error = useDataStore((s) => s.errors.weather);
-	const apiStatus = useDataStore((s) => s.apiStatus.weather ?? null);
-	const usingDefaultLocation = useDataStore(
-		(s) => s.usingDefaultWeatherLocation,
-	);
-	const manualWeatherCity = useDataStore((s) => s.manualWeatherCity);
+	// Consolidated data-field selector — one subscription, shallow equality
+	const { weather, loading, error, apiStatus, usingDefaultLocation, manualWeatherCity } =
+		useDataStore(useShallow((s) => ({
+			weather: s.weather,
+			loading: s.loading.weather,
+			error: s.errors.weather,
+			apiStatus: s.apiStatus.weather ?? null,
+			usingDefaultLocation: s.usingDefaultWeatherLocation,
+			manualWeatherCity: s.manualWeatherCity,
+		})));
+	// Actions are stable Zustand references — separate subscriptions cause no extra renders
 	const fetchWeather = useDataStore((s) => s.fetchWeather);
 	const setManualWeatherCity = useDataStore((s) => s.setManualWeatherCity);
 	const getLastUpdatedMinutes = useDataStore((s) => s.getLastUpdatedMinutes);
@@ -229,4 +233,4 @@ const WeatherWidget = () => {
 	);
 };
 
-export default WeatherWidget;
+export default memo(WeatherWidget);

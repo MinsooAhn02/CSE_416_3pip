@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import { Check, Loader2, MessageCircle } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useTheme } from "../../hooks/useTheme";
@@ -188,4 +188,4 @@ const DiaryCard = () => {
 	);
 };
 
-export default DiaryCard;
+export default memo(DiaryCard);

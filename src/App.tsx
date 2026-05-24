@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { Toaster } from "react-hot-toast";
 import { useTranslation } from "react-i18next";
 import type { Session } from "@supabase/supabase-js";
@@ -16,12 +16,13 @@ import { supabase } from "./lib/supabase";
 import LoginScreen from "./components/layout/LoginScreen";
 import TopNav from "./components/layout/TopNav";
 import DashboardLayout from "./components/layout/DashboardLayout";
-import FixedButtons from "./components/layout/FixedButtons";
-import OnboardingModal from "./components/modals/OnboardingModal";
-import SettingsModal from "./components/modals/SettingsModal";
-import FirstLoginBriefingModal from "./components/modals/FirstLoginBriefingModal";
-import WidgetSettingsModal from "./components/modals/WidgetSettingsModal";
 import ExtensionInstallBanner from "./components/banners/ExtensionInstallBanner";
+
+const FixedButtons = lazy(() => import("./components/layout/FixedButtons"));
+const OnboardingModal = lazy(() => import("./components/modals/OnboardingModal"));
+const SettingsModal = lazy(() => import("./components/modals/SettingsModal"));
+const FirstLoginBriefingModal = lazy(() => import("./components/modals/FirstLoginBriefingModal"));
+const WidgetSettingsModal = lazy(() => import("./components/modals/WidgetSettingsModal"));
 
 /* ── v8: 1:3:3 Layout Architecture with Widget Scroll Box (REQ-WS-001) ── */
 
@@ -31,9 +32,15 @@ const App = () => {
 	const handleAuthChange = useAuthStore((s) => s.handleAuthChange);
 	const { isDark } = useTheme();
 	const { i18n } = useTranslation();
-	const fetchAll = useDataStore((s) => s.fetchAll);
+	// Zustand actions are stable references by design, but we wrap in useCallback
+	// with empty deps to make the stability guarantee explicit and prevent any
+	// future refactor from accidentally reintroducing stale-closure re-triggers.
+	const _fetchAll = useDataStore((s) => s.fetchAll);
+	const fetchAll = useCallback(_fetchAll, []); // eslint-disable-line react-hooks/exhaustive-deps
 
 	const bgImage = useSettingsStore((s) => s.bgImage);
+	// initPhaseRef gates fetchAll so it never fires more than once per login phase
+	// (prevents double-trigger from strict-mode double-mount or concurrent auth events)
 	const initPhaseRef = useRef<string>("none");
 
 	const [authBootstrapDone, setAuthBootstrapDone] = useState(!supabase);
@@ -223,11 +230,13 @@ const App = () => {
 			<DashboardLayout />
 
 			{/* Modals & Fixed Components */}
-			<FixedButtons />
-			<OnboardingModal />
-			<SettingsModal />
-			<FirstLoginBriefingModal />
-			<WidgetSettingsModal />
+			<Suspense fallback={null}>
+				<FixedButtons />
+				<OnboardingModal />
+				<SettingsModal />
+				<FirstLoginBriefingModal />
+				<WidgetSettingsModal />
+			</Suspense>
 
 			{/* Global Toast Notifications */}
 			<Toaster

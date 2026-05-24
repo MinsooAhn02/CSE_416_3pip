@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { memo, useState, useEffect, useMemo } from "react";
 import {
 	Calendar,
 	ArrowLeftRight,
@@ -480,4 +480,4 @@ const CalendarWidget = () => {
 	);
 };
 
-export default CalendarWidget;
+export default memo(CalendarWidget);
