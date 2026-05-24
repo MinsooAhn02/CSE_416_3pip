@@ -54,20 +54,29 @@
 
 ## Actions Taken
 
-### 1. `provider_token` removed from Supabase session persistence
+### 1. `provider_refresh_token` removed from Supabase session persistence
 
 **File:** `src/lib/supabase.ts`
 
-Supabase automatically writes the full `Session` object (including the Google
-OAuth `provider_token`) to `sb-<project-ref>-auth-token` in localStorage. A
-Google OAuth access token with Calendar/Drive scopes persisting on-disk is an
-unnecessary attack surface in case of XSS.
+Supabase automatically writes the full `Session` object (including
+`provider_token` and `provider_refresh_token`) to `sb-<project-ref>-auth-token`
+in localStorage. The long-lived refresh token is the higher-value target —
+an attacker who exfiltrates it via XSS can mint new access tokens
+indefinitely.
 
 **Fix:** Custom `secureStorage` adapter intercepts every `setItem` call for
-keys matching `*-auth-token` and deletes `provider_token` and
-`provider_refresh_token` before writing. The tokens remain available in-session
-via `useAuthStore.providerToken` (refreshed from `session.provider_token` on
-every `onAuthStateChange` event), so Google Calendar API calls are unaffected.
+keys matching `*-auth-token` and deletes `provider_refresh_token` before
+writing.
+
+**Trade-off (documented):** An earlier version of this fix also stripped
+`provider_token`, but Supabase **does not refresh OAuth provider tokens** —
+`refreshSession()` only refreshes the Supabase JWT, not the Google access
+token. Stripping `provider_token` therefore broke every Google API call
+after page reload (`fetchTomorrowCalendar`, `fetchHealth`, etc.). Because
+the access token expires in ~1 h regardless, persisting it gives the same
+practical exposure window as a short-lived in-memory copy. The
+long-lived refresh token (which would let an attacker indefinitely mint
+new access tokens) is the one we actually need to keep off-disk.
 
 ### 2. No unnecessary sensitive keys found
 

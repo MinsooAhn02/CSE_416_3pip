@@ -2009,10 +2009,7 @@ export const useDataStore = create<DataState>()((set, get) => ({
 				}
 			}
 
-			const {
-				data: { session },
-			} = await supabase.auth.getSession();
-			const token = session?.provider_token;
+			const token = await useAuthStore.getState().ensureProviderToken?.();
 			if (!token) {
 				set({ calEvents: [] });
 				get().markFetched("calendar");
@@ -2071,10 +2068,7 @@ export const useDataStore = create<DataState>()((set, get) => ({
 				}
 			}
 
-			const {
-				data: { session },
-			} = await supabase.auth.getSession();
-			const token = session?.provider_token;
+			const token = await useAuthStore.getState().ensureProviderToken?.();
 			if (!token) {
 				set({ tomorrowEvents: [] });
 				return;

@@ -255,6 +255,7 @@ Nine Zustand stores. All use localStorage for persistence unless noted.
 | `newsAnswer` | string \| null | Tavily news summary (briefing fallback) |
 | `newsResults` | `[{title, url, content, image, published_date}]` | News data |
 | `calEvents` | array | Today's calendar events |
+| `tomorrowEvents` | array | Tomorrow's calendar events — populated by `fetchTomorrowCalendar`. Exposed via `useBriefingContext` so that `BriefingWidget` and `FirstLoginBriefingModal` can include it in their effect dependency arrays and regenerate the briefing once the data lands. |
 | `healthData` | `{steps, stepsGoal, sleep, sleepGoal, calories, caloriesGoal, heartRate}` | |
 | `fetchedLanguage` | `{news, trends}` | Language of last fetch |
 
@@ -524,6 +525,7 @@ Legacy `[MB_META]...[/MB_META]` task metadata is stripped on read; no longer wri
 - `section.lines` is polymorphic: `string` (plain text) | `{title, url, summary, source, keyword?}` (news/trends/smart article)
 - Auto-saves snapshot to `useBriefingHistoryStore` (3-hour interval or on manual refresh)
 - Language change → `briefingVersions` cache cleared → immediate re-generation
+- **Post-init tomorrow regen**: `fetchTomorrowCalendar` runs in parallel with other fetches, so `tomorrowEvents` typically arrives after the initial briefing has already generated. A dedicated effect (guarded by `tomorrowRegenDoneRef`) regenerates the briefing exactly once when `tomorrowEvents` first populates with `length > 0`, so afternoon/evening briefings reliably include tomorrow's schedule without waiting for the 1-hour interval.
 
 #### DiaryCard
 
@@ -856,7 +858,7 @@ https://www.googleapis.com/auth/fitness.activity.read
 1. Third-party API keys managed in Supabase Secrets only
 2. No hardcoded secrets in client code
 3. RLS on all tables for user data isolation
-4. Google OAuth token in memory (Zustand) only — never localStorage
+4. Google OAuth long-lived refresh token stripped from localStorage. Enforced by `secureStorage` adapter in `src/lib/supabase.ts` which deletes `provider_refresh_token` from every `*-auth-token` write. The short-lived `provider_token` (1-hour access token) IS persisted — Supabase does not refresh OAuth provider tokens, so stripping it caused every Calendar/Tasks/Fit call to fail after page reload. The 1-hour expiry bounds the exposure window. All Google-API callers go through `useAuthStore.getState().ensureProviderToken()` (memory → `getSession()` → `refreshSession()` fallback) — `fetchCalendar`, `fetchTomorrowCalendar`, `fetchHealth` all follow this pattern
 5. Edge Functions for user data (events/tasks/fitness/smart-widget) require Supabase JWT validation
 6. Diary PIN: SHA-256 hashed before storage — no plaintext
 7. All table `GRANT` statements explicitly written in SQL files (Supabase auto-grant ends 2026-05-30)

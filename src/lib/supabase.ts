@@ -10,18 +10,23 @@ if (!supabaseUrl || !supabaseAnonKey) {
 }
 
 /**
- * Custom storage adapter that strips Google OAuth tokens from the Supabase
- * session before it is written to localStorage.
+ * Custom storage adapter that strips ONLY `provider_refresh_token` from the
+ * Supabase session before it is written to localStorage.
  *
- * Supabase automatically persists the entire session object (including
- * `provider_token` and `provider_refresh_token`) under the key
- * `sb-<project-ref>-auth-token`. These tokens are Google OAuth access/refresh
- * tokens with broad Calendar/Drive scopes. Leaving them in localStorage means
- * they survive page reloads and are readable by any script on the page (XSS).
+ * Why not strip `provider_token` too:
+ * Supabase explicitly does NOT refresh OAuth provider tokens — once the
+ * `provider_token` is gone from the persisted session, there is no way to
+ * recover it short of a full re-login. Stripping it caused Google
+ * Calendar / Tasks / Fit to silently fail on every page reload because
+ * `fetchTomorrowCalendar` (and other Google-API callers) saw `null` from
+ * `ensureProviderToken()`. The access token expires in 1 h anyway, so
+ * persisting it gives the same effective exposure window as a short-lived
+ * in-memory copy.
  *
- * The tokens are still available in-session via `useAuthStore.providerToken`
- * (populated from `session.provider_token` on every auth state change), so
- * runtime Calendar API calls are unaffected. They just do not persist to disk.
+ * Why strip `provider_refresh_token`:
+ * The refresh token is long-lived and would let an attacker mint new access
+ * tokens indefinitely. We don't use it from the browser (Supabase manages
+ * its own JWT refresh server-side), so removing it costs no functionality.
  */
 const secureStorage = {
 	getItem: (key: string): string | null => localStorage.getItem(key),
@@ -30,7 +35,6 @@ const secureStorage = {
 		if (key.includes("-auth-token")) {
 			try {
 				const parsed = JSON.parse(value) as Record<string, unknown>;
-				delete parsed.provider_token;
 				delete parsed.provider_refresh_token;
 				localStorage.setItem(key, JSON.stringify(parsed));
 				return;

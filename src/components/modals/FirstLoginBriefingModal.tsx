@@ -32,6 +32,7 @@ const FirstLoginBriefingModal = () => {
 		buildContext,
 		weather,
 		calEvents,
+		tomorrowEvents,
 		stocks,
 		trends,
 		activeWidgetIds,
@@ -74,7 +75,7 @@ const FirstLoginBriefingModal = () => {
 		};
 
 		generateBriefing();
-	}, [showFirstLoginModal, weather, calEvents, stocks, trends, activeWidgetIds, tone]); // eslint-disable-line react-hooks/exhaustive-deps
+	}, [showFirstLoginModal, weather, calEvents, tomorrowEvents, stocks, trends, activeWidgetIds, tone]); // eslint-disable-line react-hooks/exhaustive-deps
 
 	// Countdown timer for dismiss button (REQ-AJ-004: block dismissal for 10 seconds)
 	useEffect(() => {

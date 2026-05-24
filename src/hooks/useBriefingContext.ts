@@ -135,6 +135,7 @@ export const useBriefingContext = () => {
 		buildContext,
 		weather,
 		calEvents,
+		tomorrowEvents,
 		stocks,
 		trends,
 		activeWidgetIds,

@@ -43,6 +43,7 @@ const BriefingWidget = () => {
 		buildContext,
 		weather,
 		calEvents,
+		tomorrowEvents,
 		stocks,
 		trends,
 		activeWidgetIds,
@@ -133,6 +134,21 @@ const BriefingWidget = () => {
 		generateBriefingVersion(BRIEFING_LENGTH, true);
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [weather, calEvents, stocks, trends, activeWidgetIds, initialGenDone]);
+
+	// Post-init regen: tomorrowEvents typically arrives after initial gen
+	// (fetchTomorrowCalendar runs in parallel with other fetches). The initialGenDone
+	// guard above would otherwise block the briefing from ever picking them up
+	// until the 1-hour interval, tone change, or manual refresh.
+	const tomorrowRegenDoneRef = useRef<boolean>(false);
+	useEffect(() => {
+		if (!initialGenDone) return;
+		if (isLoading) return;
+		if (tomorrowRegenDoneRef.current) return;
+		if (!Array.isArray(tomorrowEvents) || tomorrowEvents.length === 0) return;
+		tomorrowRegenDoneRef.current = true;
+		generateBriefingVersion(BRIEFING_LENGTH, true);
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [tomorrowEvents, initialGenDone]);
 
 	useEffect(() => {
 		if (!initialGenDone) return;
