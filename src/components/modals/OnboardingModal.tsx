@@ -1,7 +1,7 @@
 import { Activity, Calendar } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useTheme } from "../../hooks/useTheme";
-import { useAuthStore } from "../../store/useAuthStore";
+import { useOnboardingStore } from "../../store/useOnboardingStore";
 import { useWidgetStore } from "../../store/useWidgetStore";
 import { CATEGORIES } from "../../constants";
 import Toggle from "../common/Toggle";
@@ -18,7 +18,7 @@ const OnboardingModal = () => {
 		toggleCat,
 		setPerms,
 		finishOB,
-	} = useAuthStore();
+	} = useOnboardingStore();
 	const setVis = useWidgetStore((s) => s.setVis);
 	const isKo = i18n.language?.toLowerCase().startsWith("ko");
 	const copy = isKo

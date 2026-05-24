@@ -3,7 +3,7 @@ import { useSettingsStore } from "../store/useSettingsStore";
 import { useDataStore } from "../store/useDataStore";
 import { useTodoStore } from "../store/useTodoStore";
 import { useDiaryStore } from "../store/useDiaryStore";
-import { useAuthStore } from "../store/useAuthStore";
+import { useOnboardingStore } from "../store/useOnboardingStore";
 import { getSmartWidgetCacheKey, useWidgetStore } from "../store/useWidgetStore";
 import { mergeInterestLists } from "../utils/interests";
 import { shiftDateString, formatLocalDate } from "../utils/date";
@@ -62,7 +62,7 @@ export const useBriefingContext = () => {
 	const priorityOrder = useSettingsStore((s) => s.priorityOrder) || [];
 	const fixedInterestIds = useSettingsStore((s) => s.fixedInterestIds) || [];
 	const keywordInterests = useSettingsStore((s) => s.keywordInterests) || [];
-	const persona = useAuthStore((s) => s.persona);
+	const persona = useOnboardingStore((s) => s.persona);
 
 	const weather = useDataStore((s) => s.weather);
 	const stocks = useDataStore((s) => s.stocks);

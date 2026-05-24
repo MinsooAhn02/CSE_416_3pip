@@ -21,6 +21,7 @@ import {
 } from "../../store/useSettingsStore";
 import { useWidgetStore } from "../../store/useWidgetStore";
 import { useAuthStore } from "../../store/useAuthStore";
+import { useOnboardingStore } from "../../store/useOnboardingStore";
 import { useDiaryStore } from "../../store/useDiaryStore";
 import { WIDGET_LIST, DEFAULT_PRIORITY_ORDER } from "../../constants";
 import {
@@ -143,12 +144,10 @@ const SettingsModal = () => {
 		addSmartWidget,
 		removeSmartWidget,
 	} = useWidgetStore();
-	const { logout, setShowOnboarding, setObStep } = useAuthStore();
+	const { logout } = useAuthStore();
+	const { setShowOnboarding, setObStep, setOnboarded } = useOnboardingStore();
 	const pinSet = useDiaryStore((s) => s.pinSet);
 	const applyPinLockMode = useDiaryStore((s) => s.applyPinLockMode);
-	const setOnboarded = (v: boolean) => {
-		useAuthStore.setState({ onboarded: v });
-	};
 	const isKo = i18n.language?.toLowerCase().startsWith("ko");
 	const settingsCopy = useMemo(
 		() =>

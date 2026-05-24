@@ -3,7 +3,7 @@ import { Check, Loader2, MessageCircle } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useTheme } from "../../hooks/useTheme";
 import { useDiaryStore } from "../../store/useDiaryStore";
-import { useAuthStore } from "../../store/useAuthStore";
+import { useOnboardingStore } from "../../store/useOnboardingStore";
 import { useDataStore } from "../../store/useDataStore";
 import { useSettingsStore } from "../../store/useSettingsStore";
 import { useFontSize } from "../../hooks/useFontSize";
@@ -28,7 +28,7 @@ const DiaryCard = () => {
 	const { t, i18n } = useTranslation();
 
 	const addAnswer = useDiaryStore((s) => s.addAnswer);
-	const persona = useAuthStore((s) => s.persona);
+	const persona = useOnboardingStore((s) => s.persona);
 	const weather = useDataStore((s) => s.weather);
 	const fixedInterestIds = useSettingsStore((s) => s.fixedInterestIds) || [];
 	const bumpKeyword = useSettingsStore((s) => s.bumpKeyword);

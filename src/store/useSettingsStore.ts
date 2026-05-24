@@ -136,6 +136,10 @@ export interface SettingsState {
 	dismissFirstLoginModal: () => void;
 	setFixedInterestIds: (ids: string[]) => void;
 	setKeywordInterests: (interests: Interest[]) => void;
+	/** Hydrate interests from DB without triggering a sync back to the server. */
+	hydrateInterests: (ids: string[], keywords: Interest[]) => void;
+	/** Clear all interests from local state without syncing to DB (use on logout / session clear). */
+	resetInterests: () => void;
 	addKeywordInterest: (keyword: string, category?: string) => void;
 	bumpKeyword: (keyword: string, category?: string, delta?: number) => void;
 	removeKeywordInterest: (keyword: string) => void;
@@ -380,6 +384,17 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
 	setKeywordInterests: (interests: Interest[]) => {
 		set({ keywordInterests: interests });
 		syncSettings({ keyword_interests: interests });
+	},
+
+	hydrateInterests: (ids: string[], keywords: Interest[]) => {
+		set({
+			fixedInterestIds: normalizeFixedInterestIds(ids),
+			keywordInterests: keywords,
+		});
+	},
+
+	resetInterests: () => {
+		set({ fixedInterestIds: [], keywordInterests: [] });
 	},
 
 	addKeywordInterest: (keyword: string, category = "interest") => {

@@ -1,4 +1,4 @@
-import { useAuthStore } from "../store/useAuthStore";
+import { useOnboardingStore } from "../store/useOnboardingStore";
 import { useDataStore } from "../store/useDataStore";
 import { useDiaryStore } from "../store/useDiaryStore";
 import { useSettingsStore } from "../store/useSettingsStore";
@@ -19,19 +19,19 @@ export const buildPersonaContext = ({
 	includeMemo = true,
 	beforeDate = formatLocalDate(),
 }: BuildPersonaContextOptions = {}): PersonaContext => {
-	const authState = useAuthStore.getState();
+	const onboardingState = useOnboardingStore.getState();
 	const dataState = useDataStore.getState();
 	const diaryState = useDiaryStore.getState();
 	const settingsState = useSettingsStore.getState();
 
 	return {
 		persona:
-			authState.persona ?? (dataState.onboardingProfile?.persona ?? null),
+			onboardingState.persona ?? (dataState.onboardingProfile?.persona ?? null),
 		age: dataState.onboardingProfile?.age ?? null,
 		interests: mergeInterestLists(
 			settingsState.fixedInterestIds ??
 				dataState.onboardingProfile?.interests ??
-				authState.selCats ??
+				onboardingState.selCats ??
 				[],
 			settingsState.keywordInterests ?? [],
 		)

@@ -5,16 +5,11 @@ import { runPersonalizationBatch } from "../services/personalizationService";
 import { normalizeFixedInterestIds } from "../utils/interests";
 import type { Session } from "@supabase/supabase-js";
 import { useSettingsStore } from "./useSettingsStore";
+import { useOnboardingStore } from "./useOnboardingStore";
 import type { AppUser, Perms, Interest } from "../types";
 
 interface AuthState {
 	isLoggedIn: boolean;
-	onboarded: boolean;
-	showOnboarding: boolean;
-	obStep: number;
-	selCats: string[];
-	perms: Perms;
-	persona: string | null;
 	user: AppUser | null;
 	providerToken: string | null;
 
@@ -24,22 +19,10 @@ interface AuthState {
 	handleAuthChange: (session: Session | null) => Promise<void>;
 	ensureProviderToken: () => Promise<string | null>;
 	loadUserSettings: () => Promise<void>;
-	setShowOnboarding: (v: boolean) => void;
-	setObStep: (v: number) => void;
-	setPersona: (p: string | null) => void;
-	toggleCat: (id: string) => void;
-	setPerms: (updater: Perms | ((prev: Perms) => Perms)) => void;
-	finishOB: () => Promise<void>;
 }
 
 export const useAuthStore = create<AuthState>()((set, get) => ({
 	isLoggedIn: load<boolean>("mb_login", false),
-	onboarded: false,
-	showOnboarding: false,
-	obStep: 0,
-	selCats: [],
-	perms: { fit: false, cal: false },
-	persona: null,
 	user: null,
 	providerToken: null,
 
@@ -87,18 +70,9 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
 	},
 
 	logout: async () => {
-		set({
-			isLoggedIn: false,
-			user: null,
-			providerToken: null,
-			onboarded: false,
-			showOnboarding: false,
-			obStep: 0,
-			selCats: [],
-			perms: { fit: false, cal: false },
-			persona: null,
-		});
-		useSettingsStore.setState({ fixedInterestIds: [], keywordInterests: [] });
+		set({ isLoggedIn: false, user: null, providerToken: null });
+		useOnboardingStore.getState().reset();
+		useSettingsStore.getState().resetInterests();
 		save("mb_login", false);
 
 		if (supabase) {
@@ -134,18 +108,9 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
 			return;
 		}
 
-		set({
-			isLoggedIn: false,
-			user: null,
-			providerToken: null,
-			onboarded: false,
-			showOnboarding: false,
-			obStep: 0,
-			selCats: [],
-			perms: { fit: false, cal: false },
-			persona: null,
-		});
-		useSettingsStore.setState({ fixedInterestIds: [], keywordInterests: [] });
+		set({ isLoggedIn: false, user: null, providerToken: null });
+		useOnboardingStore.getState().reset();
+		useSettingsStore.getState().resetInterests();
 		save("mb_login", false);
 	},
 
@@ -204,88 +169,28 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
 							cal: Boolean((onboardingPermsRaw as Record<string, unknown>).cal),
 						}
 					: { fit: false, cal: false };
-			set({
-				onboarded: true,
-				persona: (dbData.persona as string) ?? null,
-				perms: onboardingPerms,
-				selCats: fixedInterestIds,
-			});
-			useSettingsStore.setState({
+			const keywordInterests: Interest[] = Array.isArray(dbData.keyword_interests)
+				? (dbData.keyword_interests as Interest[])
+				: [];
+
+			useOnboardingStore.getState().hydrate(
+				(dbData.persona as string) ?? null,
+				onboardingPerms,
 				fixedInterestIds,
-				keywordInterests: Array.isArray(dbData.keyword_interests)
-					? (dbData.keyword_interests as Interest[])
-					: [],
-			});
+			);
+			useSettingsStore.getState().hydrateInterests(fixedInterestIds, keywordInterests);
 
 			runPersonalizationBatch()
 				.then((interests) => {
 					if (Array.isArray(interests) && interests.length > 0) {
-						useSettingsStore.setState({ keywordInterests: interests });
+						useSettingsStore.getState().setKeywordInterests(interests);
 					}
 				})
 				.catch(() => {});
 		} else {
-			set({
-				onboarded: false,
-				showOnboarding: true,
-				obStep: 0,
-				selCats: [],
-				perms: { fit: false, cal: false },
-				persona: null,
-			});
-			useSettingsStore.setState({ fixedInterestIds: [] });
-		}
-	},
-
-	setShowOnboarding: (v) => set({ showOnboarding: v }),
-	setObStep: (v) => set({ obStep: v }),
-	setPersona: (p) => set({ persona: p }),
-	toggleCat: (id) =>
-		set((s) => ({
-			selCats: s.selCats.includes(id)
-				? s.selCats.filter((c) => c !== id)
-				: [...s.selCats, id],
-		})),
-	setPerms: (updater) =>
-		set((s) => ({
-			perms: typeof updater === "function" ? updater(s.perms) : updater,
-		})),
-
-	finishOB: async () => {
-		const { selCats, perms, persona } = get();
-		const normalizedSelCats = normalizeFixedInterestIds(selCats);
-		const normalizedPerms: Perms = {
-			fit: Boolean(perms?.fit),
-			cal: Boolean(perms?.cal),
-		};
-		set({
-			onboarded: true,
-			showOnboarding: false,
-			selCats: normalizedSelCats,
-			perms: normalizedPerms,
-		});
-		useSettingsStore.setState({ fixedInterestIds: normalizedSelCats });
-
-		if (supabase) {
-			const {
-				data: { user },
-			} = await supabase.auth.getUser();
-			if (user) {
-				const { error } = await supabase.from("user_settings").upsert({
-					id: user.id,
-					persona,
-					fixed_interests: normalizedSelCats,
-					onboarding_perms: normalizedPerms,
-				});
-				if (error) {
-					console.warn("Fixed interests save failed:", error.message);
-					await supabase.from("user_settings").upsert({
-						id: user.id,
-						persona,
-						onboarding_perms: normalizedPerms,
-					});
-				}
-			}
+			useOnboardingStore.getState().reset();
+			useOnboardingStore.getState().setShowOnboarding(true);
+			useSettingsStore.getState().resetInterests();
 		}
 	},
 }));
