@@ -50,7 +50,7 @@ Clear:
 
 ---
 
-## 4. 상태 관리 분리
+## 4. 상태 관리 분리 (O)
 
 Goal: useAuthStore의 책임을 단일화하고 스토어 간 직접 setState 호출을 없앤다.
 
@@ -66,19 +66,29 @@ Clear:
 
 ---
 
-## 5. 국제화/지역화 완성
+## 5. 국제화/지역화 완성 (O)
 
 Goal: 한국어/영어 하드코딩 문자열을 모두 i18n 키로 교체한다.
 
 Condition:
-- src/ 전체에서 한글 문자열 직접 렌더링 0개
-- en.json / ko.json 키 누락 없음 (빌드 시 missing key 경고 0)
-- 언어 전환 시 모든 UI 텍스트 즉시 반영
+- src/ 전체에서 한글 문자열 직접 렌더링 0개 ✓
+- en.json / ko.json 키 누락 없음 (빌드 시 missing key 경고 0) ✓
+- 언어 전환 시 모든 UI 텍스트 즉시 반영 ✓
 
 Clear:
 - grep으로 하드코딩 문자열 스캔
 - 대상 집중: App.jsx 로딩 텍스트, useAuthStore.js 에러 메시지, 각 위젯 fallback 텍스트
 - i18next-parser 로 누락 키 자동 감지 설정
+
+Done:
+- isKo ternary 패턴 전면 교체: SmartWidgetContent, SettingsModal, DiaryPanel, WidgetSettingsModal, OnboardingModal, FirstLoginBriefingModal, ExtensionInstallBanner, WidgetCard, LoginScreen, TopNav
+- eventRepeat.ts: getRepeatLocale() → i18n.t() with lng parameter (event_repeat namespace)
+- aiService.ts: 브리핑 섹션 타이틀/fallback → bs() helper (briefing_sections namespace); smart widget 섹션 타이틀 동일 처리
+- errorHandler.ts, useDataStore.ts, useWidgetStore.ts: 한국어 에러 메시지 → i18n.t()
+- EventPanel.tsx: formatReminderMinutes/formatReminderLabel/formatEventTimeLabel/customFrequencyOptions → i18n.t()
+- constants/index.ts, useSettingsStore.ts, useQuickLinksStore.ts: 한국어 기본값 → 영어로 교체
+- en.json/ko.json: banner, categories, onboarding, widget_settings, settings_modal, diary_panel, smart_widget, briefing_sections, first_login_briefing, event_repeat, auth, errors 네임스페이스 추가/완성
+- npx tsc --noEmit: 0 errors
 
 ---
 

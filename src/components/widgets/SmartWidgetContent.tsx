@@ -15,7 +15,7 @@ interface SmartWidgetContentProps {
 const SmartWidgetContent = ({ keyword }: SmartWidgetContentProps) => {
 	const { isDark, cardCls, muted, hoverCls, secondaryBgCls } = useTheme();
 	const { body: bodyStyle, title: titleStyle } = useFontSize();
-	const { i18n } = useTranslation();
+	const { t, i18n } = useTranslation();
 	const isKo = i18n.language?.startsWith("ko");
 
 	const removeSmartWidget = useWidgetStore((s) => s.removeSmartWidget);
@@ -60,18 +60,16 @@ const SmartWidgetContent = ({ keyword }: SmartWidgetContentProps) => {
 		return () => window.clearInterval(timer);
 	}, [data?.lastUpdatedAt, data?.lastUpdated]);
 
-	const loadingMsg = isKo
-		? `'${keyword}' 검색 중...`
-		: `Searching '${keyword}'...`;
+	const loadingMsg = t("smart_widget.loading", { keyword });
 	const hasHangulKeyword = /[가-힣]/.test(keyword);
 	const hasLatinKeyword = /[A-Za-z]/.test(keyword);
 	const languageMismatch = isKo
 		? hasLatinKeyword && !hasHangulKeyword
 		: hasHangulKeyword;
 	const languageHint = isKo
-		? "더 좋은 한국어 결과를 위해 키워드를 한국어로 바꿔보세요."
-		: "For better English results, try changing this keyword to English.";
-	const editPlaceholder = isKo ? "키워드 수정" : "Edit keyword";
+		? t("smart_widget.language_hint_ko")
+		: t("smart_widget.language_hint_en");
+	const editPlaceholder = t("smart_widget.edit_placeholder");
 	const categoryOptions = SMART_WIDGET_CATEGORY_OPTIONS.map((option) => {
 		const labelObj = option.label as unknown as Record<string, string>;
 		return {
@@ -85,8 +83,8 @@ const SmartWidgetContent = ({ keyword }: SmartWidgetContentProps) => {
 		const updatedAt = new Date(data?.lastUpdatedAt ?? "").getTime();
 		if (!Number.isFinite(updatedAt)) return fallback;
 		const minutes = Math.max(0, Math.floor((nowMs - updatedAt) / 60000));
-		if (minutes < 1) return isKo ? "방금 전" : "Just now";
-		if (minutes < 60) return isKo ? `${minutes}분 전` : `${minutes}m ago`;
+		if (minutes < 1) return t("smart_widget.just_now");
+		if (minutes < 60) return t("smart_widget.minutes_ago", { count: minutes });
 		return fallback;
 	};
 	const updatedLabel = getUpdatedLabel();
@@ -148,10 +146,10 @@ const SmartWidgetContent = ({ keyword }: SmartWidgetContentProps) => {
 
 	const getLocalizedSectionTitle = (section: { type?: string; title?: string }) => {
 		if (section?.type === "summary") {
-			return isKo ? "맞춤 검색" : "Personalized Search";
+			return t("smart_widget.personalized_search");
 		}
 		if (section?.type === "news") {
-			return isKo ? "관련 정보" : "Related Info";
+			return t("smart_widget.related_info");
 		}
 		return section?.title || "";
 	};
@@ -261,7 +259,7 @@ const SmartWidgetContent = ({ keyword }: SmartWidgetContentProps) => {
 				<button
 					type="submit"
 					className={`p-1 rounded-lg ${hoverCls}`}
-					title={isKo ? "저장" : "Save"}
+					title={t("smart_widget.save")}
 				>
 					<Check size={12} className={muted} />
 				</button>
@@ -287,7 +285,7 @@ const SmartWidgetContent = ({ keyword }: SmartWidgetContentProps) => {
 									? "border-white/15 bg-white/10"
 									: "border-slate-200 bg-white shadow-sm"
 							} ${hoverCls}`}
-							title={isKo ? "카테고리 변경" : "Change category"}
+							title={t("smart_widget.change_category")}
 						>
 							<span aria-hidden="true" className="text-[14px] leading-none">
 								{data.emoji || "🔍"}
@@ -308,7 +306,7 @@ const SmartWidgetContent = ({ keyword }: SmartWidgetContentProps) => {
 				<button
 					onClick={() => setEditingKeyword(true)}
 					className={`p-1 rounded-lg ${hoverCls}`}
-					title={isKo ? "키워드 수정" : "Edit keyword"}
+					title={t("smart_widget.edit_keyword")}
 				>
 					<Pencil size={11} className={muted} />
 				</button>
@@ -457,7 +455,7 @@ const SmartWidgetContent = ({ keyword }: SmartWidgetContentProps) => {
 								</div>
 								{item.url && (
 									<p className={`text-[11px] shrink-0 self-center ${muted}`}>
-										{isKo ? "열기" : "Open"}
+										{t("smart_widget.open")}
 									</p>
 								)}
 							</div>
@@ -488,14 +486,14 @@ const SmartWidgetContent = ({ keyword }: SmartWidgetContentProps) => {
 					<button
 						onClick={() => refreshSmartWidget(keyword)}
 						className={`p-1 rounded-lg transition-all ${hoverCls} ${isRefreshing ? "animate-spin" : ""}`}
-						title={isKo ? "새로고침" : "Refresh"}
+						title={t("smart_widget.refresh")}
 					>
 						<RefreshCw size={12} className={muted} />
 					</button>
 					<button
 						onClick={() => removeSmartWidget(keyword)}
 						className={`p-1 rounded-lg ${hoverCls} ${muted} hover:opacity-100`}
-						title={isKo ? "위젯 삭제" : "Remove widget"}
+						title={t("smart_widget.remove_widget")}
 					>
 						<X size={14} />
 					</button>
@@ -510,7 +508,7 @@ const SmartWidgetContent = ({ keyword }: SmartWidgetContentProps) => {
 							className="animate-spin mx-auto mb-2 text-blue-400"
 						/>
 						<p className={`text-xs ${muted}`}>
-							{isKo ? "데이터 갱신 중..." : "Updating..."}
+							{t("smart_widget.updating")}
 						</p>
 					</div>
 				) : (
@@ -520,9 +518,7 @@ const SmartWidgetContent = ({ keyword }: SmartWidgetContentProps) => {
 						) : (
 							<div className={`text-center py-6 rounded-xl ${secondaryBgCls}`}>
 								<p className={`text-xs ${muted}`}>
-									{isKo
-										? "표시할 스마트 위젯 데이터가 아직 없어요. 새로고침해보세요."
-										: "No smart widget data to show yet. Try refreshing."}
+									{t("smart_widget.no_data")}
 								</p>
 							</div>
 						)}

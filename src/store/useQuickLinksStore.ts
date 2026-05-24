@@ -20,10 +20,10 @@ interface QuickLinksState {
 }
 
 const DEFAULT_LINKS: QuickLink[] = [
-	{ id: "naver", name: "네이버", url: "https://www.naver.com", icon: "N", color: "#03C75A" },
-	{ id: "youtube", name: "유튜브", url: "https://www.youtube.com", icon: "YT", color: "#FF0000" },
-	{ id: "instagram", name: "인스타", url: "https://www.instagram.com", icon: "IG", color: "#E1306C" },
-	{ id: "google", name: "구글", url: "https://www.google.com", icon: "G", color: "#4285F4" },
+	{ id: "naver", name: "Naver", url: "https://www.naver.com", icon: "N", color: "#03C75A" },
+	{ id: "youtube", name: "YouTube", url: "https://www.youtube.com", icon: "YT", color: "#FF0000" },
+	{ id: "instagram", name: "Instagram", url: "https://www.instagram.com", icon: "IG", color: "#E1306C" },
+	{ id: "google", name: "Google", url: "https://www.google.com", icon: "G", color: "#4285F4" },
 ];
 
 export const useQuickLinksStore = create<QuickLinksState>()((set, get) => ({

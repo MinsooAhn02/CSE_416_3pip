@@ -31,12 +31,11 @@ const WidgetCard = ({
 	apiStatus,
 	apiError,
 }: WidgetCardProps) => {
-	const { i18n } = useTranslation();
+	const { t } = useTranslation();
 	const { isDark, cardCls, cardShadowCls, muted, hoverCls } = useTheme();
 	const closeWidget = useWidgetStore((s) => s.closeWidget);
-	const isKo = i18n.language?.toLowerCase().startsWith("ko");
-	const refreshTitle = isKo ? "새로고침" : "Refresh";
-	const closeWidgetTitle = isKo ? "위젯 끄기" : "Close widget";
+	const refreshTitle = t("common.refresh");
+	const closeWidgetTitle = t("common.close_widget");
 
 	return (
 		<div

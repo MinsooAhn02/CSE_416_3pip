@@ -1,44 +1,44 @@
 export const CATEGORIES = [
-	{ id: "news", label: "뉴스", emoji: "📰" },
-	{ id: "tech", label: "기술", emoji: "💻" },
-	{ id: "fashion", label: "패션", emoji: "👗" },
-	{ id: "finance", label: "금융", emoji: "📈" },
-	{ id: "health", label: "건강", emoji: "💪" },
-	{ id: "food", label: "음식", emoji: "🍔" },
-	{ id: "entertainment", label: "엔터테인먼트", emoji: "🎬" },
-	{ id: "sports", label: "스포츠", emoji: "⚽" },
+	{ id: "news", label: "News", emoji: "📰" },
+	{ id: "tech", label: "Tech", emoji: "💻" },
+	{ id: "fashion", label: "Fashion", emoji: "👗" },
+	{ id: "finance", label: "Finance", emoji: "📈" },
+	{ id: "health", label: "Health", emoji: "💪" },
+	{ id: "food", label: "Food", emoji: "🍔" },
+	{ id: "entertainment", label: "Entertainment", emoji: "🎬" },
+	{ id: "sports", label: "Sports", emoji: "⚽" },
 ];
 
 // Widget Classification (REQ-WS-002)
 // Fixed Widgets: Non-draggable, positioned in Left/Right columns
 // Standard Widgets: Draggable, Middle Column only
 export const FIXED_WIDGETS = [
-	{ id: "briefing", label: "AI 브리핑", zone: "left" },
-	{ id: "diary", label: "오늘의 질문", zone: "left" },
-	{ id: "calendar", label: "캘린더", zone: "right" },
-	{ id: "todo", label: "할 일", zone: "right" },
+	{ id: "briefing", label: "AI Briefing", zone: "left" },
+	{ id: "diary", label: "Daily Question", zone: "left" },
+	{ id: "calendar", label: "Calendar", zone: "right" },
+	{ id: "todo", label: "Tasks", zone: "right" },
 ];
 
 export const STANDARD_WIDGETS = [
-	{ id: "weather", label: "날씨", emoji: "🌤️" },
-	{ id: "stocks", label: "주식/환율", emoji: "📈" },
-	{ id: "trends", label: "실시간 트렌드", emoji: "🔥" },
-	{ id: "health", label: "건강", emoji: "💪" },
-	{ id: "news", label: "뉴스", emoji: "📰" },
-	{ id: "smart", label: "스마트 위젯", emoji: "✨" },
+	{ id: "weather", label: "Weather", emoji: "🌤️" },
+	{ id: "stocks", label: "Stocks/Exchange", emoji: "📈" },
+	{ id: "trends", label: "Live Trends", emoji: "🔥" },
+	{ id: "health", label: "Health", emoji: "💪" },
+	{ id: "news", label: "News", emoji: "📰" },
+	{ id: "smart", label: "Smart Widget", emoji: "✨" },
 ];
 
 // Default priority order for Standard Widgets (REQ-US-006)
 export const DEFAULT_PRIORITY_ORDER = ["weather", "stocks", "trends", "health", "news", "smart"];
 
 export const WIDGET_LIST = [
-	{ id: "health", label: "건강 (Google Fit)", category: "core" },
-	{ id: "calendar", label: "캘린더 (Google)", category: "core" },
-	{ id: "briefing", label: "AI 브리핑", category: "core" },
-	{ id: "trends", label: "실시간 트렌드", category: "core" },
-	{ id: "stocks", label: "주식/환율", category: "core" },
-	{ id: "weather", label: "날씨", category: "core" },
-	{ id: "news", label: "뉴스", category: "core" },
+	{ id: "health", label: "Health (Google Fit)", category: "core" },
+	{ id: "calendar", label: "Calendar (Google)", category: "core" },
+	{ id: "briefing", label: "AI Briefing", category: "core" },
+	{ id: "trends", label: "Live Trends", category: "core" },
+	{ id: "stocks", label: "Stocks/Exchange", category: "core" },
+	{ id: "weather", label: "Weather", category: "core" },
+	{ id: "news", label: "News", category: "core" },
 ];
 
 export const DEFAULT_VIS = {

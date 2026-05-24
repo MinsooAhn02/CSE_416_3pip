@@ -80,7 +80,7 @@ const TopNav = () => {
 				{user?.avatarUrl ? (
 					<img
 						src={user.avatarUrl}
-						alt={user.displayName || (isKo ? "프로필" : "Profile")}
+						alt={user.displayName || t("settings_modal.profile_tab.profile_alt")}
 						className="w-8 h-8 rounded-full object-cover cursor-pointer border-2 border-transparent hover:border-morning-light-accent transition-colors"
 					/>
 				) : (

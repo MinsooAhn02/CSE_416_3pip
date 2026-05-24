@@ -43,18 +43,14 @@ export const handleApiError = (
 
 	if (!userVisible) return type;
 
-	const isKo = String(i18n?.language || "").toLowerCase().startsWith("ko");
-
 	if (type === ErrorType.TIMEOUT) {
 		toast.error(
-			isKo ? "잠시 후 다시 시도해 주세요." : "Please try again in a moment.",
+			i18n.t("errors.timeout"),
 			{ id: "api-timeout", duration: 3000 },
 		);
 	} else if (type === ErrorType.NETWORK) {
 		toast.error(
-			isKo
-				? "네트워크 연결을 확인해 주세요."
-				: "Check your network connection.",
+			i18n.t("errors.network"),
 			{ id: "api-network", duration: 3000 },
 		);
 	}

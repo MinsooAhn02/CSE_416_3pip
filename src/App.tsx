@@ -31,7 +31,7 @@ const App = () => {
 	const user = useAuthStore((s) => s.user);
 	const handleAuthChange = useAuthStore((s) => s.handleAuthChange);
 	const { isDark } = useTheme();
-	const { i18n } = useTranslation();
+	const { t, i18n } = useTranslation();
 	// Zustand actions are stable references by design, but we wrap in useCallback
 	// with empty deps to make the stability guarantee explicit and prevent any
 	// future refactor from accidentally reintroducing stale-closure re-triggers.
@@ -197,9 +197,7 @@ const App = () => {
 				}`}
 			>
 				<p className="text-sm opacity-80">
-					{i18n.language?.toLowerCase().startsWith("ko")
-						? "세션 확인 중..."
-						: "Checking your session..."}
+					{t("common.checking_session")}
 				</p>
 			</div>
 		);

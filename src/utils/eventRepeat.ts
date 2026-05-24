@@ -1,3 +1,5 @@
+import i18n from "../l10n/i18n";
+
 const DAY_CODES = ["SU", "MO", "TU", "WE", "TH", "FR", "SA"];
 const WEEKDAY_CODES = ["MO", "TU", "WE", "TH", "FR"];
 
@@ -18,62 +20,39 @@ interface RepeatLocale {
 	customIntervalLabel: (freq: string, interval: number, days?: string[]) => string;
 }
 
-const getRepeatLocale = (language = "en"): RepeatLocale =>
-	language === "ko"
-		? {
-				dayNames: ["일요일", "월요일", "화요일", "수요일", "목요일", "금요일", "토요일"],
-				monthNames: ["1월", "2월", "3월", "4월", "5월", "6월", "7월", "8월", "9월", "10월", "11월", "12월"],
-				ordinals: ["첫째", "둘째", "셋째", "넷째", "다섯째"],
-				weekDaysShort: [
-					{ code: "MO", label: "월" }, { code: "TU", label: "화" }, { code: "WE", label: "수" },
-					{ code: "TH", label: "목" }, { code: "FR", label: "금" }, { code: "SA", label: "토" },
-					{ code: "SU", label: "일" },
-				],
-				repeatNone: "반복 안 함",
-				repeatDaily: "매일",
-				repeatWeekly: (dayName) => `매주 ${dayName}`,
-				repeatMonthly: (ordinal, dayName) => `매월 ${ordinal} ${dayName}`,
-				repeatYearly: (monthName, day) => `매년 ${monthName} ${day}일`,
-				repeatWeekdays: "매주 평일",
-				repeatCustom: "사용자 지정...",
-				customIntervalLabel: (freq, interval, days = []) => {
-					if (freq === "weekly" && days.length > 0) {
-						return `${interval === 1 ? "매주" : `매 ${interval}주`} ${days.join(", ")}`;
-					}
-					if (freq === "daily") return interval === 1 ? "매일" : `매 ${interval}일`;
-					if (freq === "weekly") return interval === 1 ? "매주" : `매 ${interval}주`;
-					if (freq === "monthly") return interval === 1 ? "매월" : `매 ${interval}개월`;
-					return interval === 1 ? "매년" : `매 ${interval}년`;
-				},
-			}
-		: {
-				dayNames: ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"],
-				monthNames: ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"],
-				ordinals: ["first", "second", "third", "fourth", "fifth"],
-				weekDaysShort: [
-					{ code: "MO", label: "Mon" }, { code: "TU", label: "Tue" }, { code: "WE", label: "Wed" },
-					{ code: "TH", label: "Thu" }, { code: "FR", label: "Fri" }, { code: "SA", label: "Sat" },
-					{ code: "SU", label: "Sun" },
-				],
-				repeatNone: "Does not repeat",
-				repeatDaily: "Daily",
-				repeatWeekly: (dayName) => `Weekly on ${dayName}`,
-				repeatMonthly: (ordinal, dayName) => `Monthly on the ${ordinal} ${dayName}`,
-				repeatYearly: (monthName, day) => `Annually on ${monthName} ${day}`,
-				repeatWeekdays: "Every weekday (Monday to Friday)",
-				repeatCustom: "Custom...",
-				customIntervalLabel: (freq, interval, days = []) => {
-					if (freq === "weekly" && days.length > 0) {
-						return `Every ${interval > 1 ? `${interval} weeks` : "week"} on ${days.join(", ")}`;
-					}
-					const unit =
-						freq === "daily" ? "day"
-						: freq === "weekly" ? "week"
-						: freq === "monthly" ? "month"
-						: "year";
-					return `Every ${interval > 1 ? `${interval} ${unit}s` : unit}`;
-				},
-			};
+const tr = (key: string, opts?: Record<string, unknown>, lang = "en"): string =>
+	i18n.t(`event_repeat.${key}`, { lng: lang, ...opts }) as string;
+
+const getRepeatLocale = (language = "en"): RepeatLocale => ({
+	dayNames: [0,1,2,3,4,5,6].map((i) => tr(`day_${i}`, {}, language)),
+	monthNames: [0,1,2,3,4,5,6,7,8,9,10,11].map((i) => tr(`month_${i}`, {}, language)),
+	ordinals: [0,1,2,3,4].map((i) => tr(`ordinal_${i}`, {}, language)),
+	weekDaysShort: [
+		{ code: "MO", label: tr("weekday_short_MO", {}, language) },
+		{ code: "TU", label: tr("weekday_short_TU", {}, language) },
+		{ code: "WE", label: tr("weekday_short_WE", {}, language) },
+		{ code: "TH", label: tr("weekday_short_TH", {}, language) },
+		{ code: "FR", label: tr("weekday_short_FR", {}, language) },
+		{ code: "SA", label: tr("weekday_short_SA", {}, language) },
+		{ code: "SU", label: tr("weekday_short_SU", {}, language) },
+	],
+	repeatNone: tr("repeat_none", {}, language),
+	repeatDaily: tr("repeat_daily", {}, language),
+	repeatWeekly: (dayName) => tr("repeat_weekly", { dayName }, language),
+	repeatMonthly: (ordinal, dayName) => tr("repeat_monthly", { ordinal, dayName }, language),
+	repeatYearly: (monthName, day) => tr("repeat_yearly", { monthName, day }, language),
+	repeatWeekdays: tr("repeat_weekdays", {}, language),
+	repeatCustom: tr("repeat_custom", {}, language),
+	customIntervalLabel: (freq, interval, days = []) => {
+		if (freq === "weekly" && days.length > 0) {
+			const key = interval === 1 ? "custom_weekly_days_1" : "custom_weekly_days_n";
+			return tr(key, { count: interval, days: days.join(", ") }, language);
+		}
+		const freqKey = freq === "daily" ? "daily" : freq === "weekly" ? "weekly" : freq === "monthly" ? "monthly" : "yearly";
+		const key = interval === 1 ? `custom_${freqKey}_1` : `custom_${freqKey}_n`;
+		return tr(key, { count: interval }, language);
+	},
+});
 
 const pad2 = (value: number): string => String(value).padStart(2, "0");
 

@@ -187,14 +187,10 @@ const getTavilyErrorMessage = (raw: unknown): string => {
 		);
 	}
 	if (normalized.includes("tavily_api_key not set")) {
-		return i18n.language?.toLowerCase().startsWith("ko")
-			? "Supabase에 Tavily API 키가 설정되어 있지 않습니다."
-			: "Tavily API key is not configured in Supabase.";
+		return getErrorText("tavily_no_key", {}, "Tavily API key is not configured in Supabase.");
 	}
 	if (normalized.includes("tavily 401") || normalized.includes("tavily 403")) {
-		return i18n.language?.toLowerCase().startsWith("ko")
-			? "Tavily 요청이 거부되었습니다. API 키 또는 권한 설정을 확인해주세요."
-			: "Tavily request was rejected. Check the API key and permissions.";
+		return getErrorText("tavily_rejected", {}, "Tavily request was rejected. Check the API key and permissions.");
 	}
 	if (normalized.includes("failed to fetch") || normalized.includes("networkerror")) {
 		return getErrorText(

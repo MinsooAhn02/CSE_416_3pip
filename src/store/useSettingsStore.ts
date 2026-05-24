@@ -19,38 +19,38 @@ export interface PinLockOption {
 export const PIN_LOCK_OPTIONS: PinLockOption[] = [
 	{
 		id: "off",
-		label: "PIN 해제",
-		description: "Diary를 열 때 PIN을 묻지 않습니다.",
+		label: "PIN off",
+		description: "You will not be asked for a PIN when opening the diary.",
 	},
 	{
 		id: "immediate",
-		label: "바로 잠금",
-		description: "Diary를 닫으면 바로 다시 PIN을 입력해야 합니다.",
+		label: "Immediate lock",
+		description: "Diary locks again as soon as you close it.",
 	},
 	{
 		id: "5m",
-		label: "5분 뒤 잠금",
-		description: "마지막 PIN 인증 후 5분 동안 유지됩니다.",
+		label: "Lock after 5 minutes",
+		description: "Stays unlocked for 5 minutes after the last PIN check.",
 	},
 	{
 		id: "30m",
-		label: "30분 뒤 잠금",
-		description: "마지막 PIN 인증 후 30분 동안 유지됩니다.",
+		label: "Lock after 30 minutes",
+		description: "Stays unlocked for 30 minutes after the last PIN check.",
 	},
 	{
 		id: "1h",
-		label: "1시간 뒤 잠금",
-		description: "마지막 PIN 인증 후 1시간 동안 유지됩니다.",
+		label: "Lock after 1 hour",
+		description: "Stays unlocked for 1 hour after the last PIN check.",
 	},
 	{
 		id: "3h",
-		label: "3시간 뒤 잠금",
-		description: "마지막 PIN 인증 후 3시간 동안 유지됩니다.",
+		label: "Lock after 3 hours",
+		description: "Stays unlocked for 3 hours after the last PIN check.",
 	},
 	{
 		id: "6h",
-		label: "6시간 뒤 잠금",
-		description: "마지막 PIN 인증 후 6시간 동안 유지됩니다.",
+		label: "Lock after 6 hours",
+		description: "Stays unlocked for 6 hours after the last PIN check.",
 	},
 ];
 

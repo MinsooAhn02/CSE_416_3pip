@@ -43,6 +43,7 @@ import {
 import ConfirmDialog from "../common/ConfirmDialog";
 import GooglePlacesLocationField from "../common/GooglePlacesLocationField";
 import TimeInput from "../common/TimeInput";
+import i18n from "../../l10n/i18n";
 
 const EMPTY_FORM = {
 	title: "",
@@ -262,18 +263,17 @@ const parseGuestEmailsText = (rawText: unknown) =>
 	).map((email) => ({ email }));
 
 const formatReminderMinutes = (minutes: unknown, language = "en") => {
+	const lng = language;
 	const value = Number(minutes || 0);
 	if (!Number.isFinite(value) || value <= 0) {
-		return language === "ko" ? "사용자 지정 알림" : "Custom reminder";
+		return i18n.t("events.reminder_custom", { lng });
 	}
-	if (value === 1440) return language === "ko" ? "1일 전" : "1 day before";
+	if (value === 1440) return i18n.t("events.reminder_1day", { lng });
 	if (value % 60 === 0) {
 		const hours = value / 60;
-		return language === "ko"
-			? `${hours}시간 전`
-			: `${hours} hour${hours === 1 ? "" : "s"} before`;
+		return i18n.t("events.reminder_hours", { count: hours, lng });
 	}
-	return language === "ko" ? `${value}분 전` : `${value} min before`;
+	return i18n.t("events.reminder_minutes", { count: value, lng });
 };
 
 const getReminderFormState = (event: CalendarEvent | null | undefined) => {
@@ -302,11 +302,12 @@ const getReminderFormState = (event: CalendarEvent | null | undefined) => {
 };
 
 const formatReminderLabel = (event: CalendarEvent | null | undefined, language = "en") => {
+	const lng = language;
 	if (event?.remindersUseDefault !== false) {
-		return language === "ko" ? "캘린더 기본값" : "Calendar default";
+		return i18n.t("events.calendar_default", { lng });
 	}
 	if (!Array.isArray(event?.reminderOverrides) || event.reminderOverrides.length === 0) {
-		return language === "ko" ? "알림 없음" : "No reminder";
+		return i18n.t("events.no_reminder", { lng });
 	}
 	return formatReminderMinutes(event.reminderOverrides[0].minutes, language);
 };
@@ -329,7 +330,7 @@ const formatTimeLabel = (timeStr: unknown, language = "en"): string => {
 };
 
 const formatEventTimeLabel = (event: CalendarEvent | null | undefined, language = "en") => {
-	if (event?.allDay) return language === "ko" ? "하루 종일" : "All day";
+	if (event?.allDay) return i18n.t("common.all_day", { lng: language });
 	if (event?.startTime && event?.endTime) {
 		return `${formatTimeLabel(event.startTime, language)} - ${formatTimeLabel(
 			event.endTime,
@@ -438,34 +439,10 @@ const EventPanel = ({ selectedDate, onClose }: EventPanelProps) => {
 	];
 	const reminderMinuteOptions = [10, 30, 60, 1440];
 	const customFrequencyOptions = [
-		{
-			value: "daily",
-			label:
-				i18n.language === "ko"
-					? "일"
-					: `day${Number(formData.customInterval) !== 1 ? "s" : ""}`,
-		},
-		{
-			value: "weekly",
-			label:
-				i18n.language === "ko"
-					? "주"
-					: `week${Number(formData.customInterval) !== 1 ? "s" : ""}`,
-		},
-		{
-			value: "monthly",
-			label:
-				i18n.language === "ko"
-					? "개월"
-					: `month${Number(formData.customInterval) !== 1 ? "s" : ""}`,
-		},
-		{
-			value: "yearly",
-			label:
-				i18n.language === "ko"
-					? "년"
-					: `year${Number(formData.customInterval) !== 1 ? "s" : ""}`,
-		},
+		{ value: "daily", label: t("events.freq_day", { count: Number(formData.customInterval) }) },
+		{ value: "weekly", label: t("events.freq_week", { count: Number(formData.customInterval) }) },
+		{ value: "monthly", label: t("events.freq_month", { count: Number(formData.customInterval) }) },
+		{ value: "yearly", label: t("events.freq_year", { count: Number(formData.customInterval) }) },
 	];
 	const selectedEventDescription = String(selectedEventForDetail?.description || "");
 	const selectedEventDescriptionHtml = isHtmlDescription(selectedEventDescription)

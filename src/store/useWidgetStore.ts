@@ -243,7 +243,7 @@ export const useWidgetStore = create<WidgetState>()((set, get) => ({
 				refreshing: { ...s.refreshing, [kw]: false },
 				smartWidgetErrors: {
 					...s.smartWidgetErrors,
-					[kw]: (error as Error).message || "스마트 위젯 데이터를 불러오지 못했습니다.",
+					[kw]: (error as Error).message || i18n.t("smart_widget.no_data"),
 				},
 			}));
 			return null;

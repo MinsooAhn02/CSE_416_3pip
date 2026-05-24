@@ -18,7 +18,7 @@ import BriefingSectionsView from "../widgets/BriefingSectionsView";
  * - Tracked via lastBriefingShown timestamp (idempotency)
  */
 const FirstLoginBriefingModal = () => {
-	const { i18n } = useTranslation();
+	const { t } = useTranslation();
 	const { isDark, cardCls, muted } = useTheme();
 	const showFirstLoginModal = useSettingsStore((s) => s.showFirstLoginModal);
 	const dismissFirstLoginModal = useSettingsStore(
@@ -42,27 +42,6 @@ const FirstLoginBriefingModal = () => {
 	const lastGeneratedRef = useRef<Date | null>(null);
 	const [isLoading, setIsLoading] = useState(false);
 	const [dismissCountdown, setDismissCountdown] = useState(10); // 10-second block (REQ-AJ-004)
-	const isKo = i18n.language?.toLowerCase().startsWith("ko");
-	const copy = isKo
-		? {
-				close: "닫기",
-				title: "오늘의 AI 브리핑",
-				subtitle: "좋은 아침 브리핑",
-				refresh: "브리핑 새로고침",
-				loading: "브리핑을 불러오는 중입니다...",
-				countdown: (seconds: number) => `${seconds}초 후 시작하기`,
-				start: "오늘 하루 시작하기",
-			}
-		: {
-				close: "Close",
-				title: "Today's AI Briefing",
-				subtitle: "Good Morning Briefing",
-				refresh: "Refresh briefing",
-				loading: "Loading your briefing...",
-				countdown: (seconds: number) => `Start in ${seconds}s`,
-				start: "Start the day",
-			};
-
 	// Time-based greeting
 	const greeting = useMemo(() => getTimeGreeting(), []);
 
@@ -156,13 +135,13 @@ const FirstLoginBriefingModal = () => {
 	const displayBriefing = useMemo(() => {
 		if (briefing) {
 			return {
-				summary: briefing.summary || copy.title,
+				summary: briefing.summary || t("first_login_briefing.title"),
 				detail: briefing.detail || "",
 				sections: Array.isArray(briefing.sections) ? briefing.sections : [],
 			};
 		}
 		return { summary: "", detail: "", sections: [] };
-	}, [briefing, copy.title]);
+	}, [briefing, t]);
 
 	const detailLines = (displayBriefing.detail || "")
 		.split("\n")
@@ -210,7 +189,7 @@ const FirstLoginBriefingModal = () => {
 					<button
 						onClick={() => dismissFirstLoginModal()}
 						className="absolute top-4 right-4 p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors rounded-full z-10 hover:bg-gray-200/10 dark:hover:bg-gray-700/10"
-						title={copy.close}
+						title={t("first_login_briefing.close")}
 					>
 						<X size={20} />
 					</button>
@@ -230,8 +209,8 @@ const FirstLoginBriefingModal = () => {
 								<Sparkles size={24} className="text-blue-500" />
 							</div>
 							<div>
-								<h2 className="font-bold text-lg">{copy.title}</h2>
-								<p className={`text-xs ${muted}`}>{copy.subtitle}</p>
+								<h2 className="font-bold text-lg">{t("first_login_briefing.title")}</h2>
+								<p className={`text-xs ${muted}`}>{t("first_login_briefing.subtitle")}</p>
 							</div>
 						</div>
 						{/* PHASE 23: Repositioned Refresh button to avoid overlap with X close button */}
@@ -243,7 +222,7 @@ const FirstLoginBriefingModal = () => {
 									? "hover:bg-morning-dark-hover"
 									: "hover:bg-morning-light-hover/20"
 							} ${isLoading ? "opacity-50" : ""}`}
-							title={copy.refresh}
+							title={t("first_login_briefing.refresh")}
 						>
 							<RefreshCw
 								size={18}
@@ -291,8 +270,8 @@ const FirstLoginBriefingModal = () => {
 							}`}
 						>
 							{dismissCountdown > 0
-								? copy.countdown(dismissCountdown)
-								: copy.start}
+								? t("first_login_briefing.countdown", { count: dismissCountdown })
+								: t("first_login_briefing.start")}
 						</button>
 					</div>
 				</motion.div>

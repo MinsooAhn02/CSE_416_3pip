@@ -31,8 +31,7 @@ const pingExtension = (id: string): Promise<boolean> =>
 
 const ExtensionInstallBanner = () => {
   const { isDark, borderCls } = useTheme();
-  const { i18n } = useTranslation();
-  const isKo = i18n.language?.toLowerCase().startsWith("ko");
+  const { t } = useTranslation();
 
   const [visible, setVisible] = useState(false);
 
@@ -67,9 +66,7 @@ const ExtensionInstallBanner = () => {
       <div className="flex items-center gap-2.5 min-w-0">
         <Chrome size={16} className="shrink-0 opacity-70" />
         <span className="truncate opacity-90">
-          {isKo
-            ? "새 탭을 열 때마다 MorningBrief.AI를 바로 만나보세요 —"
-            : "Open MorningBrief.AI every time you open a new tab —"}
+          {t("banner.extension_prompt")}
         </span>
         <a
           href={STORE_URL}
@@ -79,12 +76,12 @@ const ExtensionInstallBanner = () => {
             isDark ? "text-blue-400 hover:text-blue-300" : "text-blue-600 hover:text-blue-500"
           }`}
         >
-          {isKo ? "Chrome 확장 설치하기" : "Install Chrome Extension"}
+          {t("banner.install_extension")}
         </a>
       </div>
       <button
         onClick={handleDismiss}
-        aria-label="닫기"
+        aria-label={t("common.close")}
         className={`shrink-0 p-1 rounded opacity-60 hover:opacity-100 transition-opacity ${
           isDark ? "hover:bg-morning-dark-hover" : "hover:bg-morning-light-hover"
         }`}

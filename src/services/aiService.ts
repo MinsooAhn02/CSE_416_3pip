@@ -1,4 +1,6 @@
-import { getCurrentLanguage } from "../l10n/i18n";
+import i18n, { getCurrentLanguage } from "../l10n/i18n";
+
+const bs = (key: string, lng: string) => i18n.t(`briefing_sections.${key}`, { lng }) as string;
 import { handleApiError } from "../utils/errorHandler";
 import type {
 	WeatherData,
@@ -739,7 +741,7 @@ export function formatCalEventsForAI(calEvents: CalEvent[] = [], lang = "en"): s
 				hour12: false,
 				},
 			);
-			return `${time} ${e.title || e.summary || (isKo ? "일정" : "Event")}`;
+			return `${time} ${e.title || e.summary || bs("event_untitled", lang)}`;
 		})
 		.join(", ");
 }
@@ -906,7 +908,7 @@ const formatEventLine = (event: CalEvent, lang: string): string => {
 			hour12: false,
 		})
 		: "";
-	const title = event?.title || event?.summary || (isKo ? "일정" : "Event");
+	const title = event?.title || event?.summary || bs("event_untitled", lang);
 	return time ? `${time} ${title}` : title;
 };
 
@@ -1096,24 +1098,24 @@ export async function generateDetailedBriefing({ tone, length, context }: { tone
 	// ── 1) 날짜 + 날씨 (한 줄, 결합) ────────────
 	{
 		const weather = context?.weather;
-		const dateLabelText = `${isKo ? "날짜" : "Date"}: ${dateLabel}`;
+		const dateLabelText = `${bs("date_label", lang)}: ${dateLabel}`;
 		let weatherLabelText;
 		if (weather) {
-			const city = weather.city || (isKo ? "현재 위치" : "Current location");
+			const city = weather.city || bs("current_location", lang);
 			const temp = weather.temp != null ? `${weather.temp}°C` : "?°C";
 			const condition = weather.condition || "";
 			const emoji = getWeatherEmoji(condition);
 			const precipitation =
 				weather.precipitation != null
-					? `, ${isKo ? "강수확률" : "precipitation"} ${weather.precipitation}%`
+					? `, ${bs("weather_precipitation", lang)} ${weather.precipitation}%`
 					: "";
-			weatherLabelText = `${isKo ? "날씨" : "Weather"}: ${emoji} ${city} ${temp}${condition ? `, ${condition}` : ""}${precipitation}`;
+			weatherLabelText = `${bs("weather_label", lang)}: ${emoji} ${city} ${temp}${condition ? `, ${condition}` : ""}${precipitation}`;
 		} else {
-			weatherLabelText = `${isKo ? "날씨" : "Weather"}: ${isKo ? "정보 없음" : "No data"}`;
+			weatherLabelText = `${bs("weather_label", lang)}: ${bs("no_data", lang)}`;
 		}
 		sections.push({
 			id: "header",
-			title: isKo ? "오늘" : "Today",
+			title: bs("today_header", lang),
 			lines: [`${dateLabelText} | ${weatherLabelText}`],
 		});
 	}
@@ -1130,11 +1132,11 @@ export async function generateDetailedBriefing({ tone, length, context }: { tone
 			.sort((a, b) => (eventStartTime(a) ?? 0) - (eventStartTime(b) ?? 0));
 
 		if (timeMode === "morning") {
-			const title = isKo ? "오늘 일정" : "Today's schedule";
+			const title = bs("today_schedule", lang);
 			const lines =
 				sortedToday.length > 0
 					? sortedToday.slice(0, 6).map((e) => formatEventLine(e, lang))
-					: [isKo ? "일정 없음" : "No events"];
+					: [bs("no_events", lang)];
 			sections.push({ id: "schedule", title, lines });
 		} else {
 			const nowMs = now.getTime();
@@ -1146,24 +1148,22 @@ export async function generateDetailedBriefing({ tone, length, context }: { tone
 				.slice()
 				.sort((a, b) => (eventStartTime(a) ?? 0) - (eventStartTime(b) ?? 0));
 
-			const remainingTitle = isKo ? "오늘 남은 일정" : "Remaining today";
 			sections.push({
 				id: "schedule_today_remaining",
-				title: remainingTitle,
+				title: bs("remaining_today", lang),
 				lines:
 					remaining.length > 0
 						? remaining.slice(0, 5).map((e) => formatEventLine(e, lang))
-						: [isKo ? "남은 일정 없음" : "No remaining events"],
+						: [bs("no_remaining_events", lang)],
 			});
 
-			const tomorrowTitle = isKo ? "내일 일정" : "Tomorrow";
 			sections.push({
 				id: "schedule_tomorrow",
-				title: tomorrowTitle,
+				title: bs("tomorrow", lang),
 				lines:
 					sortedTomorrow.length > 0
 						? sortedTomorrow.slice(0, 5).map((e) => formatEventLine(e, lang))
-						: [isKo ? "일정 없음" : "No events"],
+						: [bs("no_events", lang)],
 			});
 		}
 	}
@@ -1201,13 +1201,13 @@ export async function generateDetailedBriefing({ tone, length, context }: { tone
 	{
 		const hasYesterdayData =
 			Boolean(context?.yesterdayDiary) || Boolean(context?.yesterdayMemo);
-		const fallback = isKo ? "기록된 일기가 없습니다." : "No diary was recorded.";
+		const fallback = bs("no_diary", lang);
 		const line =
 			diaryRewrite ||
 			(hasYesterdayData ? toSentenceSummary(context?.yesterdayDiary || context?.yesterdayMemo, 2) : fallback);
 		sections.push({
 			id: "yesterday",
-			title: isKo ? "어제" : "Yesterday",
+			title: bs("yesterday", lang),
 			lines: [line],
 		});
 	}
@@ -1223,7 +1223,7 @@ export async function generateDetailedBriefing({ tone, length, context }: { tone
 				url: s.latestArticle!.url,
 				source: s.latestArticle!.source ?? "",
 			}));
-		const smartFallback = isKo ? "수집된 키워드 정보가 없습니다." : "No keyword info collected yet.";
+		const smartFallback = bs("no_keywords", lang);
 
 		// News: structured objects { title, url, summary, source }
 		const newsLines =
@@ -1234,7 +1234,7 @@ export async function generateDetailedBriefing({ tone, length, context }: { tone
 					summary: truncateText(newsSummaryMap[i] || "", 200),
 					source: truncateText(n?.source || hostFromUrl(n?.url), 40),
 				  })).filter((o) => o.title && o.url)
-				: [isKo ? "수집된 뉴스가 없습니다." : "No news collected yet."];
+				: [bs("no_news", lang)];
 
 		// Trends: same structured shape
 		const trendsLines =
@@ -1245,7 +1245,7 @@ export async function generateDetailedBriefing({ tone, length, context }: { tone
 					summary: truncateText(trendsSummaryMap[i] || "", 200),
 					source: truncateText(t?.source || hostFromUrl(t?.url), 40),
 				  })).filter((o) => o.title && o.url)
-				: [isKo ? "수집된 트렌드가 없습니다." : "No trends collected yet."];
+				: [bs("no_trends", lang)];
 
 		// detail 평문용: 객체를 "제목 — 출처: 요약" 형태로 직렬화
 		const toPlainLine = (item: string | { title: string; url: string; summary?: string; source?: string }) =>
@@ -1255,7 +1255,7 @@ export async function generateDetailedBriefing({ tone, length, context }: { tone
 
 		sections.push({
 			id: "latest_info",
-			title: isKo ? "오늘 최신 정보" : "Today's latest info",
+			title: bs("latest_info", lang),
 			lines: [
 				...(smartLines.length > 0 ? smartLines.map(toPlainLine) : [smartFallback]),
 				...newsLines.map(toPlainLine),
@@ -1264,17 +1264,17 @@ export async function generateDetailedBriefing({ tone, length, context }: { tone
 			subBlocks: [
 				{
 					id: "latest_smart",
-					title: isKo ? "관심 키워드" : "Smart keywords",
+					title: bs("smart_keywords", lang),
 					lines: smartLines.length > 0 ? smartLines : [smartFallback],
 				},
 				{
 					id: "latest_news",
-					title: isKo ? "주요 뉴스 Top 3" : "Top 3 news",
+					title: bs("top_3_news", lang),
 					lines: newsLines,
 				},
 				{
 					id: "latest_trends",
-					title: isKo ? "트렌드 Top 3" : "Trends Top 3",
+					title: bs("top_3_trends", lang),
 					lines: trendsLines,
 				},
 			],
@@ -2725,32 +2725,35 @@ const OMIT_SMART_SECTION_TYPES = new Set(["shopping", "sites"]);
 const SHOPPING_SMART_SECTION_RE =
 	/(쇼핑|구매|구매처|할인|세일|딜|예약|shopping|stockists|buy|borrow|deals|sale|discount|booking|price & buying)/i;
 
-const buildSmartCommunitySections = (keyword: string, category: string, isKo: boolean) => [
-	{
-		type: "video",
-		title: isKo ? "영상" : "Videos",
-		keyword,
-		category,
-		query: isKo
-			? `${keyword} 유튜브 영상 리뷰 설명`
-			: `${keyword} YouTube video review guide`,
-		searchMode: "search",
-		allowMixed: true,
-		maxItems: 2,
-	},
-	{
-		type: "blog",
-		title: isKo ? "블로그" : "Blogs",
-		keyword,
-		category,
-		query: isKo
-			? `${keyword} 블로그 후기 정리 리뷰`
-			: `${keyword} blog review analysis guide`,
-		searchMode: "search",
-		allowMixed: true,
-		maxItems: 2,
-	},
-];
+const buildSmartCommunitySections = (keyword: string, category: string, isKo: boolean) => {
+	const lang = isKo ? "ko" : "en";
+	return [
+		{
+			type: "video",
+			title: bs("smart_videos", lang),
+			keyword,
+			category,
+			query: isKo
+				? `${keyword} 유튜브 영상 리뷰 설명`
+				: `${keyword} YouTube video review guide`,
+			searchMode: "search",
+			allowMixed: true,
+			maxItems: 2,
+		},
+		{
+			type: "blog",
+			title: bs("smart_blogs", lang),
+			keyword,
+			category,
+			query: isKo
+				? `${keyword} 블로그 후기 정리 리뷰`
+				: `${keyword} blog review analysis guide`,
+			searchMode: "search",
+			allowMixed: true,
+			maxItems: 2,
+		},
+	];
+};
 
 const buildSmartSectionPlan = (keyword: string, category: string, isKo: boolean) => {
 	const lang = isKo ? "ko" : "en";
@@ -3233,9 +3236,10 @@ const cleanSmartDetail = (value = "", maxLength = 260) => {
 };
 
 const formatSmartTime = (publishedDate: string | null | undefined, isKo: boolean) => {
-	if (!publishedDate) return isKo ? "최근" : "recent";
+	const lang = isKo ? "ko" : "en";
+	if (!publishedDate) return bs("smart_recent", lang);
 	const date = new Date(publishedDate);
-	if (Number.isNaN(date.getTime())) return isKo ? "최근" : "recent";
+	if (Number.isNaN(date.getTime())) return bs("smart_recent", lang);
 	return date.toLocaleDateString(isKo ? "ko-KR" : "en-US", {
 		month: "short",
 		day: "numeric",

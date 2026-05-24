@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { BookOpen, Lock, Edit2, RotateCcw, Save, Settings, X, ThumbsUp, ThumbsDown, RefreshCw, CheckCircle } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useTheme } from "../../hooks/useTheme";
@@ -16,7 +16,8 @@ interface DiaryPanelProps {
 }
 
 const DiaryPanel = ({ selectedDate, onClose, compact = false }: DiaryPanelProps) => {
-	const { i18n } = useTranslation();
+	const { t, i18n } = useTranslation();
+	const isKo = i18n.language?.toLowerCase().startsWith("ko");
 	const { isDark, cardCls, inputCls, hoverCls, secondaryBgCls } = useTheme();
 	const {
 		getDiary,
@@ -60,98 +61,47 @@ const DiaryPanel = ({ selectedDate, onClose, compact = false }: DiaryPanelProps)
 	const [feedbackText, setFeedbackText] = useState("");
 	const [isRewriting, setIsRewriting] = useState(false);
 	const [showConfirmDialog, setShowConfirmDialog] = useState(false);
-	const isKo = i18n.language?.toLowerCase().startsWith("ko");
-	const copy = useMemo(
-		() =>
-			isKo
-				? {
-						diaryTitle: "Diary",
-						previewFallback: "이 날짜에는 아직 일기 내용이 없습니다.",
-						lockDiary: "Diary 잠금",
-						diarySettings: "Diary 설정",
-						closeDiary: "Diary 닫기",
-						lockedDiary: "Diary가 잠겨 있습니다.",
-						pinRequired: "Diary를 열기 전에 PIN 설정이 필요합니다.",
-						unlock: "잠금 해제",
-						setupPin: "PIN 설정",
-						aiDiaryLabel: "AI 생성 일기",
-						revert: "되돌리기",
-						revertTitle: "원래 AI 일기로 되돌리기",
-						editDiary: "일기 편집",
-						noDiary: "이 날짜에는 아직 AI 일기가 생성되지 않았습니다.",
-						editDiaryPlaceholder: "일기 내용을 수정해보세요...",
-						saving: "저장 중...",
-						save: "저장",
-						cancel: "취소",
-						memo: "메모",
-						editMemo: "메모 편집",
-						clickMemo: "클릭해서 메모 추가...",
-						memoPlaceholder: "메모를 입력해보세요...",
-						feedbackLabel: "피드백",
-						feedbackPlaceholder: "어떤 점을 개선하면 좋을까요?",
-						rewrite: "재작성",
-						rewriting: "재작성 중...",
-						confirmRewrite: "확정",
-						discardRewrite: "취소",
-						confirmWarningTitle: "일기를 덮어쓰시겠습니까?",
-						confirmWarningBody: "원본으로 되돌릴 수 없습니다.",
-						pendingRewriteLabel: "재작성 미리보기",
-				  }
-				: {
-						diaryTitle: "Diary",
-						previewFallback: "No diary content for this date.",
-						lockDiary: "Lock diary",
-						diarySettings: "Diary settings",
-						closeDiary: "Close diary",
-						lockedDiary: "Diary is locked.",
-						pinRequired: "Diary PIN is required before opening this diary.",
-						unlock: "Unlock",
-						setupPin: "Set up PIN",
-						aiDiaryLabel: "AI Generated Diary",
-						revert: "Revert",
-						revertTitle: "Revert to original AI diary",
-						editDiary: "Edit diary",
-						noDiary: "No AI diary generated for this date yet.",
-						editDiaryPlaceholder: "Edit diary content...",
-						saving: "Saving...",
-						save: "Save",
-						cancel: "Cancel",
-						memo: "Memo",
-						editMemo: "Edit memo",
-						clickMemo: "Click to add memo...",
-						memoPlaceholder: "Write your memo here...",
-						feedbackLabel: "Feedback",
-						feedbackPlaceholder: "What would you like to improve?",
-						rewrite: "Rewrite",
-						rewriting: "Rewriting...",
-						confirmRewrite: "Confirm",
-						discardRewrite: "Discard",
-						confirmWarningTitle: "Overwrite diary?",
-						confirmWarningBody: "This cannot be undone.",
-						pendingRewriteLabel: "Rewrite preview",
-				  },
-		[isKo],
-	);
+	const copy = {
+		diaryTitle: "Diary",
+		previewFallback: t("diary_panel.preview_fallback"),
+		lockDiary: t("diary_panel.lock_diary"),
+		diarySettings: t("diary_panel.diary_settings"),
+		closeDiary: t("diary_panel.close_diary"),
+		lockedDiary: t("diary_panel.locked_diary"),
+		pinRequired: t("diary_panel.pin_required"),
+		unlock: t("diary_panel.unlock"),
+		setupPin: t("diary_panel.setup_pin"),
+		aiDiaryLabel: t("diary_panel.ai_diary_label"),
+		revert: t("diary_panel.revert"),
+		revertTitle: t("diary_panel.revert_title"),
+		editDiary: t("diary_panel.edit_diary"),
+		noDiary: t("diary_panel.no_diary"),
+		editDiaryPlaceholder: t("diary_panel.edit_diary_placeholder"),
+		saving: t("diary_panel.saving"),
+		save: t("diary_panel.save"),
+		cancel: t("diary_panel.cancel"),
+		memo: t("diary_panel.memo"),
+		editMemo: t("diary_panel.edit_memo"),
+		clickMemo: t("diary_panel.click_memo"),
+		memoPlaceholder: t("diary_panel.memo_placeholder"),
+		feedbackLabel: t("diary_panel.feedback_label"),
+		feedbackPlaceholder: t("diary_panel.feedback_placeholder"),
+		rewrite: t("diary_panel.rewrite"),
+		rewriting: t("diary_panel.rewriting"),
+		confirmRewrite: t("diary_panel.confirm_rewrite"),
+		discardRewrite: t("diary_panel.discard_rewrite"),
+		confirmWarningTitle: t("diary_panel.confirm_warning_title"),
+		confirmWarningBody: t("diary_panel.confirm_warning_body"),
+		pendingRewriteLabel: t("diary_panel.pending_rewrite_label"),
+	};
 
-	const diaryUiText = useMemo(
-		() =>
-			i18n.language === "ko"
-				? {
-						generate: "일기 생성",
-						regenerate: "다시 생성",
-						generating: "생성 중...",
-						generateTitle: "이 날짜의 일기 생성",
-						regenerateTitle: "이 날짜의 일기 다시 생성",
-				  }
-				: {
-						generate: "Generate Diary",
-						regenerate: "Regenerate Diary",
-						generating: "Generating...",
-						generateTitle: "Generate diary for this date",
-						regenerateTitle: "Regenerate diary for this date",
-				  },
-		[i18n.language],
-	);
+	const diaryUiText = {
+		generate: t("diary_panel.generate"),
+		regenerate: t("diary_panel.regenerate"),
+		generating: t("diary_panel.generating"),
+		generateTitle: t("diary_panel.generate_title"),
+		regenerateTitle: t("diary_panel.regenerate_title"),
+	};
 
 	useEffect(() => {
 		setDiaryContent(currentEntry?.diary || "");
