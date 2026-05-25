@@ -3100,7 +3100,7 @@ const getSmartSectionTokens = (section: SmartSectionPlan) =>
 		.slice(0, 8);
 
 const smartResultMatchesSection = (result: SmartResult, section: SmartSectionPlan, isKo: boolean) => {
-	if (smartResultMatchesKeyword(result, section.keyword)) return true;
+	if (smartResultMatchesKeyword(result, section.keyword ?? "")) return true;
 	const haystack = normalizeSmartSearchText(getSmartResultText(result));
 	const title = normalizeSmartSearchText(result?.title ?? "");
 	const sectionTokens = getSmartSectionTokens(section);
@@ -3250,7 +3250,7 @@ const getSmartResultRank = (result: SmartResult, section: SmartSectionPlan, isKo
 	const score = getSmartResultScore(result) ?? 0;
 	let rank = score + getSmartResultFreshnessRank(result, section, isKo);
 	if (smartResultTitleMatchesSectionKeyword(result, section)) rank += 4;
-	if (smartResultMatchesKeyword(result, section.keyword)) rank += 2;
+	if (smartResultMatchesKeyword(result, section.keyword ?? "")) rank += 2;
 	if (isTrustedSmartSection(section) && isTrustedSmartSource(result, isKo)) {
 		rank += 1.4;
 	}
@@ -3280,7 +3280,7 @@ const formatSmartItems = (results: SmartResult[], isKo: boolean, section: SmartS
 		smartResultMatchesRequiredSectionKeyword(r, section, isKo),
 	);
 	const keywordMatches = eligibleRanked.filter((r) =>
-		smartResultMatchesKeyword(r, section.keyword),
+		smartResultMatchesKeyword(r, section.keyword ?? ""),
 	);
 	const relatedMatches = eligibleRanked.filter((r) =>
 		smartResultMatchesSection(r, section, isKo),
@@ -3309,7 +3309,7 @@ const formatSmartItems = (results: SmartResult[], isKo: boolean, section: SmartS
 		mustMatchTitleKeyword
 			? titleMatchSet.has(item)
 			: mustMatchKeyword
-			? smartResultMatchesKeyword(item, section.keyword)
+			? smartResultMatchesKeyword(item, section.keyword ?? "")
 			: (requiredMatchSet.size > 0 ? requiredMatchSet.has(item) : true),
 	);
 
@@ -3404,7 +3404,7 @@ const fetchSmartTavily = (
 	mode: string,
 	isKo: boolean,
 	includeDomains: string[] = [],
-	timeRange = "month",
+	timeRange: string | null | undefined = "month",
 ) => {
 	const payload: Record<string, unknown> = {
 		query: buildLatestSmartTavilyQuery(
@@ -3803,7 +3803,7 @@ const normalizeSmartGeneratedBullets = (value: unknown, section: SmartSectionPla
 const fallbackSmartBulletsFromEvidence = (section: SmartSectionPlan & { items?: { detail?: string; snippet?: string; title?: string; source?: string; time?: string }[] }, isKo: boolean) => {
 	const evidence = getSmartSectionEvidence(section, isKo);
 	return normalizeSmartGeneratedBullets(
-		evidence.map((item) => item.text),
+		evidence.map((item) => item?.text ?? ""),
 		section,
 		isKo,
 	);
@@ -3994,7 +3994,7 @@ const ensureKoreanSmartText = async (sections: SmartSectionFull[]) => {
 export async function generateSmartWidgetData(keyword: string, context: SmartWidgetOpts = {}): Promise<SmartWidgetData | null> {
 	const { lang } = getLangConfig();
 	const isKo = lang === "ko";
-	const categoryOverride = SMART_CATEGORY_IDS.includes(context?.categoryOverride)
+	const categoryOverride = SMART_CATEGORY_IDS.includes(context?.categoryOverride ?? "")
 		? context.categoryOverride
 		: null;
 	const classified = categoryOverride
@@ -4015,7 +4015,7 @@ export async function generateSmartWidgetData(keyword: string, context: SmartWid
 		isKo,
 	});
 	const sections = isKo
-		? await ensureKoreanSmartText(synthesizedSections)
+		? await ensureKoreanSmartText(synthesizedSections as SmartSectionFull[])
 		: synthesizedSections;
 
 	const now = new Date();
@@ -4282,18 +4282,18 @@ const getDiaryCopy = (language = "ko") =>
 				fallbackTitleScheduled: "A day shaped by plans",
 				fallbackTitleActive: "A day with notes",
 				fallbackTitleQuiet: "A quiet day",
-				scheduleSentence: (formattedDate, scheduleLines) =>
+				scheduleSentence: (formattedDate: string, scheduleLines: string[]) =>
 					`${formattedDate} included ${scheduleLines.join(", ")}.`,
-				noScheduleSentence: (formattedDate) =>
+				noScheduleSentence: (formattedDate: string) =>
 					`${formattedDate} had no recorded schedule.`,
-				completedSentence: (completedLines) =>
+				completedSentence: (completedLines: string[]) =>
 					`Completed items included ${completedLines.join(", ")}.`,
 				noCompletedSentence: "No tasks were marked complete.",
-				weatherSentence: (weatherSummary) =>
+				weatherSentence: (weatherSummary: string) =>
 					`The weather note for the day was ${weatherSummary}.`,
-				answerSentence: (answer) =>
+				answerSentence: (answer: string) =>
 					`The daily question response was "${answer}".`,
-				memoSentence: (memoText) =>
+				memoSentence: (memoText: string) =>
 					`The memo for the day said "${memoText}".`,
 				inactiveSentence:
 					"There was no app activity record, so this entry uses only automatically collected data.",
@@ -4315,18 +4315,18 @@ const getDiaryCopy = (language = "ko") =>
 				fallbackTitleScheduled: "일정이 이어진 하루",
 				fallbackTitleActive: "기록이 남은 하루",
 				fallbackTitleQuiet: "조용한 하루",
-				scheduleSentence: (formattedDate, scheduleLines) =>
+				scheduleSentence: (formattedDate: string, scheduleLines: string[]) =>
 					`${formattedDate}에는 ${scheduleLines.join(", ")} 일정이 있었다.`,
-				noScheduleSentence: (formattedDate) =>
+				noScheduleSentence: (formattedDate: string) =>
 					`${formattedDate}에는 기록된 일정이 없었다.`,
-				completedSentence: (completedLines) =>
+				completedSentence: (completedLines: string[]) =>
 					`완료한 일로는 ${completedLines.join(", ")}가 있었다.`,
 				noCompletedSentence: "완료로 표시한 일은 없었다.",
-				weatherSentence: (weatherSummary) =>
+				weatherSentence: (weatherSummary: string) =>
 					`날씨 기록은 ${weatherSummary}였다.`,
-				answerSentence: (answer) =>
+				answerSentence: (answer: string) =>
 					`하루 질문 답변에는 "${answer}"가 남아 있었다.`,
-				memoSentence: (memoText) =>
+				memoSentence: (memoText: string) =>
 					`Memo에는 "${memoText}"가 남아 있었다.`,
 				inactiveSentence:
 					"앱 접속 기록이 없어 자동 수집된 데이터만 정리했다.",

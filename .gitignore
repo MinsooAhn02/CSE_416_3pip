@@ -15,3 +15,5 @@ claude.md
 .claude/
 .claude-ignore
 script.md
+tsconfig.tsbuildinfo
+.wrangler/
