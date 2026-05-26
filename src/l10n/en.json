@@ -70,7 +70,11 @@
     "back": "← Back",
     "finish": "Finish ✓",
     "fit_desc": "Health data such as activity, sleep patterns, and more",
-    "cal_desc": "Calendar events and Google Tasks integration"
+    "cal_desc": "Calendar events and Google Tasks integration",
+    "enable_cal": "Enable Calendar",
+    "enable_cal_desc": "Turn on Calendar integration to view your schedule",
+    "enable_fit": "Enable Google Fit",
+    "enable_fit_desc": "Turn on Google Fit to view your health data"
   },
   "widget_settings": {
     "title": "Widget Settings",

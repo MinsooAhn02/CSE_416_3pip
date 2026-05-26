@@ -23,6 +23,8 @@ interface OnboardingState {
 	/** Reset all onboarding state (logout / session clear). */
 	reset: () => void;
 	finishOB: () => Promise<void>;
+	/** Update a single perm field and persist to DB. */
+	savePerm: (key: "cal" | "fit", value: boolean) => Promise<void>;
 }
 
 const INITIAL_PERMS: Perms = { fit: false, cal: false };
@@ -64,6 +66,19 @@ export const useOnboardingStore = create<OnboardingState>()((set, get) => ({
 			perms: INITIAL_PERMS,
 			persona: null,
 		}),
+
+	savePerm: async (key, value) => {
+		const newPerms: Perms = { ...get().perms, [key]: value };
+		set({ perms: newPerms });
+		if (supabase) {
+			const { data: { user } } = await supabase.auth.getUser();
+			if (user) {
+				await supabase
+					.from("user_settings")
+					.upsert({ id: user.id, onboarding_perms: newPerms });
+			}
+		}
+	},
 
 	finishOB: async () => {
 		const { selCats, perms, persona } = get();

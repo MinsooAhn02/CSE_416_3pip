@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import { X, BookOpen } from "lucide-react";
+import { X, BookOpen, CalendarDays } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useTheme } from "../../hooks/useTheme";
 import { useDiaryStore } from "../../store/useDiaryStore";
+import { useOnboardingStore } from "../../store/useOnboardingStore";
+import { useDataStore } from "../../store/useDataStore";
 import EventPanel from "./EventPanel";
 import TaskPanel from "./TaskPanel";
 import DiaryPanel from "./DiaryPanel";
@@ -31,6 +33,16 @@ const DatePanelContainer = ({ selectedDate, onClose }: { selectedDate: string | 
 	const getDiary = useDiaryStore((s) => s.getDiary);
 	const [showDiaryModal, setShowDiaryModal] = useState(false);
 	const [activePanel, setActivePanel] = useState("events");
+	const calEnabled = useOnboardingStore((s) => s.perms.cal);
+	const savePerm = useOnboardingStore((s) => s.savePerm);
+	const fetchCalendar = useDataStore((s) => s.fetchCalendar);
+	const fetchTomorrowCalendar = useDataStore((s) => s.fetchTomorrowCalendar);
+
+	const handleEnableCal = async () => {
+		await savePerm("cal", true);
+		fetchCalendar(undefined, true);
+		fetchTomorrowCalendar(undefined, true);
+	};
 
 	if (!selectedDate) return null;
 
@@ -103,43 +115,63 @@ const DatePanelContainer = ({ selectedDate, onClose }: { selectedDate: string | 
 				</div>
 			</div>
 
-			<div
-				className={`mb-3 inline-flex rounded-xl border p-1 ${
-					isDark ? "bg-morning-dark-card border-morning-dark-hover" : "bg-white/70"
-				} ${borderCls}`}
-			>
-				<button
-					type="button"
-					onClick={() => setActivePanel("events")}
-					className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
-						activePanel === "events"
-							? "bg-orange-500 text-white"
-							: `${secondaryBgCls} ${hoverCls}`
-					}`}
-				>
-					{t("events.title")}
-				</button>
-				<button
-					type="button"
-					onClick={() => setActivePanel("tasks")}
-					className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
-						activePanel === "tasks"
-							? "bg-green-500 text-white"
-							: `${secondaryBgCls} ${hoverCls}`
-					}`}
-				>
-					{t("tasks.title")}
-				</button>
-			</div>
+			<div className="relative">
+				<div className={!calEnabled ? "blur-sm pointer-events-none select-none opacity-60" : ""}>
+					<div
+						className={`mb-3 inline-flex rounded-xl border p-1 ${
+							isDark ? "bg-morning-dark-card border-morning-dark-hover" : "bg-white/70"
+						} ${borderCls}`}
+					>
+						<button
+							type="button"
+							onClick={() => setActivePanel("events")}
+							className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
+								activePanel === "events"
+									? "bg-orange-500 text-white"
+									: `${secondaryBgCls} ${hoverCls}`
+							}`}
+						>
+							{t("events.title")}
+						</button>
+						<button
+							type="button"
+							onClick={() => setActivePanel("tasks")}
+							className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
+								activePanel === "tasks"
+									? "bg-green-500 text-white"
+									: `${secondaryBgCls} ${hoverCls}`
+							}`}
+						>
+							{t("tasks.title")}
+						</button>
+					</div>
 
-			<div className="w-full max-w-none space-y-3">
-				<div className="w-full max-w-none">
-					{activePanel === "events" ? (
-					<EventPanel selectedDate={selectedDate} onClose={onClose} />
-					) : (
-					<TaskPanel selectedDate={selectedDate} />
-					)}
+					<div className="w-full max-w-none space-y-3">
+						<div className="w-full max-w-none">
+							{activePanel === "events" ? (
+							<EventPanel selectedDate={selectedDate} onClose={onClose} />
+							) : (
+							<TaskPanel selectedDate={selectedDate} />
+							)}
+						</div>
+					</div>
 				</div>
+
+				{!calEnabled && (
+					<div className="absolute inset-0 flex flex-col items-center justify-center gap-3 z-10">
+						<CalendarDays size={28} className="text-orange-400" />
+						<p className={`text-sm text-center px-4 ${isDark ? "text-gray-300" : "text-gray-600"}`}>
+							{t("onboarding.enable_cal_desc")}
+						</p>
+						<button
+							type="button"
+							onClick={handleEnableCal}
+							className="px-4 py-2 rounded-lg bg-orange-500 hover:bg-orange-600 text-white text-sm font-medium transition-colors"
+						>
+							{t("onboarding.enable_cal")}
+						</button>
+					</div>
+				)}
 			</div>
 
 			{showDiaryModal &&

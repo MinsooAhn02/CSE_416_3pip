@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { useShallow } from "zustand/react/shallow";
 import { useTheme } from "../../hooks/useTheme";
 import { useDataStore } from "../../store/useDataStore";
+import { useOnboardingStore } from "../../store/useOnboardingStore";
 import { useFontSize } from "../../hooks/useFontSize";
 import WidgetCard from "../common/WidgetCard";
 
@@ -22,6 +23,13 @@ const HealthWidget = () => {
 	const fetchHealth = useDataStore((s) => s.fetchHealth);
 	const getLastUpdatedMinutes = useDataStore((s) => s.getLastUpdatedMinutes);
 	const isRealData = apiStatus === "ok";
+	const fitEnabled = useOnboardingStore((s) => s.perms.fit);
+	const savePerm = useOnboardingStore((s) => s.savePerm);
+
+	const handleEnableFit = async () => {
+		await savePerm("fit", true);
+		fetchHealth(undefined, true);
+	};
 
 	const formatLastUpdated = (minutes: number | null | undefined) => {
 		if (minutes == null) return t("common.before_refresh");
@@ -30,6 +38,44 @@ const HealthWidget = () => {
 	};
 
 	const lastUpdatedText = formatLastUpdated(getLastUpdatedMinutes("health"));
+
+	if (!fitEnabled) {
+		return (
+			<WidgetCard
+				title={t("widgets.health.title")}
+				icon={Activity}
+				widgetId="health"
+				apiStatus={null}
+			>
+				<div className="relative min-h-[140px]">
+					<div className="blur-sm pointer-events-none select-none opacity-50 space-y-3">
+						<div className={`h-4 rounded ${isDark ? "bg-gray-700" : "bg-gray-200"}`} />
+						<div className={`h-2 rounded-full ${isDark ? "bg-gray-700" : "bg-gray-200"}`} />
+						<div className={`h-4 rounded ${isDark ? "bg-gray-700" : "bg-gray-200"}`} />
+						<div className={`h-2 rounded-full ${isDark ? "bg-gray-700" : "bg-gray-200"}`} />
+						<div className="grid grid-cols-2 gap-2 mt-2">
+							{[0, 1, 2].map((i) => (
+								<div key={i} className={`h-14 rounded-lg ${isDark ? "bg-gray-700" : "bg-gray-200"}`} />
+							))}
+						</div>
+					</div>
+					<div className="absolute inset-0 flex flex-col items-center justify-center gap-3">
+						<Activity size={24} className="text-green-400" />
+						<p className={`text-xs text-center px-2 ${isDark ? "text-gray-300" : "text-gray-600"}`}>
+							{t("onboarding.enable_fit_desc")}
+						</p>
+						<button
+							type="button"
+							onClick={handleEnableFit}
+							className="px-3 py-1.5 rounded-lg bg-green-500 hover:bg-green-600 text-white text-xs font-medium transition-colors"
+						>
+							{t("onboarding.enable_fit")}
+						</button>
+					</div>
+				</div>
+			</WidgetCard>
+		);
+	}
 
 	return (
 		<WidgetCard

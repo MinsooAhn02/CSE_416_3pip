@@ -70,7 +70,11 @@
     "back": "← 이전",
     "finish": "완료 ✓",
     "fit_desc": "운동량, 수면 패턴 등 건강 데이터",
-    "cal_desc": "일정 이벤트와 Task 연동"
+    "cal_desc": "일정 이벤트와 Task 연동",
+    "enable_cal": "캘린더 연동 켜기",
+    "enable_cal_desc": "일정과 태스크를 보려면 캘린더 연동을 켜세요",
+    "enable_fit": "Google Fit 연동 켜기",
+    "enable_fit_desc": "건강 데이터를 보려면 Google Fit 연동을 켜세요"
   },
   "widget_settings": {
     "title": "위젯 설정",
