@@ -633,7 +633,7 @@ const DiaryPanel = ({ selectedDate, onClose, compact = false }: DiaryPanelProps)
 									<button
 										onClick={handleRewrite}
 										disabled={!feedbackText.trim() || isRewriting}
-										className="w-full px-3 py-2 rounded-lg text-xs font-medium bg-blue-500 hover:bg-blue-600 text-white transition-colors flex items-center justify-center gap-1 disabled:opacity-50"
+										className="w-full px-3 py-2 rounded-lg text-xs font-medium bg-blue-500 hover:bg-blue-600 text-white transition-colors flex items-center justify-center gap-1 disabled:opacity-40 disabled:cursor-not-allowed disabled:bg-blue-500/60"
 									>
 										<RefreshCw size={13} className={isRewriting ? "animate-spin" : ""} />
 										{isRewriting ? copy.rewriting : copy.rewrite}
@@ -659,14 +659,6 @@ const DiaryPanel = ({ selectedDate, onClose, compact = false }: DiaryPanelProps)
 											{copy.confirmRewrite}
 										</button>
 										<button
-											onClick={handleRewrite}
-											disabled={isRewriting}
-											className={`flex-1 px-3 py-2 rounded-lg text-xs font-medium transition-colors flex items-center justify-center gap-1 ${secondaryBgCls} ${isDark ? "hover:bg-white/10" : "hover:bg-gray-100"} disabled:opacity-50`}
-										>
-											<RefreshCw size={13} className={isRewriting ? "animate-spin" : ""} />
-											{isRewriting ? copy.rewriting : copy.rewrite}
-										</button>
-										<button
 											onClick={handleDiscardRewrite}
 											className={`px-3 py-2 rounded-lg text-xs font-medium transition-colors ${secondaryBgCls} ${isDark ? "hover:bg-white/10" : "hover:bg-gray-100"}`}
 										>
@@ -682,6 +674,14 @@ const DiaryPanel = ({ selectedDate, onClose, compact = false }: DiaryPanelProps)
 										className={`w-full px-3 py-2 rounded-lg text-xs outline-none border transition-all focus:ring-2 focus:ring-blue-500/30 resize-none ${inputCls}`}
 										placeholder={copy.feedbackPlaceholder}
 									/>
+									<button
+										onClick={handleRewrite}
+										disabled={!feedbackText.trim() || isRewriting}
+										className={`w-full px-3 py-2 rounded-lg text-xs font-medium transition-colors flex items-center justify-center gap-1 ${secondaryBgCls} ${isDark ? "hover:bg-white/10" : "hover:bg-gray-100"} disabled:opacity-40 disabled:cursor-not-allowed`}
+									>
+										<RefreshCw size={13} className={isRewriting ? "animate-spin" : ""} />
+										{isRewriting ? copy.rewriting : copy.rewrite}
+									</button>
 								</div>
 							)}
 						</div>
