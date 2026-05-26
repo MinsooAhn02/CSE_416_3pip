@@ -945,6 +945,9 @@ const rewriteYesterdayDiary = async ({ diaryText, memoText, tone, lang, langInst
 				isKo
 					? "출력은 1-2개의 짧은 완결 문장. 군더더기 없음."
 					: "Output 1-2 short complete sentences. No filler.",
+				isKo
+					? "반드시 한국어(한글)로만 작성하세요. 일본어, 중국어(한자), 러시아어, 아랍어 등 다른 언어/문자는 절대 사용하지 마세요."
+					: "Write strictly in English only. Do not use Korean, Chinese, Japanese, Cyrillic, Arabic, or any other script.",
 				`Tone: ${tone || "neutral"}.`,
 				langInstruction,
 			].join("\n"),

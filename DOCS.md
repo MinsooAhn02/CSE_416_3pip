@@ -1,6 +1,6 @@
 # MorningBriefing.AI — Developer Reference
 
-> Last updated: 2026-05-22
+> Last updated: 2026-05-26
 > Single source of truth for architecture. Change log → [CHANGELOG.md](./CHANGELOG.md). Korean version → [DOCS_kor.md](./DOCS_kor.md).
 
 ---
