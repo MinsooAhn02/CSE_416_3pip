@@ -1,10 +1,11 @@
-import { memo } from "react";
+import { memo, useState } from "react";
 import { Activity, RefreshCw } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useShallow } from "zustand/react/shallow";
 import { useTheme } from "../../hooks/useTheme";
 import { useDataStore } from "../../store/useDataStore";
 import { useOnboardingStore } from "../../store/useOnboardingStore";
+import { useAuthStore } from "../../store/useAuthStore";
 import { useFontSize } from "../../hooks/useFontSize";
 import WidgetCard from "../common/WidgetCard";
 
@@ -25,10 +26,21 @@ const HealthWidget = () => {
 	const isRealData = apiStatus === "ok";
 	const fitEnabled = useOnboardingStore((s) => s.perms.fit);
 	const savePerm = useOnboardingStore((s) => s.savePerm);
+	const reconnectGoogle = useAuthStore((s) => s.reconnectGoogle);
+	const [isReconnecting, setIsReconnecting] = useState(false);
 
 	const handleEnableFit = async () => {
 		await savePerm("fit", true);
 		fetchHealth(undefined, true);
+	};
+
+	const handleReconnect = async () => {
+		setIsReconnecting(true);
+		try {
+			await reconnectGoogle();
+		} finally {
+			setIsReconnecting(false);
+		}
 	};
 
 	const formatLastUpdated = (minutes: number | null | undefined) => {
@@ -147,7 +159,17 @@ const HealthWidget = () => {
 					)}
 				</div>
 			) : error ? (
-				<p className="text-[11px] text-red-400">{error}</p>
+				<div className="space-y-2">
+					<p className="text-[11px] text-red-400">{error}</p>
+					<button
+						type="button"
+						onClick={handleReconnect}
+						disabled={isReconnecting}
+						className="text-xs px-3 py-1.5 rounded-lg bg-blue-500 hover:bg-blue-600 disabled:opacity-50 text-white transition-colors"
+					>
+						{isReconnecting ? t("common.reconnecting") : t("common.reconnect_google")}
+					</button>
+				</div>
 			) : (
 				<p className="text-sm opacity-50">{t("widgets.health.loading")}</p>
 			)}

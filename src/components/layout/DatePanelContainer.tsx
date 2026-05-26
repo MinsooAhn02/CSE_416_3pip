@@ -6,6 +6,7 @@ import { useTheme } from "../../hooks/useTheme";
 import { useDiaryStore } from "../../store/useDiaryStore";
 import { useOnboardingStore } from "../../store/useOnboardingStore";
 import { useDataStore } from "../../store/useDataStore";
+import { useGoogleCalendarStore } from "../../store/useGoogleCalendarStore";
 import EventPanel from "./EventPanel";
 import TaskPanel from "./TaskPanel";
 import DiaryPanel from "./DiaryPanel";
@@ -40,6 +41,11 @@ const DatePanelContainer = ({ selectedDate, onClose }: { selectedDate: string | 
 
 	const handleEnableCal = async () => {
 		await savePerm("cal", true);
+		// EventPanel은 자체 fetch 없이 useGoogleCalendarStore 읽기만 함 → 직접 트리거
+		useGoogleCalendarStore
+			.getState()
+			.fetchEventsAndTasks?.({ date: selectedDate ?? undefined, force: true })
+			.catch(() => {});
 		fetchCalendar(undefined, true);
 		fetchTomorrowCalendar(undefined, true);
 	};
