@@ -79,7 +79,7 @@ const HealthWidget = () => {
 						<button
 							type="button"
 							onClick={handleEnableFit}
-							className="px-3 py-1.5 rounded-lg bg-green-500 hover:bg-green-600 text-white text-xs font-medium transition-colors"
+							className="px-3 py-1.5 rounded-lg bg-blue-500 hover:bg-blue-600 text-white text-xs font-medium transition-colors"
 						>
 							{t("onboarding.enable_fit")}
 						</button>

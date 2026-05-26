@@ -172,7 +172,7 @@ const DatePanelContainer = ({ selectedDate, onClose }: { selectedDate: string | 
 						<button
 							type="button"
 							onClick={handleEnableCal}
-							className="px-4 py-2 rounded-lg bg-orange-500 hover:bg-orange-600 text-white text-sm font-medium transition-colors"
+							className="px-4 py-2 rounded-lg bg-blue-500 hover:bg-blue-600 text-white text-sm font-medium transition-colors"
 						>
 							{t("onboarding.enable_cal")}
 						</button>
