@@ -6,6 +6,7 @@ import { formatLocalDate, shiftDateString } from "../utils/date";
 import { getInterestFingerprint, getTopInterestKeywords } from "../utils/interests";
 import { useSettingsStore } from "./useSettingsStore";
 import { useAuthStore } from "./useAuthStore";
+import { useOnboardingStore } from "./useOnboardingStore";
 import i18n from "../l10n/i18n";
 import { handleApiError } from "../utils/errorHandler";
 
@@ -1990,6 +1991,11 @@ export const useDataStore = create<DataState>()((set, get) => ({
 	   오늘 일정(Today's Schedule)만 가져오기
 	   ══════════════════════════════════════════ */
 	fetchCalendar: async (userId, force = false) => {
+		if (!useOnboardingStore.getState().perms.cal) {
+			set({ calEvents: [] });
+			get().markFetched("calendar");
+			return;
+		}
 		if (!supabase) {
 			set({ calEvents: [] });
 			get().markFetched("calendar");
@@ -2051,6 +2057,10 @@ export const useDataStore = create<DataState>()((set, get) => ({
 	   오후 브리핑에서 사용
 	   ══════════════════════════════════════════ */
 	fetchTomorrowCalendar: async (userId, force = false) => {
+		if (!useOnboardingStore.getState().perms.cal) {
+			set({ tomorrowEvents: [] });
+			return;
+		}
 		if (!supabase) {
 			set({ tomorrowEvents: [] });
 			return;
@@ -2101,6 +2111,12 @@ export const useDataStore = create<DataState>()((set, get) => ({
 	   Steps + Sleep 중심, 나머지는 보조 데이터
 	   ══════════════════════════════════════════ */
 	fetchHealth: async (userId, force = false) => {
+		if (!useOnboardingStore.getState().perms.fit) {
+			set({ healthData: null });
+			get().markFetched("health");
+			get().setApiStatus("health", null);
+			return;
+		}
 		if (!supabase) {
 			set((s) => ({
 				errors: {
