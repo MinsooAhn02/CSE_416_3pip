@@ -165,7 +165,7 @@ const DatePanelContainer = ({ selectedDate, onClose }: { selectedDate: string | 
 
 				{!calEnabled && (
 					<div className="absolute inset-0 flex flex-col items-center justify-center gap-3 z-10">
-						<CalendarDays size={28} className="text-orange-400" />
+						<CalendarDays size={28} className="text-blue-400" />
 						<p className={`text-sm text-center px-4 ${isDark ? "text-gray-300" : "text-gray-600"}`}>
 							{t("onboarding.enable_cal_desc")}
 						</p>

@@ -72,7 +72,7 @@ const HealthWidget = () => {
 						</div>
 					</div>
 					<div className="absolute inset-0 flex flex-col items-center justify-center gap-3">
-						<Activity size={24} className="text-green-400" />
+						<Activity size={24} className="text-blue-400" />
 						<p className={`text-xs text-center px-2 ${isDark ? "text-gray-300" : "text-gray-600"}`}>
 							{t("onboarding.enable_fit_desc")}
 						</p>
