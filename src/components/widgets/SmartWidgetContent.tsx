@@ -1,6 +1,6 @@
 import { memo, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Search, X, RefreshCw, Pencil, Check } from "lucide-react";
+import { Search, X, RefreshCw, Pencil, Check, Layers } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useTheme } from "../../hooks/useTheme";
 import { getSmartWidgetCacheKey, useWidgetStore } from "../../store/useWidgetStore";
@@ -280,14 +280,15 @@ const SmartWidgetContent = ({ keyword }: SmartWidgetContentProps) => {
 								});
 							}}
 							aria-expanded={categoryMenuOpen}
-							className={`-ml-1 h-6 w-8 rounded-lg border flex items-center justify-center gap-0.5 shrink-0 transition-colors ${
+							className={`-ml-1 h-6 w-10 rounded-lg border flex items-center justify-center gap-0.5 shrink-0 transition-colors ${
 								isDark
 									? "border-white/15 bg-white/10"
 									: "border-slate-200 bg-white shadow-sm"
 							} ${hoverCls}`}
 							title={t("smart_widget.change_category")}
 						>
-							<span aria-hidden="true" className="text-[14px] leading-none">
+							<Layers size={9} aria-hidden="true" className="shrink-0 opacity-50" />
+							<span aria-hidden="true" className="text-[12px] leading-none">
 								{data.emoji || "🔍"}
 							</span>
 							<span

@@ -111,6 +111,9 @@ const App = () => {
 		}
 
 		const runFullInit = async () => {
+			// 이전 세션의 stale 타임스탬프 제거 (로그인 시 "9000분 전" 방지)
+			localStorage.removeItem("mb_last_fetched_at");
+			useDataStore.setState({ lastFetchedAt: {} });
 			try {
 				await Promise.all([
 					useSettingsStore.getState().hydrateFromDB?.(),
@@ -126,7 +129,7 @@ const App = () => {
 				);
 			}
 			setHydrateComplete(true);
-			// 캐시 우선: 1시간 이내 캐시 있으면 API 호출 없이 즉시 표시
+			// 캐시 우선: 6시간 이내 캐시 있으면 API 호출 없이 즉시 표시
 			await fetchAll({ useExistingCache: true });
 		};
 

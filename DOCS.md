@@ -1,6 +1,6 @@
 # MorningBriefing.AI — Developer Reference
 
-> Last updated: 2026-05-26
+> Last updated: 2026-05-27
 > Single source of truth for architecture. Change log → [CHANGELOG.md](./CHANGELOG.md). Korean version → [DOCS_kor.md](./DOCS_kor.md).
 
 ---
@@ -180,13 +180,18 @@ mount
 Condition: `isLoggedIn=true && user.id` present
 
 ```
-hydrateFromDB() → parallel load of settings/widgets/todos/diary/briefingHistory
-  └─ fetchAll({ useExistingCache: true })   ← cache-first, fast first render
+runFullInit()
+  └─ localStorage.removeItem("mb_last_fetched_at")   ← stale timestamp reset (prevents "9000분 전" on re-login)
+  └─ useDataStore.setState({ lastFetchedAt: {} })     ← in-memory reset
+  └─ hydrateFromDB() → parallel load of settings/widgets/todos/diary/briefingHistory
+  └─ fetchAll({ useExistingCache: true })   ← cache-first, fast first render (6-hour TTL)
   └─ AI follow-up (generateAiTodoOnLoad, etc.)
   └─ useMidnightTrigger → runs once: lazy diary synthesis for missed days + todo reset
 ```
 
 Fallback: if `user.id` is delayed, runs `fetchAll()` solo after 1200ms timeout.
+
+> **Note on "last updated" display:** `markFetched(key, dbCached.fetchedAt)` stamps the original DB-cache timestamp into localStorage. Resetting `mb_last_fetched_at` on login ensures the displayed "X분 전" always reflects the current session's fetch, not a previous session's stale value.
 
 ### Phase 3 — Periodic Refresh
 
@@ -465,6 +470,7 @@ Legacy `[MB_META]...[/MB_META]` task metadata is stripped on read; no longer wri
 - "More" → `NewsAllModal` (grid, max 10 items) via `createPortal`
 - Click → direct URL navigation (`<a target="_blank">`)
 - Content cleaned with `cleanContent()` before display
+- **Image fallback:** `imgErrors` / `modalImgErrors` React state (`Record<number, boolean>`) tracks per-index load failures. On `onError`, index is set to `true` → renders `<Newspaper>` icon placeholder. No DOM querySelector (replaced from `e.currentTarget.parentElement?.querySelector()` approach which was unreliable on re-render).
 
 #### TrendsWidget
 
@@ -507,7 +513,7 @@ Legacy `[MB_META]...[/MB_META]` task metadata is stripped on read; no longer wri
 
 - Data: `calEvents` (today's events via `useGoogleCalendarStore`)
 - Calendar grid with event indicators and blue dots for diary days
-- **3-level header drill-down**: month → year (3×4 grid) → decade (3×4 grid). Arrow keys navigate level-appropriate units. `Today` button returns to current month.
+- **3-level header drill-down**: month → year (3×4 grid) → decade (3×4 grid). Arrow keys navigate level-appropriate units. `Today` button always visible regardless of header level (`calView === "month"` condition, not `headerView === "month"`); clicking from year/decade view calls `goToToday()` which resets `headerView` to `"month"` and navigates to current date.
 - Month/week/day view toggle auto-closes open Date Details panel.
 
 #### BriefingWidget
@@ -586,6 +592,7 @@ Legacy `[MB_META]...[/MB_META]` task metadata is stripped on read; no longer wri
 - Card-first layout: title, source, image, open link
 - Empty-state message when no results
 - Language mismatch (keyword script ≠ language mode) → informational notice
+- **Category button:** `[Layers icon + emoji + ▾]` displayed left of the keyword title. Shows the auto-detected category emoji (e.g., 💻 for tech). Clicking opens a dropdown to manually override the auto-detected category. `Layers` (lucide) icon was added to distinguish it from an image-picker button.
 
 **Rendering:**
 - Two rendered sections: `type === "summary"` (Groq bullets, 3–4 items) + `type === "news"` (2–3 related news, opens in new tab)

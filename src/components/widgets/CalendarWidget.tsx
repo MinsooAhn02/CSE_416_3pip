@@ -249,25 +249,24 @@ const CalendarWidget = () => {
 							>
 								<ChevronRight size={16} />
 							</button>
-
-							{headerView === "month" && (
-								<button
-									type="button"
-									onClick={goToToday}
-									disabled={isTodayButtonDisabled}
-									className={`rounded-full border px-2.5 py-1 text-xs font-medium transition-colors ${
-										isTodayButtonDisabled
-											? isDark
-												? "cursor-default border-slate-700 text-slate-500"
-												: "cursor-default border-slate-200 text-slate-400"
-											: `${borderCls} ${hoverCls}`
-									}`}
-									title={t("calendar.go_to_today")}
-								>
-									{t("calendar.today")}
-								</button>
-							)}
 						</>
+					)}
+
+					{calView === "month" && (
+						<button
+							type="button"
+							onClick={goToToday}
+							className={`rounded-full border px-2.5 py-1 text-xs font-medium transition-colors ${
+								isTodayButtonDisabled
+									? isDark
+										? "cursor-default border-slate-700 text-slate-500"
+										: "cursor-default border-slate-200 text-slate-400"
+									: `${borderCls} ${hoverCls}`
+							}`}
+							title={t("calendar.go_to_today")}
+						>
+							{t("calendar.today")}
+						</button>
 					)}
 
 					<button

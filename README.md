@@ -1,7 +1,7 @@
 # MorningBriefing.AI
 
-> **Live demo:** `https://morningbriefing.dksalstn0621.workers.dev` _(Cloudflare Workers; replace with actual deployment URL)_
-> **Repository:** `https://github.com/MinsooAhn02/CSE_416_3pip` _(replace with actual GitHub URL)_
+> **Live demo:** https://morningbriefing.dksalstn0621.workers.dev (Cloudflare Workers)
+> **Repository:** https://github.com/MinsooAhn02/CSE_416_3pip
 
 ## 🚩 Problem Statement
 
@@ -24,7 +24,7 @@ MorningBriefing.AI eliminates the need for users to search for information throu
 ## 🛠️ Technology Stack
 
 ### Frontend
-- **Language:** JavaScript (JSX)
+- **Language:** TypeScript (TSX)
 - **Framework:** React 18.3
 - **Build tool:** Vite 6
 - **Styling:** Tailwind CSS 3.4
@@ -180,6 +180,14 @@ npm run build:extension
 
 Generates `dist/` plus a zipped extension archive for the Chrome Web Store.
 
+### Type checking (TypeScript)
+
+```powershell
+npm run typecheck
+```
+
+Runs `tsc --noEmit` — reports type errors without emitting any files. Run before committing to catch type issues early.
+
 ---
 
 ## 🧪 Testing
@@ -192,14 +200,17 @@ After completing setup (above), verify the dev environment with this checklist:
 
 1. **Login flow:** Click "Continue with Google" on the login screen → OAuth consent → redirect back → dashboard renders
 2. **Widget rendering:** All default widgets (Briefing, Diary, Calendar, Weather, Stocks, Trends, News, Health) appear within 3 seconds
-3. **Manual refresh:** Click the refresh icon on any widget → loading indicator → fresh data
-4. **Language toggle:** Click language toggle in TopNav → news, trends, smart widget content reloads in selected language
-5. **Settings persistence:** Change theme/temperature unit/stock symbols → reload page → settings retained
-6. **Calendar:** Add an event via EventPanel → event appears on the calendar
-7. **Diary:** Answer today's Q&A → save → reload → answer retained (PIN-gated)
-8. **AI Briefing:** Wait for briefing to generate → click for detail modal → all sections (header / schedule / yesterday / latest_info) render
+3. **Last-updated time:** After login, all widget headers show "방금" or ≤2분 전 — not a stale timestamp from a previous session
+4. **Manual refresh:** Click the refresh icon on any widget → loading indicator → fresh data
+5. **Language toggle:** Click language toggle in TopNav → news, trends, smart widget content reloads in selected language
+6. **Settings persistence:** Change theme/temperature unit/stock symbols → reload page → settings retained
+7. **Calendar:** Add an event via EventPanel → event appears on the calendar; clicking the month/year header enters the year picker → **오늘** button remains visible and clicking it returns to today's month
+8. **News images:** News widget (news/grid view) → images load correctly; broken images show the newspaper icon placeholder without a blank gap
+9. **Smart Widget:** Category button shows `[≡ + emoji + ▾]` — clicking opens the category dropdown; pencil icon edits the keyword
+10. **Diary:** Answer today's Q&A → save → reload → answer retained (PIN-gated)
+11. **AI Briefing:** Wait for briefing to generate → click for detail modal → all sections (header / schedule / yesterday / latest_info) render
 
-If any check fails, see `todo.md` for known issues or file a bug (see below).
+If any check fails, check the [GitHub Issues](https://github.com/MinsooAhn02/CSE_416_3pip/issues) for known issues or file a bug (see below).
 
 ### Test data and accounts
 

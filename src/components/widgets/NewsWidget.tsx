@@ -38,6 +38,8 @@ const NewsWidget = () => {
 	const maxShow = MAX_ITEMS[fontKey as keyof typeof MAX_ITEMS]?.[viewType as keyof (typeof MAX_ITEMS)[keyof typeof MAX_ITEMS]] ?? 3;
 
 	const [showAllModal, setShowAllModal] = useState(false);
+	const [imgErrors, setImgErrors] = useState<Record<number, boolean>>({});
+	const [modalImgErrors, setModalImgErrors] = useState<Record<number, boolean>>({});
 
 	const formatLastUpdated = (minutes: number | null | undefined) => {
 		if (minutes == null) return t("common.before_refresh");
@@ -123,24 +125,18 @@ const NewsWidget = () => {
 								{...linkProps(item)}
 								className="overflow-hidden rounded-xl group aspect-square relative block"
 							>
-								{item.image ? (
+								{item.image && !imgErrors[i] ? (
 									<img
 										src={item.image}
 										alt=""
 										className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
-										onError={(e) => {
-											e.currentTarget.style.display = "none";
-											e.currentTarget.parentElement
-												?.querySelector(".grid-fallback")
-												?.classList.remove("hidden");
-										}}
+										onError={() => setImgErrors(prev => ({ ...prev, [i]: true }))}
 									/>
-								) : null}
-								<div
-									className={`grid-fallback ${item.image ? "hidden" : ""} w-full h-full flex items-center justify-center ${secondaryBgCls}`}
-								>
-									<Newspaper size={16} className="opacity-20" />
-								</div>
+								) : (
+									<div className={`w-full h-full flex items-center justify-center ${secondaryBgCls}`}>
+										<Newspaper size={16} className="opacity-20" />
+									</div>
+								)}
 								{item.title && (
 									<div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent px-1.5 pb-1.5 pt-4">
 										<p className="text-[10px] text-white font-medium line-clamp-2 leading-tight">
@@ -174,24 +170,18 @@ const NewsWidget = () => {
 						className={`w-full flex items-start gap-2.5 p-2 rounded-xl text-left transition-colors ${listItemBgCls}`}
 					>
 						<div className="w-16 h-14 rounded-lg shrink-0 overflow-hidden">
-							{item.image ? (
+							{item.image && !imgErrors[i] ? (
 								<img
 									src={item.image}
 									alt=""
 									className="w-full h-full object-cover"
-									onError={(e) => {
-										e.currentTarget.style.display = "none";
-										e.currentTarget.parentElement
-											?.querySelector(".news-fallback")
-											?.classList.remove("hidden");
-									}}
+									onError={() => setImgErrors(prev => ({ ...prev, [i]: true }))}
 								/>
-							) : null}
-							<div
-								className={`news-fallback ${item.image ? "hidden" : ""} w-full h-full flex items-center justify-center ${secondaryBgCls}`}
-							>
-								<Newspaper size={14} className="opacity-25" />
-							</div>
+							) : (
+								<div className={`w-full h-full flex items-center justify-center ${secondaryBgCls}`}>
+									<Newspaper size={14} className="opacity-25" />
+								</div>
+							)}
 						</div>
 						<div className="flex-1 min-w-0 py-0.5">
 							<p
@@ -282,15 +272,13 @@ const NewsWidget = () => {
 													className={`flex gap-3 px-4 py-3 transition-colors ${hoverBtnCls}`}
 												>
 													<div className={`w-20 h-14 flex-shrink-0 rounded-lg overflow-hidden ${secondaryBgCls}`}>
-														{item.image ? (
+														{item.image && !modalImgErrors[i] ? (
 															<img
 																src={item.image}
 																alt=""
 																className="w-full h-full object-cover"
 																loading="lazy"
-																onError={(e) => {
-																	e.currentTarget.style.display = "none";
-																}}
+																onError={() => setModalImgErrors(prev => ({ ...prev, [i]: true }))}
 															/>
 														) : (
 															<div className="w-full h-full flex items-center justify-center">
