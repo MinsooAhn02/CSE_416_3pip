@@ -2,19 +2,16 @@ import { useState, useEffect, useMemo } from "react";
 import {
 	X,
 	Search,
-	Lock,
 	BookOpen,
 	ChevronRight,
-	ChevronLeft,
-	Edit2,
-	RotateCcw,
-	Save,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useTheme } from "../../hooks/useTheme";
+import { useFontSize } from "../../hooks/useFontSize";
 import { useDiaryStore } from "../../store/useDiaryStore";
 import { useSettingsStore } from "../../store/useSettingsStore";
 import PINModal from "./PINModal";
+import DiaryPanel from "../layout/DiaryPanel";
 
 /**
  * DiaryListModal — PIN-protected list of all historical diary entries
@@ -32,6 +29,7 @@ interface DiaryListModalProps {
 const DiaryListModal = ({ onClose }: DiaryListModalProps) => {
 	const { isDark, cardCls, inputCls, hoverCls, secondaryBgCls, borderCls } =
 		useTheme();
+	const { body: bodyStyle } = useFontSize();
 	const {
 		entries,
 		getDiaryDates,
@@ -40,24 +38,14 @@ const DiaryListModal = ({ onClose }: DiaryListModalProps) => {
 		pinAuthExpiresAt,
 		refreshPinAuthState,
 		clearPinSession,
-		saveDiary,
-		saveMemo,
-		revertDiaryToGenerated,
 	} = useDiaryStore();
 	const pinLockMode = useSettingsStore((state) => state.pinLockMode);
 	const pinRequired = pinSet && pinLockMode !== "off";
 
 	const [showPinModal, setShowPinModal] = useState(false);
 	const [searchQuery, setSearchQuery] = useState("");
-	const [selectedEntry, setSelectedEntry] = useState(null);
 	const [sortBy, setSortBy] = useState("recent"); // 'recent' or 'oldest'
-
-	/* PHASE 11: Detail modal & edit view state */
 	const [detailDateStr, setDetailDateStr] = useState<string | null>(null);
-	const [isEditMode, setIsEditMode] = useState(false);
-	const [editDiary, setEditDiary] = useState("");
-	const [editMemo, setEditMemo] = useState("");
-	const [isSaving, setIsSaving] = useState(false);
 
 	/* Check if PIN is authenticated */
 	const isAuthenticated = !pinRequired || isPinAuthenticated;
@@ -160,55 +148,12 @@ const DiaryListModal = ({ onClose }: DiaryListModalProps) => {
 			: text;
 	};
 
-	/* PHASE 11: Open detail view for a diary entry */
 	const handleOpenDetail = (dateStr: string) => {
 		setDetailDateStr(dateStr);
-		const entry = entries[dateStr];
-		setEditDiary(entry?.diary || "");
-		setEditMemo(entry?.notes || entry?.memo || "");
-		setIsEditMode(false);
 	};
 
-	/* PHASE 11: Back to list */
 	const handleBackToList = () => {
 		setDetailDateStr(null);
-		setIsEditMode(false);
-		setEditDiary("");
-		setEditMemo("");
-	};
-
-	/* PHASE 11: Save edits */
-	const handleSaveEdits = async () => {
-		setIsSaving(true);
-		try {
-			if (editDiary !== (entries[detailDateStr!]?.diary || "")) {
-				await saveDiary(detailDateStr!, editDiary);
-			}
-			if (
-				editMemo !==
-				(entries[detailDateStr!]?.notes || entries[detailDateStr!]?.memo || "")
-			) {
-				await saveMemo(detailDateStr!, editMemo);
-			}
-			setIsEditMode(false);
-		} catch (err) {
-			console.error("Failed to save diary:", err);
-		}
-		setIsSaving(false);
-	};
-
-	const handleRevertDiary = async () => {
-		if (!detailDateStr) return;
-		setIsSaving(true);
-		try {
-			await revertDiaryToGenerated(detailDateStr);
-			const entry = entries[detailDateStr];
-			setEditDiary(entry?.aiGeneratedDiary || entry?.diary || "");
-			setIsEditMode(false);
-		} catch (err) {
-			console.error("Failed to revert diary:", err);
-		}
-		setIsSaving(false);
 	};
 
 	if (pinRequired && !isAuthenticated) {
@@ -341,11 +286,12 @@ const DiaryListModal = ({ onClose }: DiaryListModalProps) => {
 														{/* Entry Header */}
 														<div className="flex items-start justify-between gap-3">
 															<div className="flex-1 min-w-0">
-																<h4 className="font-semibold text-sm">
+																<h4 className="font-semibold text-sm" style={bodyStyle}>
 																	{formatDate(dateStr)}
 																</h4>
 																<p
 																	className={`text-xs mt-1 line-clamp-2 ${isDark ? "text-gray-400" : "text-gray-600"}`}
+																	style={bodyStyle}
 																>
 																	{preview || "(No content)"}
 																</p>
@@ -376,192 +322,19 @@ const DiaryListModal = ({ onClose }: DiaryListModalProps) => {
 				) : null}
 			</AnimatePresence>
 
-			{/* Modal Content - Detail/Edit View */}
+			{/* Modal Content - Detail View (DiaryPanel) */}
 			<AnimatePresence mode="wait">
 				{detailDateStr ? (
 					<motion.div
 						key="detail-view"
-						className={`relative z-10 w-full max-w-2xl max-h-[80vh] rounded-2xl border shadow-2xl flex flex-col overflow-hidden ${cardCls}`}
+						className="relative z-10 w-full max-w-2xl max-h-[85vh] overflow-y-auto custom-scrollbar"
 						onClick={(e) => e.stopPropagation()}
 						initial={{ opacity: 0, scale: 0.95, x: 50 }}
 						animate={{ opacity: 1, scale: 1, x: 0 }}
 						exit={{ opacity: 0, scale: 0.95, x: -50 }}
 						transition={{ duration: 0.2 }}
 					>
-						{/* Detail Header */}
-						<div
-							className={`flex items-center justify-between p-4 border-b ${borderCls}`}
-						>
-							<div className="flex items-center gap-3">
-								<button
-									onClick={handleBackToList}
-									className={`p-1 rounded-full transition-colors ${hoverCls}`}
-									title="Back to list"
-								>
-									<ChevronLeft size={18} />
-								</button>
-								<div>
-									<h2 className="font-bold text-lg">
-										{formatDate(detailDateStr)}
-									</h2>
-									<p
-										className={`text-xs ${isDark ? "text-gray-400" : "text-gray-600"}`}
-									>
-										{isEditMode ? "Editing..." : "Detail View"}
-									</p>
-								</div>
-							</div>
-							<div className="flex items-center gap-2">
-								{isEditMode ? (
-									<>
-										<button
-											onClick={handleSaveEdits}
-											disabled={isSaving}
-											className={`p-1 rounded-full transition-colors ${
-												isSaving
-													? "opacity-50 cursor-not-allowed"
-													: isDark
-														? "hover:bg-green-500/20"
-														: "hover:bg-green-100"
-											}`}
-											title="Save"
-										>
-											<Save
-												size={18}
-												className={isSaving ? "" : "text-green-500"}
-											/>
-										</button>
-										<button
-											onClick={() => {
-												setIsEditMode(false);
-												const entry = entries[detailDateStr];
-												setEditDiary(entry?.diary || "");
-												setEditMemo(entry?.notes || entry?.memo || "");
-											}}
-											className={`p-1 rounded-full transition-colors ${
-												hoverCls
-											}`}
-											title="Cancel"
-										>
-											<X size={18} />
-										</button>
-									</>
-								) : (
-									<>
-										{!!(
-											entries[detailDateStr]?.editedDiary?.trim() &&
-											entries[detailDateStr]?.aiGeneratedDiary?.trim()
-										) && (
-											<button
-												onClick={handleRevertDiary}
-												disabled={isSaving}
-												className={`p-1 rounded-full transition-colors ${
-													isDark
-														? "hover:bg-amber-500/20"
-														: "hover:bg-amber-100"
-												} ${isSaving ? "opacity-50 cursor-not-allowed" : ""}`}
-												title="Revert to original AI diary"
-											>
-												<RotateCcw size={18} className="text-amber-500" />
-											</button>
-										)}
-										<button
-											onClick={() => setIsEditMode(true)}
-											className={`p-1 rounded-full transition-colors ${
-												isDark ? "hover:bg-blue-500/20" : "hover:bg-blue-100"
-											}`}
-											title="Edit"
-										>
-											<Edit2 size={18} className="text-blue-500" />
-										</button>
-										<button
-											onClick={onClose}
-											className={`p-1 rounded-full transition-colors ${
-												hoverCls
-											}`}
-											title="Close entire modal"
-										>
-											{" "}
-											<X size={18} />
-										</button>
-									</>
-								)}
-							</div>
-						</div>
-
-						{/* Detail Content */}
-						<div className="flex-1 overflow-y-auto p-4 space-y-4">
-							{isEditMode ? (
-								/* Edit Mode */
-								<>
-									<div className="space-y-2">
-										<label
-											className={`text-xs font-semibold ${isDark ? "text-blue-400" : "text-blue-600"}`}
-										>
-											Diary
-										</label>
-										<textarea
-											value={editDiary}
-											onChange={(e) => setEditDiary(e.target.value)}
-											placeholder="Write your diary entry..."
-											className={`w-full h-32 px-3 py-2 rounded-lg text-sm outline-none border transition-all focus:ring-2 focus:ring-blue-500/30 resize-none ${inputCls}`}
-										/>
-									</div>
-									<div className="space-y-2">
-										<label
-											className={`text-xs font-semibold ${isDark ? "text-green-400" : "text-green-600"}`}
-										>
-											Memo
-										</label>
-										<textarea
-											value={editMemo}
-											onChange={(e) => setEditMemo(e.target.value)}
-											placeholder="Add memo or reflections..."
-											className={`w-full h-24 px-3 py-2 rounded-lg text-sm outline-none border transition-all focus:ring-2 focus:ring-green-500/30 resize-none ${inputCls}`}
-										/>
-									</div>
-								</>
-							) : (
-								/* View Mode */
-								<>
-									{editDiary && (
-										<div className="space-y-2">
-											<div
-												className={`text-xs font-semibold ${isDark ? "text-blue-300" : "text-blue-600"}`}
-											>
-												Diary
-											</div>
-											<p
-												className={`text-sm leading-relaxed whitespace-pre-wrap ${isDark ? "text-gray-300" : "text-gray-700"}`}
-											>
-												{editDiary}
-											</p>
-										</div>
-									)}
-									{editMemo && (
-										<div className="space-y-2">
-											<div
-												className={`text-xs font-semibold ${isDark ? "text-green-300" : "text-green-600"}`}
-											>
-												Memo
-											</div>
-											<p
-												className={`text-sm leading-relaxed whitespace-pre-wrap ${isDark ? "text-gray-300" : "text-gray-700"}`}
-											>
-												{editMemo}
-											</p>
-										</div>
-									)}
-									{!editDiary && !editMemo && (
-										<div
-											className={`text-sm text-center ${isDark ? "text-gray-400" : "text-gray-600"}`}
-										>
-											No content for this date
-										</div>
-									)}
-								</>
-							)}
-						</div>
+						<DiaryPanel selectedDate={detailDateStr} onClose={handleBackToList} skipPinCheck={true} />
 					</motion.div>
 				) : null}
 			</AnimatePresence>

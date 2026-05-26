@@ -27,6 +27,7 @@ import {
 	Underline,
 } from "lucide-react";
 import { useTheme } from "../../hooks/useTheme";
+import { useFontSize } from "../../hooks/useFontSize";
 import {
 	GOOGLE_SYNC_AUTH_ERROR,
 	useGoogleCalendarStore,
@@ -389,6 +390,7 @@ type CalendarEventDetail = CalendarEvent & {
 const EventPanel = ({ selectedDate, onClose }: EventPanelProps) => {
 	const { t, i18n } = useTranslation();
 	const { isDark, cardCls, inputCls, hoverCls, secondaryBgCls } = useTheme();
+	const { body: bodyStyle } = useFontSize();
 	const { events, loading, error, addEvent, deleteEvent, updateEvent, readEvent } =
 		useGoogleCalendarStore();
 	const reconnectGoogle = useAuthStore((s) => s.reconnectGoogle);
@@ -1507,12 +1509,13 @@ const EventPanel = ({ selectedDate, onClose }: EventPanelProps) => {
 						>
 							<div className="flex items-center justify-between gap-2">
 								<div className="flex-1 min-w-0">
-									<h4 className="font-semibold text-xs truncate">
+									<h4 className="font-semibold text-xs truncate" style={bodyStyle}>
 										{getDisplayEventTitle(event, noTitleLabel)}
 									</h4>
 									{(event.allDay || event.startTime || event.endTime) && (
 										<p
 											className={`text-xs ${isDark ? "text-gray-400" : "text-gray-600"}`}
+											style={bodyStyle}
 										>
 											{formatEventTimeLabel(event, i18n.language)}
 										</p>

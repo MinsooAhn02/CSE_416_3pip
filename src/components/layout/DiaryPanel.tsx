@@ -2,23 +2,25 @@ import { useEffect, useState } from "react";
 import { BookOpen, Lock, Edit2, RotateCcw, Save, Settings, X, ThumbsUp, ThumbsDown, RefreshCw, CheckCircle } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useTheme } from "../../hooks/useTheme";
+import { useFontSize } from "../../hooks/useFontSize";
 import { useDiaryStore } from "../../store/useDiaryStore";
 import { useSettingsStore } from "../../store/useSettingsStore";
 import { useBriefingHistoryStore } from "../../store/useBriefingHistoryStore";
 import { generateAndSaveDiaryForDate } from "../../services/diaryGenerationService";
 import PINModal from "../modals/PINModal";
-import ConfirmDialog from "../common/ConfirmDialog";
 
 interface DiaryPanelProps {
 	selectedDate: string | null;
 	onClose?: () => void;
 	compact?: boolean;
+	skipPinCheck?: boolean;
 }
 
-const DiaryPanel = ({ selectedDate, onClose, compact = false }: DiaryPanelProps) => {
+const DiaryPanel = ({ selectedDate, onClose, compact = false, skipPinCheck = false }: DiaryPanelProps) => {
 	const { t, i18n } = useTranslation();
 	const isKo = i18n.language?.toLowerCase().startsWith("ko");
 	const { isDark, cardCls, inputCls, hoverCls, secondaryBgCls } = useTheme();
+	const { body: bodyStyle } = useFontSize();
 	const {
 		getDiary,
 		saveDiary,
@@ -60,7 +62,6 @@ const DiaryPanel = ({ selectedDate, onClose, compact = false }: DiaryPanelProps)
 	// Feedback state
 	const [feedbackText, setFeedbackText] = useState("");
 	const [isRewriting, setIsRewriting] = useState(false);
-	const [showConfirmDialog, setShowConfirmDialog] = useState(false);
 	const copy = {
 		diaryTitle: "Diary",
 		previewFallback: t("diary_panel.preview_fallback"),
@@ -90,8 +91,6 @@ const DiaryPanel = ({ selectedDate, onClose, compact = false }: DiaryPanelProps)
 		rewriting: t("diary_panel.rewriting"),
 		confirmRewrite: t("diary_panel.confirm_rewrite"),
 		discardRewrite: t("diary_panel.discard_rewrite"),
-		confirmWarningTitle: t("diary_panel.confirm_warning_title"),
-		confirmWarningBody: t("diary_panel.confirm_warning_body"),
 		pendingRewriteLabel: t("diary_panel.pending_rewrite_label"),
 	};
 
@@ -110,22 +109,25 @@ const DiaryPanel = ({ selectedDate, onClose, compact = false }: DiaryPanelProps)
 		setIsEditingMemo(false);
 	}, [selectedDate, currentEntry?.diary, currentEntry?.notes, currentEntry?.memo]);
 
-	const isAuthenticated = !pinRequired || isPinAuthenticated;
+	const isAuthenticated = skipPinCheck || !pinRequired || isPinAuthenticated;
 
 	useEffect(() => {
+		if (skipPinCheck) return;
 		refreshPinAuthState?.();
-	}, [pinLockMode, refreshPinAuthState]);
+	}, [skipPinCheck, pinLockMode, refreshPinAuthState]);
 
 	useEffect(() => {
+		if (skipPinCheck) return;
 		return () => {
 			if (pinRequired && pinLockMode === "immediate" && isAuthenticated) {
 				clearPinSession();
 			}
 		};
-	}, [pinRequired, pinLockMode, isAuthenticated, clearPinSession]);
+	}, [skipPinCheck, pinRequired, pinLockMode, isAuthenticated, clearPinSession]);
 
 	useEffect(() => {
 		if (
+			skipPinCheck ||
 			!pinRequired ||
 			pinLockMode === "immediate" ||
 			!isAuthenticated ||
@@ -146,6 +148,7 @@ const DiaryPanel = ({ selectedDate, onClose, compact = false }: DiaryPanelProps)
 
 		return () => window.clearTimeout(timerId);
 	}, [
+		skipPinCheck,
 		pinRequired,
 		pinLockMode,
 		isAuthenticated,
@@ -236,7 +239,6 @@ const DiaryPanel = ({ selectedDate, onClose, compact = false }: DiaryPanelProps)
 
 	const handleConfirmRewrite = async () => {
 		await confirmRewrite(safeDateStr);
-		setShowConfirmDialog(false);
 	};
 
 	const handleDiscardRewrite = () => {
@@ -341,11 +343,13 @@ const DiaryPanel = ({ selectedDate, onClose, compact = false }: DiaryPanelProps)
 					>
 						<p
 							className={`text-[11px] whitespace-nowrap ${isDark ? "text-gray-400" : "text-gray-500"}`}
+							style={bodyStyle}
 						>
 							{formatDate(selectedDate)}
 						</p>
 						<p
 							className={`text-xs truncate ${isDark ? "text-gray-300" : "text-gray-700"}`}
+							style={bodyStyle}
 						>
 							{previewText}
 						</p>
@@ -437,6 +441,7 @@ const DiaryPanel = ({ selectedDate, onClose, compact = false }: DiaryPanelProps)
 				<div className="space-y-4">
 					<p
 						className={`text-xs font-medium flex-shrink-0 ${isDark ? "text-gray-400" : "text-gray-600"}`}
+						style={bodyStyle}
 					>
 						{formatDate(selectedDate)}
 					</p>
@@ -491,6 +496,7 @@ const DiaryPanel = ({ selectedDate, onClose, compact = false }: DiaryPanelProps)
 						{!isEditingDiary ? (
 							<div
 								className={`p-3 rounded-lg text-xs leading-relaxed whitespace-pre-wrap min-h-[80px] transition-all ${secondaryBgCls} ${canEditDiary ? "cursor-pointer" : ""} ${canEditDiary ? hoverCls : ""}`}
+								style={bodyStyle}
 								onClick={() => {
 									if (canEditDiary) {
 										setIsEditingDiary(true);
@@ -506,6 +512,7 @@ const DiaryPanel = ({ selectedDate, onClose, compact = false }: DiaryPanelProps)
 									onChange={(e) => setDiaryContent(e.target.value)}
 									rows={4}
 									className={`w-full px-3 py-2 rounded-lg text-xs outline-none border transition-all focus:ring-2 focus:ring-blue-500/30 resize-none ${inputCls}`}
+									style={bodyStyle}
 									placeholder={copy.editDiaryPlaceholder}
 								/>
 								<div className="flex gap-2">
@@ -551,6 +558,7 @@ const DiaryPanel = ({ selectedDate, onClose, compact = false }: DiaryPanelProps)
 						{!isEditingMemo ? (
 							<div
 								className={`p-3 rounded-lg text-xs leading-relaxed whitespace-pre-wrap min-h-[80px] cursor-pointer transition-all ${`${secondaryBgCls} ${hoverCls}`}`}
+								style={bodyStyle}
 								onClick={() => setIsEditingMemo(true)}
 							>
 								{memoContent || copy.clickMemo}
@@ -562,6 +570,7 @@ const DiaryPanel = ({ selectedDate, onClose, compact = false }: DiaryPanelProps)
 									onChange={(e) => setMemoContent(e.target.value)}
 									rows={4}
 									className={`w-full px-3 py-2 rounded-lg text-xs outline-none border transition-all focus:ring-2 focus:ring-blue-500/30 resize-none ${inputCls}`}
+									style={bodyStyle}
 									placeholder={copy.memoPlaceholder}
 								/>
 								<div className="flex gap-2">
@@ -591,7 +600,7 @@ const DiaryPanel = ({ selectedDate, onClose, compact = false }: DiaryPanelProps)
 					{canEditDiary && !isEditingDiary && (
 						<div className="space-y-2 pt-2 border-t border-white/10">
 							<div className="flex items-center justify-between">
-								<span className={`text-xs font-medium ${isDark ? "opacity-70" : "text-gray-600"}`}>
+								<span className={`text-xs font-medium ${isDark ? "opacity-70" : "text-gray-600"}`} style={bodyStyle}>
 									{copy.feedbackLabel}
 								</span>
 								<div className="flex gap-1">
@@ -628,6 +637,7 @@ const DiaryPanel = ({ selectedDate, onClose, compact = false }: DiaryPanelProps)
 										onChange={(e) => setFeedbackText(e.target.value)}
 										rows={2}
 										className={`w-full px-3 py-2 rounded-lg text-xs outline-none border transition-all focus:ring-2 focus:ring-blue-500/30 resize-none ${inputCls}`}
+										style={bodyStyle}
 										placeholder={copy.feedbackPlaceholder}
 									/>
 									<button
@@ -644,15 +654,15 @@ const DiaryPanel = ({ selectedDate, onClose, compact = false }: DiaryPanelProps)
 							{/* pendingRewrite 미리보기 */}
 							{currentEntry?.feedback?.pendingRewrite && (
 								<div className="space-y-2">
-									<p className={`text-xs font-medium ${isDark ? "opacity-70" : "text-gray-600"}`}>
+									<p className={`text-xs font-medium ${isDark ? "opacity-70" : "text-gray-600"}`} style={bodyStyle}>
 										{copy.pendingRewriteLabel}
 									</p>
-									<div className={`p-3 rounded-lg text-xs leading-relaxed whitespace-pre-wrap ${secondaryBgCls} border border-blue-500/30`}>
+									<div className={`p-3 rounded-lg text-xs leading-relaxed whitespace-pre-wrap ${secondaryBgCls} border border-blue-500/30`} style={bodyStyle}>
 										{currentEntry.feedback.pendingRewrite}
 									</div>
 									<div className="flex gap-2">
 										<button
-											onClick={() => setShowConfirmDialog(true)}
+											onClick={handleConfirmRewrite}
 											className="flex-1 px-3 py-2 rounded-lg text-xs font-medium bg-blue-500 hover:bg-blue-600 text-white transition-colors flex items-center justify-center gap-1"
 										>
 											<CheckCircle size={13} />
@@ -672,6 +682,7 @@ const DiaryPanel = ({ selectedDate, onClose, compact = false }: DiaryPanelProps)
 										onChange={(e) => setFeedbackText(e.target.value)}
 										rows={2}
 										className={`w-full px-3 py-2 rounded-lg text-xs outline-none border transition-all focus:ring-2 focus:ring-blue-500/30 resize-none ${inputCls}`}
+										style={bodyStyle}
 										placeholder={copy.feedbackPlaceholder}
 									/>
 									<button
@@ -689,15 +700,7 @@ const DiaryPanel = ({ selectedDate, onClose, compact = false }: DiaryPanelProps)
 				</div>
 			)}
 
-			{/* 확정 경고 모달 */}
-			{showConfirmDialog && (
-				<ConfirmDialog
-					title={copy.confirmWarningTitle}
-					message={copy.confirmWarningBody}
-					onConfirm={handleConfirmRewrite}
-					onCancel={() => setShowConfirmDialog(false)}
-				/>
-			)}
+
 		</div>
 	);
 };

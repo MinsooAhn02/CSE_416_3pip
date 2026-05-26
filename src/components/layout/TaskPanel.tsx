@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useTheme } from "../../hooks/useTheme";
+import { useFontSize } from "../../hooks/useFontSize";
 import {
 	ALL_TASK_LIST_FILTER_ID,
 	GOOGLE_SYNC_AUTH_ERROR,
@@ -83,6 +84,7 @@ const formDataFromTask = (task: Task): FormData => ({
 const TaskPanel = ({ selectedDate }: TaskPanelProps) => {
 	const { t, i18n } = useTranslation();
 	const { isDark, cardCls, inputCls, hoverCls } = useTheme();
+	const { body: bodyStyle } = useFontSize();
 	const {
 		tasks,
 		taskLists,
@@ -599,11 +601,12 @@ const TaskPanel = ({ selectedDate }: TaskPanelProps) => {
 										className={`font-semibold text-xs ${
 											task.completed ? "line-through opacity-50" : ""
 										}`}
+										style={bodyStyle}
 									>
 										<TaskTitle title={task.title} noTitleLabel={t("common.no_title")} />
 									</h4>
 									{task.description && (
-										<p className={`text-xs truncate ${isDark ? "text-gray-400" : "text-gray-600"}`}>
+										<p className={`text-xs truncate ${isDark ? "text-gray-400" : "text-gray-600"}`} style={bodyStyle}>
 											{task.description}
 										</p>
 									)}
