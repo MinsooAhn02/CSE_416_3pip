@@ -29,7 +29,7 @@ Sprint planning was tracked in Jira throughout Sprints 1–4 (2026-05-06 – 202
 
 ## 3. API Design Documentation
 
-- **API Document:** [MorningBriefingAI_API_Design](https://docs.google.com/spreadsheets/d/1s0TRC2M82RqDSFkEVq3LXFjo7rlTSezO1_mNGqPBDlU/edit?usp=sharing)
+- **API Document (google sheet):** [MorningBriefingAI_API_Design](https://docs.google.com/spreadsheets/d/1s0TRC2M82RqDSFkEVq3LXFjo7rlTSezO1_mNGqPBDlU/edit?usp=sharing)
 - **API Document (xlsx):** [MorningBriefingAI_API_Design](./API%20docs/MorningBriefingAI_API_Design.xlsx)
 - **API Document (pdf):** [MorningBriefingAI_API_Design - Sheet1](./API%20docs/MorningBriefingAI_API_Design%20-%20Sheet1.pdf)
 - **API reference (25 endpoints):** [API.md](./API%20docs/API.md)
