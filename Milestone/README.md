@@ -42,6 +42,7 @@ Bugs were tracked across complementary sources throughout development:
 - **`todo.md` (root):** open items and per-feature task list — [`../todo.md`](../todo.md)
 - **`CHANGELOG.md` (root):** dated fix rounds with date, files changed, root cause, fix, and follow-ups; attributed by team role (UI/UX → Dahyun Kwon, complex logic → Minsoo Ahn, backend/store/API → Sungmin Choo) — [`../CHANGELOG.md`](../CHANGELOG.md)
 - **GitHub Issues — open bugs:** https://github.com/MinsooAhn02/CSE_416_3pip/issues
+- **GitHub Issues — closed bugs:** https://github.com/MinsooAhn02/CSE_416_3pip/issues?q=is%3Aissue%20state%3Aclosed
 - **README → Bug Reporting section (how to report, where to look):** https://github.com/MinsooAhn02/CSE_416_3pip#-bug-reporting
 - **Local bug staging / triage notes:** [KNOWN_ISSUES.md](./KNOWN_ISSUES.md)
 
