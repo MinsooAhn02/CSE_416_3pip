@@ -24,16 +24,17 @@ MorningBriefing.AI eliminates the need for users to search for information throu
 ## 🛠️ Technology Stack
 
 ### Frontend
-- **Language:** TypeScript (TSX)
+- **Language:** TypeScript (`.ts` / `.tsx`) — full migration completed 2026-05-24 (`tsconfig.json` with `strict:false`)
 - **Framework:** React 18.3
 - **Build tool:** Vite 6
 - **Styling:** Tailwind CSS 3.4
-- **State management:** Zustand 5
+- **State management:** Zustand 5 (10 stores including the recently extracted `useOnboardingStore`)
 - **Drag-and-drop:** @hello-pangea/dnd
 - **Animation:** framer-motion
 - **i18n:** i18next / react-i18next (English, Korean)
 - **Icons:** Lucide React
 - **Toasts:** react-hot-toast
+- **Error handling:** centralized `src/utils/errorHandler.ts` (`ApiError` + `handleApiError`)
 
 ### Backend / Infrastructure
 - **Auth + Database:** Supabase (PostgreSQL with Row-Level Security, OAuth via Supabase Auth)
@@ -209,6 +210,9 @@ After completing setup (above), verify the dev environment with this checklist:
 9. **Smart Widget:** Category button shows `[≡ + emoji + ▾]` — clicking opens the category dropdown; pencil icon edits the keyword
 10. **Diary:** Answer today's Q&A → save → reload → answer retained (PIN-gated)
 11. **AI Briefing:** Wait for briefing to generate → click for detail modal → all sections (header / schedule / yesterday / latest_info) render
+12. **News image fallback:** Force a broken image URL in DevTools → confirm a `Newspaper` icon placeholder shows in place of a blank gap
+13. **Login timestamp reset:** Log out → wait a few minutes → log back in → confirm widget "last-updated" labels read "방금" / "just now", not a stale "9000분 전"
+14. **SmartWidget category override:** On any Smart Widget header, click the `[≡ + emoji + ▾]` button → dropdown opens → manual category override applies
 
 If any check fails, check the [GitHub Issues](https://github.com/MinsooAhn02/CSE_416_3pip/issues) for known issues or file a bug (see below).
 
@@ -261,9 +265,16 @@ For security-sensitive issues, do not open a public issue — contact the team d
 
 | File | Purpose |
 |------|---------|
+| [ARCHITECTURE.md](./ARCHITECTURE.md) | 30-minute end-to-end onboarding overview (auth flow, store map, fetch pipeline) — added 2026-05-24 |
 | [DOCS.md](./DOCS.md) | Architecture reference — stores, caching, widgets, Edge Functions, DB schema, personalization |
+| [DOCS_kor.md](./DOCS_kor.md) | Korean translation of `DOCS.md` |
 | [CHANGELOG.md](./CHANGELOG.md) | Dated change log (fix rounds, feature releases) |
-| [ProjectMilestones.md](./ProjectMilestones.md) | CSE 416 course assignment specification (milestones 1–4) |
+| [Milestone/ProjectMilestones.md](./Milestone/ProjectMilestones.md) | CSE 416 course assignment specification (milestones 1–4) |
+| [Milestone/SCHEDULE.md](./Milestone/SCHEDULE.md) | Sprint-by-sprint schedule + Schedule Changes |
+| [Milestone/API.md](./Milestone/API.md) | API design (25 endpoints) |
+| [Milestone/KNOWN_ISSUES.md](./Milestone/KNOWN_ISSUES.md) | Open bug list (staging for GitHub Issues) |
+| [Milestone/MILESTONE4_PROGRESS.md](./Milestone/MILESTONE4_PROGRESS.md) | Per-team-member progress + group self-grade |
+| [docs/security/localStorage-audit.md](./docs/security/localStorage-audit.md) | Audit of localStorage usage (XSS surface, `provider_token` handling) — added 2026-05-24 |
 | `todo.md` | Working notes and manual test checklist |
 
 ---

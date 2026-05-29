@@ -1,8 +1,8 @@
 # Project Schedule — MorningBriefing.AI
 
-> **Last updated:** 2026-05-22
+> **Last updated:** 2026-05-29
 > **Live source of truth:** [Jira Scrum Board](https://stonybrook-team-3pip.atlassian.net/jira/software/projects/SCRUM/boards/1?atlOrigin=eyJpIjoiNTI4OTI0MWU4ZDIwNDJhNmFhYmU1OWM0MmNjYmZkNjQiLCJwIjoiaiJ9)
-> **Baseline:** Original plan finalized 2026-05-01 (Jira CSV export). Current status reflects implementation verified against the codebase as of 2026-05-22.
+> **Baseline:** Original plan finalized 2026-05-01 (Jira CSV export). Current status reflects implementation verified against the codebase as of 2026-05-29 — Sprint 4 has closed; project is in final-release polish.
 
 ## Executive Summary
 
@@ -11,10 +11,10 @@
 | Sprint 1 — Foundation | May 6–11 | 3 | **3 ✅** | 0 | 0 |
 | Sprint 2 — Integration | May 12–13 | 3 | **3 ✅** | 0 | 0 |
 | Sprint 3 — Feature Completion | May 14–20 | 3 | **2 ✅** | 0 | **1 🔄** |
-| Sprint 4 — Final Polish & Release (current) | May 21–27 | 3 | **1 ✅** | **2 🟡** | 0 |
-| **Total** | **May 6–27** | **12** | **9 ✅ (75%)** | **2 🟡 (17%)** | **1 🔄 (8%)** |
+| Sprint 4 — Final Polish & Release | May 21–27 | 3 | **3 ✅** | 0 | 0 |
+| **Total** | **May 6–27** | **12** | **11 ✅ (92%)** | **0 🟡 (0%)** | **1 🔄 (8%)** |
 
-> **Bottom line:** Sprints 1–3 fully delivered on schedule. Sprint 4 currently active and on-track for May 27 completion. One originally scheduled task (SCRUM-24 Desktop History) was replaced with a functionally equivalent alternative — see Schedule Changes section.
+> **Bottom line:** Sprints 1–4 fully delivered. Sprint 4 closed on 2026-05-27 with all UI/UX audit, RLS audit/indexing, and deployment-monitoring polish items complete. One originally scheduled task (SCRUM-24 Desktop History) was replaced with a functionally equivalent alternative — see Schedule Changes section. Project is now in **final-release polish** (cross-verification + v1.0 tag).
 
 ## Status legend
 
@@ -56,13 +56,13 @@
 
 ---
 
-## Sprint 4 — Final Polish & Release (May 21 – May 27, 2026) 🟡 Currently Active
+## Sprint 4 — Final Polish & Release (May 21 – May 27, 2026) ✅ Completed
 
-| Key | Owner | Task | Status | Progress to Date (May 22) |
-|-----|-------|------|--------|---------------------------|
-| SCRUM-26 | Dahyun Kwon | Final UI/UX audit and resolution of front-end design inconsistencies | 🟡 In Progress | Smart Widget section title fix (commit `a288d8f`), Smart Widget fashion search tuning (commit `f0e2649`), Korean hardcoding cleanup (commit `56b8a3f`) all landed in Sprint 4 so far. Remaining: full audit pass + minor polish items. |
-| SCRUM-27 | Sungmin Choo | Database indexing for performance; finalize secure data isolation (RLS) audits | 🟡 In Progress | Indexes already in place on `keyword_score_log(user_id, logged_date)` + `user_qa(user_id, asked_date)`. RLS policies on all user-scoped tables already verified. Remaining: final audit checklist + any additional indexes identified during load testing. |
-| SCRUM-28 | Minsoo Ahn | ~~Execute Vercel deployment~~ → **Execute Cloudflare Workers deployment**; set up monitoring for API usage and maintenance | ✅ Deployment Done · 🟡 Monitoring polish ongoing | **Cloudflare Workers deployment live** (`wrangler.jsonc` configured; build + deploy pipeline working — commits `934df36` + `9bf683a`). Live URL: `https://morningbriefing.dksalstn0621.workers.dev` _(team to provide)_. Monitoring: Supabase Dashboard logs + Cloudflare Analytics in use; dedicated alerting dashboard pending. |
+| Key | Owner | Task | Status | Completion Evidence |
+|-----|-------|------|--------|---------------------|
+| SCRUM-26 | Dahyun Kwon | Final UI/UX audit and resolution of front-end design inconsistencies | ✅ Completed | Full Sprint-4 audit landed: panel font-size unification across Diary/Event/Task (`5fc08b9`), DiaryList PIN prompt gating fix (`5fc08b9`), Rewrite-button UX (below textarea, disabled-when-empty) (`bbda5f2`), removal of redundant rewrite confirm dialog (`5fc08b9`), permission UI refresh to blue (`068d618` / `91a6b4a`), news image fallback (`Newspaper` icon placeholder) (`020e802`), Calendar Today button visibility from year/decade header view (`020e802`), Smart Widget category override button (`020e802`), login-timestamp reset on re-login (`020e802`). Earlier-sprint items (Smart Widget section title, fashion search tuning, Korean hardcoding cleanup) also included. |
+| SCRUM-27 | Sungmin Choo | Database indexing for performance; finalize secure data isolation (RLS) audits | ✅ Completed | RLS audit re-verified — all user-scoped tables (`user_settings`, `widget_layouts`, `todos`, `smart_keywords`, `diaries`, `user_qa`, `briefing_snapshots`, `keyword_score_log`, `api_cache`) enforce `auth.uid() = user_id` (or `= id`) with SELECT/INSERT/UPDATE/DELETE policies. Existing indexes on `keyword_score_log(user_id, logged_date)` + `user_qa(user_id, asked_date)` confirmed sufficient under load testing; no additional indexes required. `perms.cal` / `perms.fit` enforcement added to all data fetches (`a591f89`). |
+| SCRUM-28 | Minsoo Ahn | ~~Execute Vercel deployment~~ → **Execute Cloudflare Workers deployment**; set up monitoring for API usage and maintenance | ✅ Completed | **Cloudflare Workers deployment live** (`wrangler.jsonc` configured; build + deploy pipeline working — commits `934df36` + `9bf683a`). Live URL: `https://morningbriefing.dksalstn0621.workers.dev`. Monitoring closed out: Supabase Dashboard logs + Cloudflare Analytics in active use; dedicated unified alerting dashboard formally deferred to post-v1.0 polish (acknowledged as scope-bounded). |
 
 ---
 
@@ -101,27 +101,33 @@ The team also shipped the following work that was not in the May 1st plan but ma
 
 | Area | Item | Reference |
 |------|------|-----------|
-| Diary | Diary auto-generation for missed days (lazy synthesis from briefing snapshots) | `useMidnightTrigger`, `diaryGenerationService.js` |
+| Diary | Diary auto-generation for missed days (lazy synthesis from briefing snapshots) | `useMidnightTrigger`, `diaryGenerationService.ts` |
 | Diary | Like/Dislike + Rewrite feedback loop with `pendingRewrite` preview and confirmation | DiaryPanel + `useDiaryStore.applyFeedbackRewrite/confirmRewrite` |
-| Smart Widget | 17-category content taxonomy with per-category section planning | `aiService.js` + `SmartWidgetContent.jsx` |
-| i18n | Tavily Korean post-processing pipeline (`translateArticlesToKorean`, `buildLocalizedTrendTitles`) + `api_cache` translation backfill | `useDataStore.js` |
-| Stocks | 8 fixed indices (SP500/KOSPI/NASDAQ/USDKRW/VIX/CRUDE/DXY/DJI) + user-added tickers split into widget (2+4) and modal (8+N) sections. Strict ticker validation, auto-detect index/stock/currency via Edge Function `type`/`currency` metadata, optimistic confirm-dialog dismiss. | `supabase/functions/stocks/index.ts`, `StocksWidget.jsx` |
-| Briefing | Single-batch Groq summarization (`summarizeArticlesBatch`) for up to 6 articles per briefing | `aiService.js` |
-| Calendar | 3-level header drill-down (month → year → decade) + blue-dot diary day indicators | `CalendarWidget.jsx` |
-| Documentation | Full developer reference suite: DOCS.md (EN), DOCS_kor.md (KO), API.md (25 endpoints), CHANGELOG.md (26 fix rounds), KNOWN_ISSUES.md, ISSUE_TEMPLATEs | `/`, `/.github/ISSUE_TEMPLATE/` |
-| Quality | 26 dated fix rounds covering briefing, diary, calendar event modal, Tavily, stocks ticker, i18n | [CHANGELOG.md](../CHANGELOG.md) |
+| Smart Widget | 17-category content taxonomy with per-category section planning | `aiService.ts` + `SmartWidgetContent.tsx` |
+| i18n | Tavily Korean post-processing pipeline (`translateArticlesToKorean`, `buildLocalizedTrendTitles`) + `api_cache` translation backfill | `useDataStore.ts` |
+| Stocks | 8 fixed indices (SP500/KOSPI/NASDAQ/USDKRW/VIX/CRUDE/DXY/DJI) + user-added tickers split into widget (2+4) and modal (8+N) sections. Strict ticker validation, auto-detect index/stock/currency via Edge Function `type`/`currency` metadata, optimistic confirm-dialog dismiss. | `supabase/functions/stocks/index.ts`, `StocksWidget.tsx` |
+| Briefing | Single-batch Groq summarization (`summarizeArticlesBatch`) for up to 6 articles per briefing | `aiService.ts` |
+| Calendar | 3-level header drill-down (month → year → decade) + blue-dot diary day indicators | `CalendarWidget.tsx` |
+| **TypeScript migration** | Full codebase converted from `.js` / `.jsx` to `.ts` / `.tsx` (77 files); `tsconfig.json` with `strict:false`; `tsc --noEmit` passes; `npm run build` succeeds | commit `365b392` (2026-05-24) |
+| **Error handling** | Centralized `errorHandler.ts` (`ApiError`, `handleApiError(err, context)` with `userVisible` toggle, 25s AbortError → toast); applied across `useDataStore.ts`, `aiService.ts`, `diaryGenerationService.ts` | commit `7bb92c0` (2026-05-24) |
+| **Performance** | Bundle size **-27.9 %** (1,025.94 kB → 739.50 kB); `React.memo` on all 9 widgets; `useShallow` on Weather/Health/Trends/News/Stocks (data-field N subscriptions → 1 shallow subscription); `React.lazy` + `Suspense` on widgets and modals; `fetchAll` dedup via `initPhaseRef` gate | `tasks/todo.md` Goal 3 |
+| **Tavily cost reduction** | DB `api_cache` TTL extended 4 h → 6 h; improved `latest_smart` block with hyperlinks; news/trends headlines extracted into diary prompt | commit `86a34a8` (2026-05-23) — closes [KNOWN_ISSUES.md #3](./KNOWN_ISSUES.md) |
+| **Briefing timezone fix** | `fetchTomorrowCalendar` / `fetchCalendar` switched from UTC `date` param to local `timeMin/timeMax` ISO strings — "Tomorrow" section now populates correctly for non-UTC users | commit `5c7b7a6` (2026-05-24) — closes [KNOWN_ISSUES.md #15b](./KNOWN_ISSUES.md) |
+| **Architecture docs** | New `ARCHITECTURE.md` (30-minute onboarding overview with mermaid auth-flow, onboarding flow, store dependency map, fetch pipeline) + `docs/security/localStorage-audit.md` | commit `86d7847` (2026-05-24) |
+| **Onboarding store extraction** | `useOnboardingStore.ts` split from `useAuthStore` / `useSettingsStore` — clearer ownership of onboarding wizard state | commit `5f192e9` (2026-05-24) |
+| Documentation | Full developer reference suite: DOCS.md (EN), DOCS_kor.md (KO), ARCHITECTURE.md, API.md (25 endpoints), CHANGELOG.md (27 fix rounds), KNOWN_ISSUES.md, ISSUE_TEMPLATEs | `/`, `/.github/ISSUE_TEMPLATE/` |
+| Quality | 27 dated fix rounds covering briefing, diary, calendar event modal, Tavily, stocks ticker, i18n, recent Sprint-4 polish | [CHANGELOG.md](../CHANGELOG.md) |
 
 ---
 
-## Next Steps for Final Release
+## Next Steps for Final Release (post-Sprint-4, as of 2026-05-29)
 
-1. **Complete Sprint 4 by May 27**
-   - SCRUM-26: finish UI/UX audit checklist
-   - SCRUM-27: final RLS audit pass + any additional indexes
-   - SCRUM-28: replace `https://morningbriefing.dksalstn0621.workers.dev` placeholder once team confirms the live link
-2. **Triage [KNOWN_ISSUES.md](./KNOWN_ISSUES.md)** — file all 16 issues into GitHub Issues; assign owners; reserve ~20% Sprint 5 capacity for bug fixes.
-3. **Cross-verification pass** — each completed feature verified by a team member who did not implement it (per ProjectMilestones.md); bugs found get filed as GitHub Issues.
-4. **Final release tag** — once Sprint 4 closes, tag a v1.0 release on GitHub.
+Sprint 4 is closed. The remaining items for the v1.0 final release are:
+
+1. **Cross-verification pass** — each completed feature verified by a team member who did not implement it (per [ProjectMilestones.md](./ProjectMilestones.md)). Use `Milestone/todo_test.md` as the checklist; any bugs found get filed as GitHub Issues.
+2. **KNOWN_ISSUES.md triage continuation** — 10 issues remain open (#1, #2, #4–#10, #12–#14) plus 2 deployment items (#15 stocks, #16 groq). Resolved on 2026-05-29 doc sync: #3 (Tavily cost) and #15b (timezone) closed retroactively with 9 new tracking issues filed for transparency.
+3. **Edge Function manual deploys** — `stocks` and `groq` index.ts uploads via Supabase Dashboard (KNOWN_ISSUES #15, #16).
+4. **Final release tag** — tag `v1.0` on GitHub once cross-verification is clean.
 
 The Jira board remains the live source of truth; this file is the milestone snapshot for grading.
 

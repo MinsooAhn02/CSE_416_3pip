@@ -1,8 +1,10 @@
 # MorningBriefing.AI — API Design
 
-> **Last updated:** 2026-05-22
+> **Last updated:** 2026-05-29
 > **Format:** Matches the structure of `MorningBriefingAI_API_Design.xlsx` (Status / Method / Name / URL / Input / Output / Flow / Notes), with corrections applied against actual source code and missing endpoints added.
-> **See also:** [DOCS.md §9](./DOCS.md#9-edge-functions) for narrative architecture, and `supabase/functions/*/index.ts` for source-of-truth implementations.
+> **See also:** [DOCS.md §9](../DOCS.md#9-edge-functions) for narrative architecture, [ARCHITECTURE.md §6](../ARCHITECTURE.md#6-supabase-edge-functions) for the end-to-end fetch pipeline diagram, and `supabase/functions/*/index.ts` for source-of-truth implementations.
+>
+> **File-extension note:** The codebase migrated `.js`/`.jsx` → `.ts`/`.tsx` on 2026-05-24 (commit `365b392`). Any source-file reference below ending in `.js` should be read as the equivalent `.ts` — the endpoints themselves are language-neutral and unchanged.
 
 ## Authentication legend
 
@@ -84,7 +86,7 @@
 - Coordinates rounded to 0.1 precision client-side for cache reuse.
 - AQI mapping: `1=Good`, `2-3=Moderate`, `4=Bad`, `5=Very Bad`.
 - Timeout: 25s.
-- Cache key: `weather_{rLat}_{rLon}` (1-hour TTL).
+- Cache key: `weather_{rLat}_{rLon}` (6-hour TTL — see Caching section).
 
 ---
 
@@ -548,11 +550,11 @@ All REST endpoints are accessed via the auto-generated PostgREST interface at `/
 ]
 ```
 
-**Flow / Reason:** `useDataStore.readApiCache()` → Supabase REST SELECT → check 1-hour TTL against `fetched_at` → cache hit returns state; cache miss proceeds to real API call.
+**Flow / Reason:** `useDataStore.readApiCache()` → Supabase REST SELECT → check 6-hour TTL against `fetched_at` → cache hit returns state; cache miss proceeds to real API call.
 
 **Notes:**
 - Key format: `u:{userId}:{cacheKey}`.
-- TTL: 60 minutes (enforced app-side, not DB).
+- TTL: 360 minutes (6 h, enforced app-side, not DB). Extended from 60 min on 2026-05-23 (commit `86a34a8`) to cut Tavily token consumption.
 - RLS: users can only access their own rows.
 
 ---
@@ -861,7 +863,7 @@ POST to `/rest/v1/widget_layouts` with `Prefer: resolution=merge-duplicates`. Tr
 |-------|---------|-----|---------|
 | Memory | Module-level Map | 5 min (geo) | `_geoCache`, `_trendsMemCache` |
 | localStorage | `mb_cache_{key}` | App-checked | Fallback when DB unavailable |
-| DB | `api_cache` table | 60 min | All Edge Function calls (weather, stocks, tavily, etc.) |
+| DB | `api_cache` table | **6 h** (was 60 min before 2026-05-23) | All Edge Function calls (weather, stocks, tavily, etc.) |
 
 Cache keys are language-aware where appropriate: `news_{lang}_{interestFingerprint}`, `trends_full_{lang}`, `${keyword}_${lang}` (Smart Widget).
 
@@ -901,3 +903,12 @@ This section documents the corrections made to `MorningBriefingAI_API_Design.xls
 ### Additions
 
 Endpoints 5, 14, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25 were not in the original template. Added: Tavily generic search mode, Upsert User Settings, Upsert Widget Layouts, all 6 missing Supabase REST tables (todos, smart_keywords, diaries, user_qa, briefing_snapshots, keyword_score_log), and 3 Supabase Auth client API calls.
+
+### Updates 2026-05-29
+
+| Area | Change | Reference |
+|------|--------|-----------|
+| Caching — DB layer | `api_cache` TTL extended **1 h → 6 h** (360 minutes) to cut Tavily token consumption. Affects all Edge Function call sites (weather, stocks, tavily, calendar, health). Cache key formats unchanged. | commit `86a34a8` (2026-05-23) |
+| Briefing flow | `fetchTomorrowCalendar` / `fetchCalendar` switched from UTC-bound `date` parameter to explicit local-time `timeMin` / `timeMax` ISO strings. No Edge Function signature change — purely a client-side fix to the `events` POST body. | commit `5c7b7a6` (2026-05-24) |
+| Source file extensions | Codebase-wide migration `.js`/`.jsx` → `.ts`/`.tsx`. All endpoint signatures unchanged. Source references in this document that name `.js` files should be read as the equivalent `.ts`. | commit `365b392` (2026-05-24) |
+| Error handling | All Edge Function fetch wrappers now route through `src/utils/errorHandler.ts` → `handleApiError(err, context)`. User-facing failures surface a toast; silent failures get console-logged. 25 s `AbortError` is classified as a transient timeout with a "잠시 후 다시 시도" toast. | commit `7bb92c0` (2026-05-24) |

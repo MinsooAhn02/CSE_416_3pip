@@ -5,6 +5,20 @@
 
 ---
 
+## 2026-05-29
+
+### [Docs] Milestone 4 doc sync — post-Sprint-4
+
+- `README.md`: TypeScript stack note updated (`.ts`/`.tsx`, `tsconfig.json strict:false`); `errorHandler.ts` and `useOnboardingStore` noted in Tech Stack; Documentation table expanded with `ARCHITECTURE.md`, `DOCS_kor.md`, all Milestone files, and `docs/security/localStorage-audit.md`; testing checklist extended with 3 new verification items (news image fallback #12, login-timestamp reset #13, SmartWidget category dropdown #14).
+- `Milestone/SCHEDULE.md`: Sprint 4 marked ✅ Completed (`3 ✅`); executive summary totals updated to `11 ✅ (92%) / 0 🟡 / 1 🔄 (8%)`; Additional Accomplishments section added covering TypeScript migration (`365b392`), error-handling standardization (`7bb92c0`), performance −27.9 % bundle, `ARCHITECTURE.md` + localStorage audit (`86d7847`), Tavily cache TTL fix (`86a34a8`), briefing timezone fix (`5c7b7a6`).
+- `Milestone/API.md`: Cache TTL corrected from 60 min → 360 min / 6 h in all three locations (weather section, §11 Read API Cache, caching table); "Updates 2026-05-29" entry added to Change Log Against Template.
+- `Milestone/KNOWN_ISSUES.md`: Item #3 (Tavily cost) marked ✅ closed; "Closed retroactively" subsection added with 9 filed-and-closed GitHub issues (#3, #17–#23, #25) linking to actual issue numbers.
+- `Milestone/MILESTONE4_PROGRESS.md`: SCRUM-26/27/28 flipped to ✅ Completed with commit-level evidence; group progress raised to 92%; self-grade raised to A−.
+- `DOCS.md`: TypeScript migration reflected in §2 Tech Stack and §3 Directory Structure; `useOnboardingStore` added as §5.10; §16 resolved items (#3 Tavily, #15b timezone) removed; §17 Sprint 4 marked ✅; ARCHITECTURE.md reference added near top.
+- **9 retroactive GitHub issues filed-and-closed** (MinsooAhn02/CSE_416_3pip #17–#23, #25) for bug-tracking transparency covering fixes shipped 2026-05-23 through 2026-05-27.
+
+---
+
 ## 2026-05-22
 
 ### [Docs] Schedule and progress doc sync against codebase

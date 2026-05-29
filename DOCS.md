@@ -1,7 +1,8 @@
 # MorningBriefing.AI — Developer Reference
 
-> Last updated: 2026-05-27
+> Last updated: 2026-05-29
 > Single source of truth for architecture. Change log → [CHANGELOG.md](./CHANGELOG.md). Korean version → [DOCS_kor.md](./DOCS_kor.md).
+> 30-minute onboarding overview (auth flow, store map, fetch pipeline) → [ARCHITECTURE.md](./ARCHITECTURE.md).
 
 ---
 
@@ -50,13 +51,15 @@
 
 | Library | Version | Purpose |
 |---------|---------|---------|
+| TypeScript | — | Language (`.ts` / `.tsx`); full migration 2026-05-24; `tsconfig.json strict:false` |
 | React | 18 | UI framework |
 | Vite | 6 | Build tool |
 | Tailwind CSS | 3 | Styling |
-| Zustand | 5 | State management |
+| Zustand | 5 | State management (10 stores; `useOnboardingStore` extracted 2026-05-24) |
 | framer-motion | — | Animation |
 | @hello-pangea/dnd | — | Drag-and-drop |
 | i18next / react-i18next | — | Korean / English i18n |
+| `src/utils/errorHandler.ts` | — | Central `ApiError` class + `handleApiError()` for all Edge Function call sites |
 
 ### Backend / Infra
 
@@ -76,78 +79,83 @@
 
 ```text
 src/
-  App.jsx                         # App entry point, auth bootstrap, initialization
+  App.tsx                         # App entry point, auth bootstrap, initialization
+  vite-env.d.ts                   # Vite client type declarations
+  types/
+    index.ts                      # Shared TypeScript type definitions
   constants/
-    index.js                      # CATEGORIES, WIDGET_LIST, DEFAULT_VIS, DEFAULT_LAYOUTS
+    index.ts                      # CATEGORIES, WIDGET_LIST, DEFAULT_VIS, DEFAULT_LAYOUTS
   components/
     common/
-      ConfirmDialog.jsx
-      DragHandle.jsx
-      GooglePlacesLocationField.jsx
-      TimeInput.jsx
-      Toggle.jsx
-      WidgetCard.jsx              # Shared card wrapper for all widgets
+      ConfirmDialog.tsx
+      DragHandle.tsx
+      GooglePlacesLocationField.tsx
+      TimeInput.tsx
+      Toggle.tsx
+      WidgetCard.tsx              # Shared card wrapper for all widgets
     layout/
-      DashboardLayout.jsx         # 1:3:3 column layout with slide panel
-      DatePanelContainer.jsx      # Events/Tasks/Diary container for selected date
-      DiaryPanel.jsx
-      EventPanel.jsx
-      FixedButtons.jsx
-      LoginScreen.jsx
-      QuickLinks.jsx
-      TaskPanel.jsx
-      TopNav.jsx                  # Language toggle, settings button, profile
+      DashboardLayout.tsx         # 1:3:3 column layout with slide panel
+      DatePanelContainer.tsx      # Events/Tasks/Diary container for selected date
+      DiaryPanel.tsx
+      EventPanel.tsx
+      FixedButtons.tsx
+      LoginScreen.tsx
+      QuickLinks.tsx
+      TaskPanel.tsx
+      TopNav.tsx                  # Language toggle, settings button, profile
     modals/
-      BriefSettingsModal.jsx
-      DiaryListModal.jsx
-      FirstLoginBriefingModal.jsx
-      NewsDetailModal.jsx         # Currently unused — replaced by direct URL navigation
-      OnboardingModal.jsx
-      PINModal.jsx
-      SettingsModal.jsx
-      WidgetSettingsModal.jsx
+      BriefSettingsModal.tsx
+      DiaryListModal.tsx
+      FirstLoginBriefingModal.tsx
+      NewsDetailModal.tsx         # Currently unused — replaced by direct URL navigation
+      OnboardingModal.tsx
+      PINModal.tsx
+      SettingsModal.tsx
+      WidgetSettingsModal.tsx
     widgets/
-      BriefingWidget.jsx
-      CalendarWidget.jsx
-      DiaryCard.jsx
-      HealthWidget.jsx
-      NewsWidget.jsx
-      SmartWidgetContent.jsx
-      StocksWidget.jsx
-      TrendsWidget.jsx
-      WeatherWidget.jsx
+      BriefingWidget.tsx
+      CalendarWidget.tsx
+      DiaryCard.tsx
+      HealthWidget.tsx
+      NewsWidget.tsx
+      SmartWidgetContent.tsx
+      StocksWidget.tsx
+      TrendsWidget.tsx
+      WeatherWidget.tsx
   hooks/
-    useBriefingContext.js         # Shared briefing context builder (14 fields)
-    useMidnightTrigger.js         # Runs once on login: diary synthesis + todo reset
-    useTheme.js                   # Theme CSS class utilities
+    useBriefingContext.ts         # Shared briefing context builder (14 fields)
+    useMidnightTrigger.ts         # Runs once on login: diary synthesis + todo reset
+    useTheme.ts                   # Theme CSS class utilities
   l10n/
-    i18n.js                       # i18next config, language-change event emission
+    i18n.ts                       # i18next config, language-change event emission
     ko.json
     en.json
   lib/
-    supabase.js                   # Supabase client initialization
+    supabase.ts                   # Supabase client initialization
   mock/
-    data.js                       # Fallback data for API failures
+    data.ts                       # Fallback data for API failures
   services/
-    aiService.js                  # Groq LLM calls (briefing, diary generation, diary rewrite)
-    diaryGenerationService.js     # Diary context builder + generateAndSaveDiaryForDate
+    aiService.ts                  # Groq LLM calls (briefing, diary generation, diary rewrite)
+    diaryGenerationService.ts     # Diary context builder + generateAndSaveDiaryForDate
   store/
-    useAuthStore.js
-    useBriefingHistoryStore.js    # Time-stamped briefing snapshots (localStorage + Supabase)
-    useDataStore.js
-    useDiaryStore.js
-    useGoogleCalendarStore.js     # Google Calendar/Tasks sync + local fallback
-    useQuickLinksStore.js
-    useSettingsStore.js
-    useTodoStore.js
-    useWidgetStore.js
+    useAuthStore.ts
+    useBriefingHistoryStore.ts    # Time-stamped briefing snapshots (localStorage + Supabase)
+    useDataStore.ts
+    useDiaryStore.ts
+    useGoogleCalendarStore.ts     # Google Calendar/Tasks sync + local fallback
+    useOnboardingStore.ts         # Onboarding state (step, perms flow) — extracted 2026-05-24
+    useQuickLinksStore.ts
+    useSettingsStore.ts
+    useTodoStore.ts
+    useWidgetStore.ts
   utils/
-    contentUtils.js               # cleanContent() — strips markdown/hashtags/SNS boilerplate
-    date.js                       # formatLocalDate(), shiftDateString() — local-time date utils
-    interests.js                  # Fixed + dynamic interest management utilities
-    personaContext.js             # buildPersonaContext() for Groq prompts
-    storage.js                    # load() / save() localStorage wrappers
-    taskRecurrence.js             # Task date filtering and materialization
+    contentUtils.ts               # cleanContent() — strips markdown/hashtags/SNS boilerplate
+    date.ts                       # formatLocalDate(), shiftDateString() — local-time date utils
+    errorHandler.ts               # ApiError class + handleApiError() — central Edge Function error surface
+    interests.ts                  # Fixed + dynamic interest management utilities
+    personaContext.ts             # buildPersonaContext() for Groq prompts
+    storage.ts                    # load() / save() localStorage wrappers
+    taskRecurrence.ts             # Task date filtering and materialization
 
 supabase/
   schema.sql                      # Base table definitions
@@ -209,7 +217,7 @@ Fallback: if `user.id` is delayed, runs `fetchAll()` solo after 1200ms timeout.
 
 ## 5) State Management
 
-Nine Zustand stores. All use localStorage for persistence unless noted.
+Ten Zustand stores. All use localStorage for persistence unless noted.
 
 ### 5.1 useAuthStore
 
@@ -282,6 +290,8 @@ Nine Zustand stores. All use localStorage for persistence unless noted.
 - Top-5 interests inserted into query: EN `"Focus topics: kw1, kw2..."`, KO `"관심 주제: kw1, kw2..."`
 - Korean mode: `include_domains: KO_NEWS_DOMAINS`, then `translateArticlesToKorean()` post-processes titles/content; translated payload backfilled to `api_cache`
 
+**Error handling:** All Edge Function call sites use `handleApiError(err, context)` from `src/utils/errorHandler.ts`. On failure, `ApiError` is thrown; catch blocks set `apiStatus="error"` and fall back to mock data.
+
 **Korean article language filter:**
 - `scoreArticleForLanguage(item, "ko")`: Hangul in title → high score; Hangul in content → medium score; KO domain host → bonus; none → -1 (rejected)
 - `filterByAllowedDomains(items, lang)`: Hard domain filter — KO mode: `KO_NEWS_DOMAINS` only; EN mode: `EN_NEWS_DOMAINS` only
@@ -335,6 +345,21 @@ Language change → all `smartKeywords` run `loadSmartWidget(kw, false)` (cache-
 ```
 
 **Key actions:** `setPIN / verifyPIN` (Web Crypto SHA-256 hash), `saveGeneratedDiary(date, text)` (sets `aiGeneratedDiary` + `diary`, clears `editedDiary`), `applyFeedbackRewrite(date, feedbackText, language)` → Groq → `pendingRewrite`, `confirmRewrite(date)` (irreversible — overwrites `diary` + DB sync), `discardPendingRewrite(date)`.
+
+---
+
+### 5.10 useOnboardingStore
+
+Extracted from `useAuthStore` and `useSettingsStore` on 2026-05-24.
+
+| Field | Type | Storage |
+|-------|------|---------|
+| `step` | `"welcome"\|"categories"\|"perms"\|"done"` | memory |
+| `pendingPerms` | `{fit: boolean, cal: boolean}` | memory |
+
+**Key actions:** `nextStep()`, `setPendingPerms(perms)`, `commitPerms()` (writes to `useAuthStore.perms` + DB upsert).
+
+Ownership of the multi-step onboarding flow lives here; `OnboardingModal.tsx` reads and drives this store only.
 
 ---
 
@@ -943,29 +968,33 @@ npx wrangler deploy
 | Stocks Edge Function deploy | Local modification done (type/currency metadata + validation fixes); needs Supabase Dashboard manual deploy |
 | `groq` Edge Function deploy | `charset=utf-8` header added; needs manual deploy |
 
+**Resolved since 2026-05-22:**
+- ~~Tavily token overuse~~ → ✅ Resolved 2026-05-23 (`86a34a8`): `api_cache` TTL extended 1 h → 6 h (GH [#3](https://github.com/MinsooAhn02/CSE_416_3pip/issues/3))
+- ~~Briefing "Tomorrow" section empty for non-UTC users~~ → ✅ Resolved 2026-05-24 (`5c7b7a6`): explicit `timeMin/timeMax` local-timezone ISO strings (GH [#17](https://github.com/MinsooAhn02/CSE_416_3pip/issues/17))
+
 ---
 
 ## 17) Milestone 4 Compliance Status
 
-Updated 2026-05-22. All five Milestone 4 documentation deliverables complete; deployment live on Cloudflare Workers; remaining items are content edits and final-sprint polish.
+Updated 2026-05-29. All five Milestone 4 documentation deliverables complete; Sprint 4 closed; deployment live on Cloudflare Workers at `https://morningbriefing.dksalstn0621.workers.dev`.
 
 ### ✅ README.md — Done
 
 - [x] Setup instructions for Windows / PowerShell (prerequisites, clone, install, `.env` config, DB setup, Edge Function deploy, dev run)
 - [x] Build & Deploy section (`npm run build` + `npx wrangler deploy`)
-- [x] Testing section with 8-point manual verification checklist
+- [x] Testing section with 14-point manual verification checklist (expanded 2026-05-29 with items #12–#14)
 - [x] OS coverage explicitly stated (Windows 10 / 11 + PowerShell)
-- [x] Bug Reporting section linking to `<REPO_URL>/issues`
+- [x] Bug Reporting section linking to repo issues
 - [x] Backend description corrected (was `FastAPI/Python/Gemini`; now `Supabase Edge Functions/Deno/Groq`)
-- [ ] **Remaining:** find/replace `<REPO_URL>` (3 occurrences) and `<DEPLOYED_URL>` (1 occurrence) before submission
+- [x] TypeScript migration noted in Tech Stack; `ARCHITECTURE.md` and `docs/security/localStorage-audit.md` added to Documentation table
 
 ### ✅ Milestone/SCHEDULE.md — Done
 
 - [x] May 1st Jira baseline (12 epics × 4 sprints) imported and verified against codebase
-- [x] Executive Summary table at top (9 ✅ / 2 🟡 / 1 🔄)
+- [x] Executive Summary table (11 ✅ / 0 🟡 / 1 🔄) — Sprint 4 ✅ Completed 2026-05-29
 - [x] Per-task "Completion Evidence" column with code references, function names, commit hashes
 - [x] Schedule Changes section: SCRUM-28 (Vercel → Cloudflare), SCRUM-16/25 (Persona → category-based personalization), SCRUM-24 (Desktop History → Smart Widget keyword learning + Briefing snapshots) — all 3 changes formally documented with rationale
-- [x] "Additional accomplishments beyond schedule" section listing unscheduled work
+- [x] "Additional accomplishments beyond schedule" section — TypeScript migration, error-handling standardization, performance −27.9 %, ARCHITECTURE.md, Tavily TTL fix, timezone fix
 - [x] Jira board linked at top as live source of truth
 
 ### ✅ Milestone/API.md — Done
@@ -973,7 +1002,7 @@ Updated 2026-05-22. All five Milestone 4 documentation deliverables complete; de
 - [x] All 9 Edge Functions documented (weather, stocks, tavily × 3 modes, groq, events, tasks, fitness, smart-widget)
 - [x] All Supabase REST endpoints documented (6 missing from original template added: todos, smart_keywords, diaries, user_qa, briefing_snapshots, keyword_score_log)
 - [x] All 3 Supabase Auth client API calls documented
-- [x] 7 corrections applied vs. Excel template (Groq output field, Smart Widget input shape, Tasks legacy MB_META note, etc.)
+- [x] 7 corrections applied vs. Excel template; cache TTL corrected to 6 h (2026-05-29)
 - [x] Auth/RLS requirements clearly marked per endpoint
 - [x] Caching, error handling, RLS cross-cutting concerns documented
 
@@ -982,24 +1011,24 @@ Updated 2026-05-22. All five Milestone 4 documentation deliverables complete; de
 - [x] README "Bug Reporting" section explains where to find issues and how to file new ones
 - [x] `.github/ISSUE_TEMPLATE/bug_report.md` — structured bug form
 - [x] `.github/ISSUE_TEMPLATE/feature_request.md` — structured feature form
-- [x] `Milestone/KNOWN_ISSUES.md` — open issues drafted, ready to paste into GitHub Issues with severity, owner, labels
-- [ ] **Remaining:** team confirms GitHub Issues is enabled at the repo; files all open entries into Issues; replaces `_to file_` with GH issue numbers; deletes KNOWN_ISSUES.md after all are filed
-- [ ] **Remaining:** team completes cross-verification of completed features (per ProjectMilestones.md — verify each marked-complete feature with a team member who did not implement it; bugs found get filed)
+- [x] `Milestone/KNOWN_ISSUES.md` — 9 retroactive issues filed-and-closed (GH #3, #17–#23, #25); open issues remain tracked in GH Issues
+- [x] 9 retroactive GitHub issues filed-and-closed for transparency paper trail (2026-05-29)
+- [ ] **Remaining:** team completes cross-verification of completed features (verify each marked-complete feature with a team member who did not implement it; bugs found get filed)
 
 ### ✅ Milestone/MILESTONE4_PROGRESS.md — Done
 
 - [x] Individual progress update sections for all 3 team members (scheduled, in-progress, actually completed, partial)
-- [x] Group progress update with self-assigned grade (B) and rationale
+- [x] Group progress update with self-assigned grade (A−) and rationale — Sprint 4 fully closed
 - [x] Process adjustments section for the final release sprint
 - [x] Sign-off block for each team member
 - [ ] **Remaining:** each team member signs the sign-off block
 - [ ] **Remaining:** copy to Brightspace for submission alongside GitHub commit
 
-### Final-release polish (low risk)
+### Remaining pre-submission items
 
-1. **Live URL placeholder** — `<DEPLOYED_URL>` placeholder in README.md to be replaced with the actual Cloudflare Workers URL (deployment is already live).
-2. **Stocks + groq Edge Function manual deploys** — Local code is ready; Supabase Dashboard upload pending so the deployed app picks up the universal-ticker fallback (stocks) and `charset=utf-8` header (groq).
-3. **Sprint 4 closeout** — SCRUM-26 UI/UX audit and SCRUM-27 RLS audit + indexing pass complete by May 27.
+1. **Stocks + groq Edge Function manual deploys** — Local code is ready; Supabase Dashboard upload pending so the deployed app picks up the universal-ticker fallback (stocks) and `charset=utf-8` header (groq).
+2. **Cross-verification** — Each completed feature verified by a team member who did not implement it; any bugs found should be filed in GitHub Issues.
+3. **Team sign-offs** — Each member signs `Milestone/MILESTONE4_PROGRESS.md`; file copied to Brightspace.
 
 ---
 

@@ -1,10 +1,11 @@
 # Known Issues — Paste into GitHub Issues
 
-> **Purpose:** This file is a staging area for known issues that should be filed into GitHub Issues (`<REPO_URL>/issues`). Each entry below is formatted to be copy-pasteable.
+> **Purpose:** This file is a staging area for known issues that should be filed into GitHub Issues (`https://github.com/MinsooAhn02/CSE_416_3pip/issues`). Each entry below is formatted to be copy-pasteable.
 > Once an issue is filed, mark it with the GitHub issue number in the **GH#** column.
 > **After all issues are filed, this file can be deleted.**
 >
 > **Compiled from:** `todo.md` (open items) + `DOCS.md §16` (Known Incomplete Items) as of 2026-05-22.
+> **Last updated:** 2026-05-29 — items #3 (Tavily token overuse) and #15b (briefing timezone) marked ✅ Resolved; 9 retroactive issues filed-and-closed for transparency (see "Closed retroactively" subsection at bottom).
 
 ## Tracking Table
 
@@ -12,7 +13,7 @@
 |---|-----|-------|----------|-----------------|--------|
 | 1 | [#1](https://github.com/MinsooAhn02/CSE_416_3pip/issues/1) | Smart Widget Korean mode: Latest Updates / Latest Coverage not loading | Major | Minsoo Ahn | todo.md |
 | 2 | [#2](https://github.com/MinsooAhn02/CSE_416_3pip/issues/2) | Diary feedback rewrite not applying | Major | Sungmin Choo | todo.md |
-| 3 | [#3](https://github.com/MinsooAhn02/CSE_416_3pip/issues/3) | Tavily token overuse — too many redundant calls | Major | Minsoo Ahn | todo.md |
+| ~~3~~ | ✅ closed | ~~Tavily token overuse — too many redundant calls~~ — **Resolved 2026-05-23** (commit `86a34a8`): `api_cache` TTL extended 1 h → 6 h cuts redundant Tavily calls by ~6×. Issue [#3](https://github.com/MinsooAhn02/CSE_416_3pip/issues/3) closed retroactively. | ~~Major~~ | — | todo.md |
 | 4 | [#4](https://github.com/MinsooAhn02/CSE_416_3pip/issues/4) | Briefing "Today's latest info" shows generic definitions instead of personalized search | Major | Minsoo Ahn | todo.md |
 | 5 | [#5](https://github.com/MinsooAhn02/CSE_416_3pip/issues/5) | Briefing "Smart keywords: No keyword info collected yet" — unclear when it populates | Minor | Sungmin Choo | todo.md |
 | 6 | [#6](https://github.com/MinsooAhn02/CSE_416_3pip/issues/6) | Google integration toggle (연동 끄기) not working; consider removing the option | Minor | Sungmin Choo | todo.md |
@@ -334,6 +335,36 @@ Local change to `supabase/functions/groq/index.ts` adds `Content-Type: applicati
 - After deploy, generate a Korean AI briefing → confirm no character garbling.
 
 **Reference:** `DOCS.md §16`
+
+---
+
+## Closed retroactively — 2026-05-29 doc sync
+
+The following items were fixed in code between 2026-05-22 and 2026-05-27 but were never tracked as GitHub issues. They have been filed-and-closed retroactively for transparency / paper trail. Issue numbers will be back-filled here after the `gh` CLI run.
+
+| Local ref | Title | Severity | Closed by commit | GH# |
+|-----------|-------|----------|------------------|-----|
+| A | `[FIX] Tavily token over-consumption — cache TTL extended 1 h → 6 h` | Major | `86a34a8` | [#3](https://github.com/MinsooAhn02/CSE_416_3pip/issues/3) |
+| B | `[FIX] Briefing "Tomorrow" section empty for non-UTC users (timezone bug)` | Major | `5c7b7a6` | [#17](https://github.com/MinsooAhn02/CSE_416_3pip/issues/17) |
+| C | `[FIX] News widget — broken image shows blank gap instead of placeholder` | Minor | `020e802` | [#18](https://github.com/MinsooAhn02/CSE_416_3pip/issues/18) |
+| D | `[FIX] Last-updated timestamp shows stale "9000분 전" on re-login` | Minor | `020e802` | [#19](https://github.com/MinsooAhn02/CSE_416_3pip/issues/19) |
+| E | `[FIX] Calendar "Today" button not visible from year/decade header view` | Minor | `020e802` | [#20](https://github.com/MinsooAhn02/CSE_416_3pip/issues/20) |
+| F | `[FIX] Smart Widget category button — emoji + dropdown not opening` | Minor | `020e802` | [#21](https://github.com/MinsooAhn02/CSE_416_3pip/issues/21) |
+| G | `[FIX] DiaryList PIN prompt — incorrect modal gating` | Minor | `5fc08b9` | [#22](https://github.com/MinsooAhn02/CSE_416_3pip/issues/22) |
+| H | `[FIX] StocksWidget — invalid ticker input does not show error state` | Minor | `70ca0d0` | [#23](https://github.com/MinsooAhn02/CSE_416_3pip/issues/23) |
+| I | `[FEAT] Apply font-size setting to Diary/Event/Task panels` | Trivial | `5fc08b9` | [#25](https://github.com/MinsooAhn02/CSE_416_3pip/issues/25) |
+
+Issue body template used (consistent across all items):
+
+```
+Fixed by <COMMIT_HASH> on <DATE>.
+
+**Symptom:** <one line>
+**Root cause:** <one line>
+**Fix:** <one line>
+
+**Reference:** CHANGELOG.md, <file path(s)>
+```
 
 ---
 
