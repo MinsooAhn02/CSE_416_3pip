@@ -48,3 +48,9 @@ Bugs were tracked across complementary sources throughout development:
 - **Local bug staging / triage notes:** [KNOWN_ISSUES.md](./KNOWN_ISSUES.md)
 
 ---
+
+## 5. Milestone 4 Progress Update
+
+Individual and group progress updates for the beta release milestone are documented below.
+
+- **Milestone 4 Progress Update (pdf):** [Milestone 4 Progress Update](./Milestone%204%20Progress%20Update.pdf)
