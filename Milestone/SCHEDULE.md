@@ -115,7 +115,7 @@ The team also shipped the following work that was not in the May 1st plan but ma
 | **Briefing timezone fix** | `fetchTomorrowCalendar` / `fetchCalendar` switched from UTC `date` param to local `timeMin/timeMax` ISO strings — "Tomorrow" section now populates correctly for non-UTC users | commit `5c7b7a6` (2026-05-24) — closes [KNOWN_ISSUES.md #15b](./KNOWN_ISSUES.md) |
 | **Architecture docs** | New `ARCHITECTURE.md` (30-minute onboarding overview with mermaid auth-flow, onboarding flow, store dependency map, fetch pipeline) + `docs/security/localStorage-audit.md` | commit `86d7847` (2026-05-24) |
 | **Onboarding store extraction** | `useOnboardingStore.ts` split from `useAuthStore` / `useSettingsStore` — clearer ownership of onboarding wizard state | commit `5f192e9` (2026-05-24) |
-| Documentation | Full developer reference suite: DOCS.md (EN), DOCS_kor.md (KO), ARCHITECTURE.md, API.md (25 endpoints), CHANGELOG.md (27 fix rounds), KNOWN_ISSUES.md, ISSUE_TEMPLATEs | `/`, `/.github/ISSUE_TEMPLATE/` |
+| Documentation | Full developer reference suite: DOCS.md, ARCHITECTURE.md, API.md (25 endpoints), CHANGELOG.md (27 fix rounds), KNOWN_ISSUES.md, ISSUE_TEMPLATEs | `/`, `/.github/ISSUE_TEMPLATE/` |
 | Quality | 27 dated fix rounds covering briefing, diary, calendar event modal, Tavily, stocks ticker, i18n, recent Sprint-4 polish | [CHANGELOG.md](../CHANGELOG.md) |
 
 ---
@@ -136,8 +136,7 @@ The Jira board remains the live source of truth; this file is the milestone snap
 ## Related Documents
 
 - [README.md](../README.md) — Setup, build, test, and bug reporting
-- [DOCS.md](../DOCS.md) — Architecture reference (English)
-- [DOCS_kor.md](../DOCS_kor.md) — Korean architecture reference
+- [DOCS.md](../DOCS.md) — Architecture reference
 - [API.md](./API.md) — API design (25 endpoints, matches `MorningBriefingAI_API_Design.xlsx` structure)
 - [CHANGELOG.md](../CHANGELOG.md) — Dated change log
 - [KNOWN_ISSUES.md](./KNOWN_ISSUES.md) — Open bugs to file

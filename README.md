@@ -50,7 +50,7 @@ MorningBriefing.AI eliminates the need for users to search for information throu
 - Google Fitness API (steps, sleep, heart rate)
 - Google Maps / Places (location autocomplete)
 
-For full architecture details, see [DOCS.md](./DOCS.md) (English) or [DOCS_kor.md](./DOCS_kor.md) (Korean).
+For full architecture details, see [DOCS.md](./DOCS.md) (English)
 
 ---
 
@@ -237,7 +237,9 @@ This is expected. The app is in GCP **Testing** mode — full OAuth verification
 
 ### Bug tracking history
 
-Bugs were tracked in **Jira** throughout development (Sprint 1–4, May 6–27, 2026). Issues were migrated to GitHub Issues on 2026-05-23 to comply with the CSE 416 Milestone 4 submission format. The original Jira board remains the live source of truth for sprint history: [Jira Scrum Board](https://stonybrook-team-3pip.atlassian.net/jira/software/projects/SCRUM/boards/1). See GitHub [issue #16](https://github.com/MinsooAhn02/CSE_416_3pip/issues/16) for the full migration notice including original discovery dates.
+Bugs were tracked via **`CHANGELOG.md`** and **`todo.md`** throughout development (Sprint 1–4, May 6–27, 2026). Each fix round in `CHANGELOG.md` records the date, affected files, root cause, fix applied, and any follow-up items — attributed by team role: UI/UX fixes (Dahyun Kwon), complex data-flow and logic fixes (Minsoo Ahn), and backend / store / API fixes (Sungmin Choo). Open items and per-feature tasks were tracked in `todo.md`.
+
+Sprint schedule and task assignments were managed in **Jira** and migrated to GitHub Issues on 2026-05-23 for Milestone 4 compliance. See GitHub [issue #16](https://github.com/MinsooAhn02/CSE_416_3pip/issues/16) for the sprint history and task migration notice. The Jira board remains the reference for sprint-level planning: [Jira Scrum Board](https://stonybrook-team-3pip.atlassian.net/jira/software/projects/SCRUM/boards/1).
 
 ### Where to find open bugs
 
@@ -267,15 +269,10 @@ For security-sensitive issues, do not open a public issue — contact the team d
 |------|---------|
 | [ARCHITECTURE.md](./ARCHITECTURE.md) | 30-minute end-to-end onboarding overview (auth flow, store map, fetch pipeline) — added 2026-05-24 |
 | [DOCS.md](./DOCS.md) | Architecture reference — stores, caching, widgets, Edge Functions, DB schema, personalization |
-| [DOCS_kor.md](./DOCS_kor.md) | Korean translation of `DOCS.md` |
-| [CHANGELOG.md](./CHANGELOG.md) | Dated change log (fix rounds, feature releases) |
-| [Milestone/ProjectMilestones.md](./Milestone/ProjectMilestones.md) | CSE 416 course assignment specification (milestones 1–4) |
-| [Milestone/SCHEDULE.md](./Milestone/SCHEDULE.md) | Sprint-by-sprint schedule + Schedule Changes |
-| [Milestone/API.md](./Milestone/API.md) | API design (25 endpoints) |
-| [Milestone/KNOWN_ISSUES.md](./Milestone/KNOWN_ISSUES.md) | Open bug list (staging for GitHub Issues) |
-| [Milestone/MILESTONE4_PROGRESS.md](./Milestone/MILESTONE4_PROGRESS.md) | Per-team-member progress + group self-grade |
+| [CHANGELOG.md](./CHANGELOG.md) | Dated change log — fix rounds by date, root cause, files changed, and follow-up items |
+| [Milestone/](./Milestone/) | CSE 416 milestone documents: `ProjectMilestones.md` (course spec), `SCHEDULE.md` (sprints + schedule changes), `API.md` (25 endpoints), `KNOWN_ISSUES.md` (bug staging), `MILESTONE4_PROGRESS.md` (team progress + self-grade) |
 | [docs/security/localStorage-audit.md](./docs/security/localStorage-audit.md) | Audit of localStorage usage (XSS surface, `provider_token` handling) — added 2026-05-24 |
-| `todo.md` | Working notes and manual test checklist |
+| `todo.md` | Working notes, open tasks, and manual test checklist |
 
 ---
 

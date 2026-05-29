@@ -1,7 +1,7 @@
 # MorningBriefing.AI — Developer Reference
 
 > Last updated: 2026-05-29
-> Single source of truth for architecture. Change log → [CHANGELOG.md](./CHANGELOG.md). Korean version → [DOCS_kor.md](./DOCS_kor.md).
+> Single source of truth for architecture. Change log → [CHANGELOG.md](./CHANGELOG.md).
 > 30-minute onboarding overview (auth flow, store map, fetch pipeline) → [ARCHITECTURE.md](./ARCHITECTURE.md).
 
 ---

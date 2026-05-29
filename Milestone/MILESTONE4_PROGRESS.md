@@ -130,7 +130,7 @@ Sprints 1, 2, 3, and 4 are all fully delivered. Sprint 4 closed on schedule (202
 In addition to scheduled items, the team has shipped **a significant body of unscheduled work** that strengthens the product:
 
 - **27 dated fix rounds** ([CHANGELOG.md](../CHANGELOG.md)) covering briefing regressions, diary feedback flow, calendar event modal bugs, Tavily Korean translation pipeline, stocks ticker fallback, i18n cleanup, post-Sprint-4 polish
-- **Full documentation suite:** [DOCS.md](../DOCS.md) (English) + [DOCS_kor.md](../DOCS_kor.md) (Korean) + [ARCHITECTURE.md](../ARCHITECTURE.md) (30-min onboarding overview) + [CHANGELOG.md](../CHANGELOG.md) + [API.md](./API.md) (25 endpoints) + [SCHEDULE.md](./SCHEDULE.md) + [KNOWN_ISSUES.md](./KNOWN_ISSUES.md) + [docs/security/localStorage-audit.md](../docs/security/localStorage-audit.md) + GitHub bug/feature issue templates
+- **Full documentation suite:** [DOCS.md](../DOCS.md) + [ARCHITECTURE.md](../ARCHITECTURE.md) (30-min onboarding overview) + [CHANGELOG.md](../CHANGELOG.md) + [API.md](./API.md) (25 endpoints) + [SCHEDULE.md](./SCHEDULE.md) + [KNOWN_ISSUES.md](./KNOWN_ISSUES.md) + [docs/security/localStorage-audit.md](../docs/security/localStorage-audit.md) + GitHub bug/feature issue templates
 - **TypeScript migration** — 77 files, full `.js`/`.jsx` → `.ts`/`.tsx` conversion; `tsconfig.json` with `strict:false`; `tsc --noEmit` exits 0; `npm run build` succeeds
 - **Performance optimization** — bundle -27.9 % (1,025.94 kB → 739.50 kB), `React.memo` on all 9 widgets, `useShallow` on 5 widgets, `React.lazy` + `Suspense` on widgets + modals
 - **Tavily cost reduction** — `api_cache` TTL extended 1 h → 6 h (~6× fewer Tavily calls; resolves KNOWN_ISSUES #3)
@@ -187,6 +187,5 @@ This document was drafted by the team on 2026-05-22 using the Jira board export 
 - [KNOWN_ISSUES.md](./KNOWN_ISSUES.md) — open bugs to file
 - [API.md](./API.md) — API design (25 endpoints)
 - [CHANGELOG.md](../CHANGELOG.md) — dated history of all fix rounds
-- [DOCS.md](../DOCS.md) — architecture reference (English)
-- [DOCS_kor.md](../DOCS_kor.md) — architecture reference (Korean)
+- [DOCS.md](../DOCS.md) — architecture reference
 - [ProjectMilestones.md](./ProjectMilestones.md) — course assignment specification
