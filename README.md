@@ -278,9 +278,9 @@ For security-sensitive issues, do not open a public issue — contact the team d
 
 ## 👥 Team Members
 
-- **Ahn Minsoo** — Infrastructure & DevOps
-- **Choo Sungmin** — Backend Developer
-- **Kwon Dahyun** — Frontend Developer & UI/UX Designer
+- **Ahn Minsoo** — Infrastructure & DevOps & Backend Developer — minsoo.ahn@stonybrook.edu
+- **Choo Sungmin** — Backend Developer & UI/UX Designer — sungmin.choo@stonybrook.edu
+- **Kwon Dahyun** — Frontend Developer & UI/UX Designer — dahyun.kwon@stonybrook.edu
 
 ## 📋 Project Management
 
