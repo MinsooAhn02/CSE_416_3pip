@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useAuthStore } from "../../store/useAuthStore";
 import { supabase } from "../../lib/supabase";
+import FloatingLines from "../common/FloatingLines";
 
 const LoginScreen = () => {
 	const { t } = useTranslation();
@@ -16,10 +17,24 @@ const LoginScreen = () => {
 	};
 
 	return (
-		<div className="min-h-screen w-full bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900 flex flex-col items-center justify-center text-white font-sans">
-			<div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-blue-500/10 rounded-full blur-[120px]" />
-			<div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-indigo-500/10 rounded-full blur-[120px]" />
-			<div className="relative z-10 flex flex-col items-center gap-8">
+		<div className="min-h-screen w-full bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900 flex flex-col items-center justify-center text-white font-sans relative overflow-hidden">
+			{/* Animated FloatingLines background (subtle, brand blue/indigo) */}
+			<div className="absolute inset-0 z-0 opacity-40">
+				<FloatingLines
+					linesGradient={["#1e3a8a", "#4f46e5", "#818cf8"]}
+					enabledWaves={["top", "middle", "bottom"]}
+					lineCount={[10, 15, 20]}
+					lineDistance={[8, 6, 4]}
+					animationSpeed={0.6}
+					bendRadius={5.0}
+					bendStrength={-0.5}
+					interactive={true}
+					parallax={true}
+				/>
+			</div>
+			<div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-blue-500/10 rounded-full blur-[120px] z-0" />
+			<div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-indigo-500/10 rounded-full blur-[120px] z-0" />
+			<div className="relative z-10 flex flex-col items-center gap-8 pointer-events-none [&_button]:pointer-events-auto">
 				<div className="text-center">
 					<h1 className="text-5xl font-bold tracking-tight mb-2">
 						Morning
