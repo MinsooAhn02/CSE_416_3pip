@@ -4,7 +4,7 @@ import { fileURLToPath } from "url";
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 const distDir = join(__dirname, "../dist");
-const outFile = join(__dirname, `../morningbrief-extension-v1.0.0.zip`);
+const outFile = join(__dirname, `../morningbriefing-extension-v1.0.0.zip`);
 
 // Read package.json version for filename
 let version = "1.0.0";
@@ -22,7 +22,7 @@ async function zipDir() {
     const archive = archiver("zip", { zlib: { level: 9 } });
 
     output.on("close", () => {
-      console.log(`✅  Extension packaged: morningbrief-extension-v${version}.zip (${archive.pointer()} bytes)`);
+      console.log(`✅  Extension packaged: morningbriefing-extension-v${version}.zip (${archive.pointer()} bytes)`);
     });
 
     archive.on("error", (err) => { throw err; });
