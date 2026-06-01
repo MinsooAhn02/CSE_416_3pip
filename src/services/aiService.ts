@@ -1699,7 +1699,7 @@ const smartResultIsFreshEnough = (result: ArticleItem, section: SmartSectionPlan
 		if (isStreetwearFreshSearchSection(section)) return true;
 		return !smartResultTitleHasOlderYearSignal(result, currentYear);
 	}
-	if (publishedYear !== null) return publishedYear >= currentYear;
+	if (publishedYear !== null) return publishedYear >= currentYear - 1;
 	if (smartResultHasStaleRelativeSignal(result)) return false;
 	if (isKoreanPersonUpdatesSection(section, isKo)) {
 		return !smartResultTitleHasOlderYearSignal(result, currentYear);
@@ -3062,6 +3062,8 @@ const smartResultMatchesRequiredSectionKeyword = (result: SmartResult, section: 
 	smartResultTitleMatchesSectionKeyword(result, section) ||
 	(isNutritionSmartSection(section) &&
 		smartResultMatchesKeyword(result, section.keyword ?? "")) ||
+	(isKo && isArticleSmartSection(section) &&
+		smartResultMatchesKeyword(result, section.keyword ?? "")) ||
 	(isKo &&
 		section?.category === "person" &&
 		hasSmartResultLanguage(result, true) &&
@@ -3083,6 +3085,7 @@ const getSmartResultFreshnessRank = (result: SmartResult, section: SmartSectionP
 	if (publishedTime !== null) {
 		const publishedYear = new Date(publishedTime).getFullYear();
 		if (publishedYear >= currentYear) return 3;
+		if (publishedYear >= currentYear - 1) return 1;
 		return -8;
 	}
 	if (
@@ -3301,7 +3304,7 @@ const formatSmartItems = (results: SmartResult[], isKo: boolean, section: SmartS
 	const mustMatchKeyword =
 		isNutritionSmartSection(section) ||
 		section?.category === "streetwear";
-	const mustMatchTitleKeyword = smartSectionRequiresTitleKeyword(section);
+	const mustMatchTitleKeyword = smartSectionRequiresTitleKeyword(section) && !(isKo && isArticleSmartSection(section));
 	const sourceItems = dedupeByUrl([
 		...titleKeywordMatches,
 		...requiredKeywordMatches,
@@ -3462,12 +3465,14 @@ const searchSmartSection = async (section: SmartSectionPlan, isKo: boolean) => {
 		(isArticleSmartSection(section) && !useFreshSearchMode)
 	)
 		? null
-		: "month";
+		: isKo ? "year" : "month";
 	const retryTimeRange = (isKeyInfoSmartSection(section) || isNutritionSmartSection(section))
 		? null
 		: useFreshSearchMode
 			? null
-			: primaryTimeRange;
+			: isKo
+				? null
+				: primaryTimeRange;
 	const tavilyData = preferredDomains.length > 0
 		? await fetchSmartTavily(section, mode, isKo, preferredDomains, primaryTimeRange)
 		: await fetchSmartTavily(section, mode, isKo, [], primaryTimeRange);
