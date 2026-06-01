@@ -1632,9 +1632,6 @@ const getSmartSearchDomains = (section: SmartSectionPlan, isKo: boolean): string
 	if (isKeyInfoSmartSection(section)) {
 		return isKo ? KO_KEY_INFO_DOMAINS : EN_KEY_INFO_DOMAINS;
 	}
-	if (section?.type === "updates") {
-		return [];
-	}
 	if (isArticleSmartSection(section)) {
 		return isKo ? KO_ARTICLE_DOMAINS : EN_ARTICLE_DOMAINS;
 	}
@@ -1701,6 +1698,10 @@ const smartResultIsFreshEnough = (result: ArticleItem, section: SmartSectionPlan
 	}
 	if (publishedYear !== null) return publishedYear >= currentYear - 1;
 	if (smartResultHasStaleRelativeSignal(result)) return false;
+	if (isVideoSmartSection(section)) {
+		// 발행일 없는 영상은 현재 연도 신호가 있어야만 허용
+		return smartResultHasYearSignal(result, currentYear) && !smartResultHasOlderYearSignal(result, currentYear);
+	}
 	if (isKoreanPersonUpdatesSection(section, isKo)) {
 		return !smartResultTitleHasOlderYearSignal(result, currentYear);
 	}
@@ -3062,8 +3063,6 @@ const smartResultMatchesRequiredSectionKeyword = (result: SmartResult, section: 
 	smartResultTitleMatchesSectionKeyword(result, section) ||
 	(isNutritionSmartSection(section) &&
 		smartResultMatchesKeyword(result, section.keyword ?? "")) ||
-	(isKo && isArticleSmartSection(section) &&
-		smartResultMatchesKeyword(result, section.keyword ?? "")) ||
 	(isKo &&
 		section?.category === "person" &&
 		hasSmartResultLanguage(result, true) &&
@@ -3304,7 +3303,7 @@ const formatSmartItems = (results: SmartResult[], isKo: boolean, section: SmartS
 	const mustMatchKeyword =
 		isNutritionSmartSection(section) ||
 		section?.category === "streetwear";
-	const mustMatchTitleKeyword = smartSectionRequiresTitleKeyword(section) && !(isKo && isArticleSmartSection(section));
+	const mustMatchTitleKeyword = smartSectionRequiresTitleKeyword(section);
 	const sourceItems = dedupeByUrl([
 		...titleKeywordMatches,
 		...requiredKeywordMatches,
