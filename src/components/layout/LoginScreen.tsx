@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import {
 	Sparkles,
@@ -63,6 +63,7 @@ const LoginScreen = () => {
 	const { t } = useTranslation();
 	const login = useAuthStore((s) => s.login);
 	const [loading, setLoading] = useState<boolean>(false);
+	const bgRef = useRef<HTMLDivElement>(null);
 
 	const handleLogin = async () => {
 		setLoading(true);
@@ -71,10 +72,29 @@ const LoginScreen = () => {
 		if (!supabase) setLoading(false);
 	};
 
+	// Forward pointer events from the scroll layer (z-10) down to the THREE.js
+	// canvas (z-0) so FloatingLines' interactive wave-bending + parallax still work.
+	const forwardPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+		const canvas = bgRef.current?.querySelector<HTMLCanvasElement>("canvas");
+		if (!canvas) return;
+		canvas.dispatchEvent(
+			new PointerEvent("pointermove", { clientX: e.clientX, clientY: e.clientY, bubbles: false })
+		);
+	};
+	const forwardPointerLeave = () => {
+		const canvas = bgRef.current?.querySelector<HTMLCanvasElement>("canvas");
+		if (!canvas) return;
+		canvas.dispatchEvent(new PointerEvent("pointerleave", { bubbles: false }));
+	};
+
 	return (
-		<div className="relative h-screen w-full bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900 text-white font-sans overflow-hidden">
+		<div
+			className="relative h-screen w-full bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900 text-white font-sans overflow-hidden"
+			onPointerMove={forwardPointerMove}
+			onPointerLeave={forwardPointerLeave}
+		>
 			{/* Animated FloatingLines background (subtle, brand blue/indigo) — fixed behind scrolling content */}
-			<div className="absolute inset-0 z-0 opacity-40">
+			<div ref={bgRef} className="absolute inset-0 z-0 opacity-40">
 				<FloatingLines
 					linesGradient={["#1e3a8a", "#4f46e5", "#818cf8"]}
 					enabledWaves={["top", "middle", "bottom"]}
@@ -83,7 +103,7 @@ const LoginScreen = () => {
 					animationSpeed={0.6}
 					bendRadius={5.0}
 					bendStrength={-0.5}
-					interactive={false}
+					interactive={true}
 					parallax={true}
 				/>
 			</div>
