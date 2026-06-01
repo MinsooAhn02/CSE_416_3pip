@@ -6,7 +6,7 @@ import { useTheme } from "../../hooks/useTheme";
 declare const chrome: { runtime?: { sendMessage?: (...args: unknown[]) => void } } | undefined;
 
 // Chrome Web Store URL — 출판 후 실제 Extension ID로 교체하세요
-const STORE_URL = "https://chrome.google.com/webstore/detail/morningbriefai/EXTENSION_ID_HERE";
+const STORE_URL = "https://chrome.google.com/webstore/detail/morningbriefingai/EXTENSION_ID_HERE";
 
 // 배포 후 Extension ID로 교체하면 설치 여부 자동 감지 가능
 const EXTENSION_ID: string | null = null;

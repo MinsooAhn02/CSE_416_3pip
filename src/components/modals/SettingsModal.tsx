@@ -602,7 +602,7 @@ const SettingsModal = () => {
 									<div>
 										<p className="font-bold">
 											{useAuthStore.getState().user?.displayName ||
-												"MorningBrief.AI User"}
+												"MorningBriefing.AI User"}
 										</p>
 										<p className={`text-xs ${muted}`}>
 											{useAuthStore.getState().user?.email ||

@@ -1632,9 +1632,6 @@ const getSmartSearchDomains = (section: SmartSectionPlan, isKo: boolean): string
 	if (isKeyInfoSmartSection(section)) {
 		return isKo ? KO_KEY_INFO_DOMAINS : EN_KEY_INFO_DOMAINS;
 	}
-	if (section?.type === "updates") {
-		return [];
-	}
 	if (isArticleSmartSection(section)) {
 		return isKo ? KO_ARTICLE_DOMAINS : EN_ARTICLE_DOMAINS;
 	}
@@ -1699,8 +1696,12 @@ const smartResultIsFreshEnough = (result: ArticleItem, section: SmartSectionPlan
 		if (isStreetwearFreshSearchSection(section)) return true;
 		return !smartResultTitleHasOlderYearSignal(result, currentYear);
 	}
-	if (publishedYear !== null) return publishedYear >= currentYear;
+	if (publishedYear !== null) return publishedYear >= currentYear - 1;
 	if (smartResultHasStaleRelativeSignal(result)) return false;
+	if (isVideoSmartSection(section)) {
+		// 발행일 없는 영상은 현재 연도 신호가 있어야만 허용
+		return smartResultHasYearSignal(result, currentYear) && !smartResultHasOlderYearSignal(result, currentYear);
+	}
 	if (isKoreanPersonUpdatesSection(section, isKo)) {
 		return !smartResultTitleHasOlderYearSignal(result, currentYear);
 	}
@@ -3083,6 +3084,7 @@ const getSmartResultFreshnessRank = (result: SmartResult, section: SmartSectionP
 	if (publishedTime !== null) {
 		const publishedYear = new Date(publishedTime).getFullYear();
 		if (publishedYear >= currentYear) return 3;
+		if (publishedYear >= currentYear - 1) return 1;
 		return -8;
 	}
 	if (
@@ -3462,12 +3464,14 @@ const searchSmartSection = async (section: SmartSectionPlan, isKo: boolean) => {
 		(isArticleSmartSection(section) && !useFreshSearchMode)
 	)
 		? null
-		: "month";
+		: isKo ? "year" : "month";
 	const retryTimeRange = (isKeyInfoSmartSection(section) || isNutritionSmartSection(section))
 		? null
 		: useFreshSearchMode
 			? null
-			: primaryTimeRange;
+			: isKo
+				? null
+				: primaryTimeRange;
 	const tavilyData = preferredDomains.length > 0
 		? await fetchSmartTavily(section, mode, isKo, preferredDomains, primaryTimeRange)
 		: await fetchSmartTavily(section, mode, isKo, [], primaryTimeRange);
