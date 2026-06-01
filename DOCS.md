@@ -2,7 +2,7 @@
 
 > Last updated: 2026-05-29
 > Single source of truth for architecture. Change log → [CHANGELOG.md](./CHANGELOG.md).
-> 30-minute onboarding overview (auth flow, store map, fetch pipeline) → [ARCHITECTURE.md](./ARCHITECTURE.md).
+> Architecture diagrams (auth flow, onboarding, store map, fetch pipeline) inlined in §4–§6. Original standalone file archived at [archive/ARCHITECTURE.md](./archive/ARCHITECTURE.md).
 
 ---
 
@@ -25,6 +25,7 @@
 15. [Operations Checklist](#15-operations-checklist)
 16. [Known Incomplete Items](#16-known-incomplete-items)
 17. [Milestone 4 Compliance Gaps](#17-milestone-4-compliance-gaps)
+18. [Quick Reference](#18-quick-reference)
 
 ---
 
@@ -42,6 +43,29 @@
 1. API failures fall back to mock data — no UX breakage
 2. User data isolation via Supabase Row-Level Security
 3. Secret keys managed exclusively in Supabase Secrets (never in client code)
+
+### 1.1 System Architecture
+
+```text
+Browser
+│
+├── React SPA (Vite + TypeScript)
+│   ├── Zustand stores  ←─ single source of truth per domain
+│   ├── React.lazy widgets  ←─ code-split, loaded on demand
+│   └── Service layer  ←─ calls Edge Functions, formats AI output
+│
+├── Supabase (BaaS)
+│   ├── Auth  ←─ Google OAuth
+│   ├── Postgres + RLS  ←─ user data (8 tables)
+│   └── Edge Functions (Deno)  ←─ secret-holding API proxy (8 functions)
+│
+└── External APIs (all behind Edge Functions, secrets never in browser)
+    ├── Google Calendar / Tasks / Fit  (OAuth-gated)
+    ├── OpenWeatherMap
+    ├── TwelveData / Yahoo / Stooq  (stocks)
+    ├── Tavily Search
+    └── Groq LLM
+```
 
 ---
 
@@ -173,6 +197,51 @@ supabase/
 
 ## 4) App Initialization Flow
 
+### Auth Flow Overview
+
+```mermaid
+flowchart TD
+    A([App mounts]) --> B[supabase.auth.getSession]
+    B --> C{Session exists?}
+
+    C -- No --> D[setAuthBootstrapDone = true]
+    D --> E[Show LoginScreen]
+    E --> F[User clicks Google Login]
+    F --> G[supabase.auth.signInWithOAuth\ngoogle scopes: calendar, tasks, fitness]
+    G --> H[OAuth redirect → Supabase callback]
+    H --> I[onAuthStateChange fires\nSIGNED_IN event]
+
+    C -- Yes --> I
+
+    I --> J[handleAuthChange: set isLoggedIn=true\nuser, providerToken ← session]
+    J --> K[hydrateFromDB\nSettingsStore / WidgetStore / TodoStore\nDiaryStore / BriefingHistoryStore]
+    K --> L[fetchAll with useExistingCache:true]
+    L --> M{showOnboarding?}
+
+    M -- Yes\nfirst login / no persona --> N[OnboardingModal\nStep 0: Select interests\nStep 1: Grant Calendar + Fit perms]
+    N --> O[finishOB → sync to user_settings]
+    O --> P[DashboardLayout]
+
+    M -- No --> P
+
+    P --> Q{Tab re-visible\nor 5 min poll}
+    Q --> R[fetchAll: re-check 6h cache TTL\nre-fetch expired data only]
+    R --> P
+
+    style E fill:#334155,color:#fff
+    style P fill:#1e3a5f,color:#fff
+    style N fill:#44337a,color:#fff
+```
+
+**Key rules:**
+
+| Condition | Behaviour |
+|-----------|-----------|
+| `supabase` is `null` (no env vars) | Offline mode — `authBootstrapDone` set immediately from `mb_login` localStorage |
+| React StrictMode double-mount | `initPhaseRef` guard ensures `fetchAll` fires exactly once per login phase |
+| Tab re-focus / 5-min interval | `fetchAll({ useExistingCache: true })` — 6h TTL checked in `readApiCache`; expired items re-fetched, fresh items served from cache |
+| Logout | `isLoggedIn=false`, all Zustand state cleared, `mb_login=false` in localStorage |
+
 ### Phase 1 — Auth Bootstrap
 
 ```
@@ -213,11 +282,81 @@ Fallback: if `user.id` is delayed, runs `fetchAll()` solo after 1200ms timeout.
 | Midnight | Auto-diary synthesis | `useMidnightTrigger` — runs once on login |
 | 1-hour auto | AI Briefing | `setInterval(60min)` in `BriefingWidget` |
 
+### Onboarding Flow
+
+```mermaid
+stateDiagram-v2
+    [*] --> CheckPersona : App loads, user logged in
+
+    CheckPersona --> ShowOnboarding : persona is null / empty
+    CheckPersona --> Dashboard : persona already set
+
+    ShowOnboarding --> Step0 : obStep = 0
+    Step0 --> Step1 : Select interest categories\n(toggleCat, stored in selCats[])
+    Step1 --> Finish : Toggle Calendar / Fit permissions\n(perms.cal, perms.fit)
+
+    Finish --> Dashboard : finishOB()\n→ persona saved to user_settings\n→ interest IDs saved as fixedInterestIds\n→ widget visibility updated if perms granted
+
+    Dashboard --> [*]
+```
+
+`useOnboardingStore.finishOB()` → calls `useSettingsStore.syncSettings({ persona, fixed_interests, onboarding_perms })` → upserts to `public.user_settings`.
+
 ---
 
 ## 5) State Management
 
 Ten Zustand stores. All use localStorage for persistence unless noted.
+
+### Store Dependency Map
+
+```mermaid
+graph TD
+    AUTH[useAuthStore]
+    SETTINGS[useSettingsStore]
+    DATA[useDataStore]
+    WIDGET[useWidgetStore]
+    TODO[useTodoStore]
+    DIARY[useDiaryStore]
+    ONBOARD[useOnboardingStore]
+    GCAL[useGoogleCalendarStore]
+    BRIEFING[useBriefingHistoryStore]
+    QUICK[useQuickLinksStore]
+
+    AUTH -->|resetInterests| SETTINGS
+    AUTH -->|reset| ONBOARD
+
+    DATA -->|stockSymbols, manualCity| SETTINGS
+    DATA -->|user.id for cache key| AUTH
+
+    WIDGET -->|user.id for DB sync| AUTH
+
+    ONBOARD -->|syncSettings persona/interests| SETTINGS
+
+    DIARY -->|diaryLanguage| SETTINGS
+
+    TODO -->|calendar events → todos| GCAL
+
+    GCAL -->|providerToken| AUTH
+
+    BRIEFING -.->|no store deps| BRIEFING
+    QUICK -.->|no store deps| QUICK
+```
+
+**Store responsibilities:**
+
+| Store | Owns | Persists to |
+|-------|------|-------------|
+| `useAuthStore` | Login state, `user`, `providerToken` | `mb_login` (localStorage) + Supabase Auth |
+| `useSettingsStore` | Theme, tone, clock, stocks list, pin mode | `mb_theme` etc. (localStorage) + `user_settings` (Supabase) |
+| `useDataStore` | Weather, stocks, news, trends, health, briefing | `mb_cache_*` (localStorage) + `api_cache` (Supabase) |
+| `useWidgetStore` | Dashboard layout, widget visibility, font size | `mb_layouts` (localStorage) + `widget_layouts` (Supabase) |
+| `useTodoStore` | Today's todo list (merged from Google Tasks) | `mb_todos` (localStorage) |
+| `useDiaryStore` | Diary entries, Q&A answers, PIN management | `mb_diary_entries` (localStorage) + `diaries` / `user_qa` (Supabase) |
+| `useOnboardingStore` | Onboarding wizard state, selected categories | `user_settings` (Supabase) via `useSettingsStore` |
+| `useGoogleCalendarStore` | Google Calendar events + Tasks | `mb_calendar_events`, `mb_google_tasks` (localStorage) |
+| `useBriefingHistoryStore` | Briefing snapshot history (30 days) | `mb_briefing_history` (localStorage) |
+| `useQuickLinksStore` | User-saved quick-access URLs | `mb_quick_links` (localStorage) |
 
 ### 5.1 useAuthStore
 
@@ -434,6 +573,29 @@ Legacy `[MB_META]...[/MB_META]` task metadata is stripped on read; no longer wri
 4. Cache miss → call Edge Function (25s timeout)
 5. Success → normalize + writeApiCache + update state + apiStatus="ok"
 6. Failure → record error + mock fallback + apiStatus="error"
+```
+
+### Data Fetch Pipeline
+
+```mermaid
+sequenceDiagram
+    participant App
+    participant fetchAll as useDataStore.fetchAll
+    participant Cache as readApiCache (6h TTL)
+    participant EF as Supabase Edge Functions
+    participant DB as Supabase api_cache table
+
+    App->>fetchAll: fetchAll({ useExistingCache: true })
+    fetchAll->>Cache: check mb_cache_weather, mb_cache_stocks, ...
+    alt cache fresh (< 6h)
+        Cache-->>fetchAll: return cached data
+    else cache expired
+        fetchAll->>EF: POST /weather, /stocks, /tavily, /groq, /fitness, /events
+        EF-->>fetchAll: response JSON
+        fetchAll->>Cache: save mb_cache_*, mb_cache_*_at
+        fetchAll->>DB: upsert api_cache row (user_id, data, fetched_at)
+    end
+    fetchAll-->>App: state updated → widgets re-render
 ```
 
 ### Auto-refresh triggers
@@ -669,6 +831,23 @@ Legacy `[MB_META]...[/MB_META]` task metadata is stripped on read; no longer wri
 | `fitness` 🔒 | `/functions/v1/fitness` | JWT | `{token}` | `{steps, sleep, calories, heartRate}` |
 | `smart-widget` 🔒 | `/functions/v1/smart-widget` | JWT | `{keyword, persona, token?, ...context}` | Personalized content structure |
 | `kakao-places` | `/functions/v1/kakao-places` | — | `{query, lat, lon}` | Place search results (currently unused) |
+
+### Calling convention from the browser
+
+All Edge Function calls go through `useDataStore` → `src/services/aiService.ts`:
+
+```ts
+const res = await fetch(`${supabaseUrl}/functions/v1/<name>`, {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json",
+    "Authorization": `Bearer ${supabaseAnonKey}`,
+  },
+  body: JSON.stringify(payload),
+});
+```
+
+The `Authorization: Bearer <anon-key>` header is required by Supabase; the anon key is public and scoped only to what RLS policies permit.
 
 **JWT auth:** Client sends `supabase.auth.getSession()` → `session.access_token` in Authorization header. Server validates with `supabase.auth.getUser(jwt)` → 401 on failure.
 
@@ -1029,6 +1208,21 @@ Updated 2026-05-29. All five Milestone 4 documentation deliverables complete; Sp
 1. **Stocks + groq Edge Function manual deploys** — Local code is ready; Supabase Dashboard upload pending so the deployed app picks up the universal-ticker fallback (stocks) and `charset=utf-8` header (groq).
 2. **Cross-verification** — Each completed feature verified by a team member who did not implement it; any bugs found should be filed in GitHub Issues.
 3. **Team sign-offs** — Each member signs `Milestone/MILESTONE4_PROGRESS.md`; file copied to Brightspace.
+
+---
+
+## 18) Quick Reference
+
+| Question | Answer |
+|----------|--------|
+| Where is the Google login button? | `src/components/layout/LoginScreen.tsx` |
+| Where is the auth session loaded? | `App.tsx` → `supabase.auth.getSession()` + `onAuthStateChange` |
+| Where is the daily data fetched? | `useDataStore.fetchAll()` called from `App.tsx` |
+| Where are API secrets? | `.env` (server-side only) + Supabase Edge Function env |
+| Where is the 6-hour cache TTL? | `useDataStore.readApiCache()` — checks `mb_cache_*_at` in localStorage |
+| Where is the midnight diary generated? | `useMidnightTrigger.ts` → `diaryGenerationService.ts` → `aiService.generateDiary` |
+| Where does onboarding save data? | `useOnboardingStore.finishOB()` → `useSettingsStore.syncSettings()` → `user_settings` |
+| Where is `provider_token` stored? | Memory only (`useAuthStore.providerToken`); stripped from localStorage by `secureStorage` adapter in `src/lib/supabase.ts` |
 
 ---
 
