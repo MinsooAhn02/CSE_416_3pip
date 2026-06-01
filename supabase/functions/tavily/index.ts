@@ -26,6 +26,7 @@ serve(async (req) => {
 			max_results: maxResults,
 			location = null,
 			include_domains = [],
+			exclude_domains = [],
 			search_topic = null,
 			time_range = null,
 		} = await req.json();
@@ -48,6 +49,9 @@ serve(async (req) => {
 		};
 		if (Array.isArray(include_domains) && include_domains.length > 0) {
 			tavilyBody.include_domains = include_domains;
+		}
+		if (Array.isArray(exclude_domains) && exclude_domains.length > 0) {
+			tavilyBody.exclude_domains = exclude_domains;
 		}
 		if (typeof time_range === "string" && time_range.trim()) {
 			tavilyBody.time_range = time_range.trim();

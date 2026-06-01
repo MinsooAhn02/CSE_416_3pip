@@ -1450,7 +1450,6 @@ export async function generateBriefing({ tone, length, context }: { tone: string
 const _HANGUL = /[가-힣]/;
 const _LATIN  = /[a-zA-Z]/;
 
-// 문제 2 fix: KO 검색 시 도메인 화이트리스트로 2단계 재시도 + fallback 임계값 1로 인하
 const KO_NEWS_DOMAINS = [
 	"news.naver.com",
 	"yna.co.kr",
@@ -1458,6 +1457,41 @@ const KO_NEWS_DOMAINS = [
 	"joins.com",
 	"hani.co.kr",
 	"news1.kr",
+	"newsis.com",
+	"ytn.co.kr",
+	"mk.co.kr",
+	"hankyung.com",
+	"mt.co.kr",
+	"heraldcorp.com",
+	"etnews.com",
+	"zdnet.co.kr",
+	"kbs.co.kr",
+	"mbc.co.kr",
+	"sbs.co.kr",
+	"jtbc.co.kr",
+	"yonhapnews.co.kr",
+];
+
+// 한국어 기사 검색 시 제외할 비뉴스 도메인 (naver.com 제외 - news.naver.com 차단 방지)
+const KO_NEWS_EXCLUDE_DOMAINS = [
+	"namu.wiki",
+	"wikipedia.org",
+	"blog.naver.com",
+	"m.blog.naver.com",
+	"post.naver.com",
+	"kin.naver.com",
+	"cafe.naver.com",
+	"tistory.com",
+	"brunch.co.kr",
+	"velog.io",
+	"dcinside.com",
+	"fmkorea.com",
+	"ruliweb.com",
+	"clien.net",
+	"ppomppu.co.kr",
+	"reddit.com",
+	"youtube.com",
+	"youtu.be",
 ];
 
 const KO_INFO_DOMAINS = [
@@ -1486,6 +1520,14 @@ const EN_INFO_DOMAINS = [
 ];
 
 const uniqueSmartDomains = (domains: string[]): string[] => Array.from(new Set(domains));
+
+const KO_PLACE_DOMAINS = uniqueSmartDomains([
+	"place.naver.com",
+	"m.place.naver.com",
+	"map.naver.com",
+	"map.kakao.com",
+	"place.map.kakao.com",
+]);
 
 const KO_VIDEO_DOMAINS = uniqueSmartDomains([
 	"youtube.com",
@@ -1632,6 +1674,9 @@ const getSmartSearchDomains = (section: SmartSectionPlan, isKo: boolean): string
 	if (isKeyInfoSmartSection(section)) {
 		return isKo ? KO_KEY_INFO_DOMAINS : EN_KEY_INFO_DOMAINS;
 	}
+	if (section?.type === "local_spots") {
+		return isKo ? KO_PLACE_DOMAINS : [];
+	}
 	if (isArticleSmartSection(section)) {
 		return isKo ? KO_ARTICLE_DOMAINS : EN_ARTICLE_DOMAINS;
 	}
@@ -1688,6 +1733,7 @@ const smartResultHasStaleRelativeSignal = (result: ArticleItem): boolean => {
 };
 
 const smartResultIsFreshEnough = (result: ArticleItem, section: SmartSectionPlan, isKo = false): boolean => {
+	if (isKo) return true;
 	const currentYear = getSmartCurrentYear();
 	const publishedYear = getSmartPublishedYear(result);
 	if (isKeyInfoSmartSection(section)) return true;
@@ -1699,11 +1745,7 @@ const smartResultIsFreshEnough = (result: ArticleItem, section: SmartSectionPlan
 	if (publishedYear !== null) return publishedYear >= currentYear - 1;
 	if (smartResultHasStaleRelativeSignal(result)) return false;
 	if (isVideoSmartSection(section)) {
-		// 발행일 없는 영상은 현재 연도 신호가 있어야만 허용
 		return smartResultHasYearSignal(result, currentYear) && !smartResultHasOlderYearSignal(result, currentYear);
-	}
-	if (isKoreanPersonUpdatesSection(section, isKo)) {
-		return !smartResultTitleHasOlderYearSignal(result, currentYear);
 	}
 	if (smartResultHasYearSignal(result, currentYear)) return true;
 	return !smartResultHasOlderYearSignal(result, currentYear);
@@ -1738,6 +1780,15 @@ const isSmartResultFromDomains = (result: SmartResult, domains: string[] = []) =
 		? domains.some((domain) => isSmartDomainMatch(hostname, domain))
 		: false;
 };
+
+const BLOCKED_SMART_URL_PATTERNS = [
+	/tistory\.com\/tag\//i,
+	/\.tistory\.com\/tag\//i,
+	/facebook\.com/i,
+];
+
+const isBlockedSmartUrl = (url: string): boolean =>
+	BLOCKED_SMART_URL_PATTERNS.some((pattern) => pattern.test(url));
 
 const isPreferredKoreanSource = (result: SmartResult) => {
 	const hostname = getSmartHostname(result?.url ?? "");
@@ -1896,13 +1947,13 @@ const SMART_CATEGORY_CONFIGS = {
 			},
 			{
 				type: "local_spots",
-				title: { ko: "지역 지점/매장", en: "Local Spots" },
+				title: { ko: "지점/매장 위치", en: "Store Locations" },
 				query: {
-					ko: "{keyword} 지역 매장 지점 맛집 추천",
-					en: "{keyword} local branches locations restaurants",
+					ko: "{keyword} 한국 전국 매장 지점 위치 주소 공식",
+					en: "{keyword} store locations branches official",
 				},
 				searchMode: "search",
-				maxItems: 2,
+				maxItems: 4,
 			},
 		],
 	},
@@ -2768,6 +2819,7 @@ const buildSmartSectionPlan = (keyword: string, category: string, isKo: boolean)
 	const sections = config.sections
 		.filter((section) => {
 			const title = `${section.title?.ko ?? ""} ${section.title?.en ?? ""}`;
+			if (section.type === "local_spots" && !isKo) return false;
 			return (
 				!section.linkOnly &&
 				!OMIT_SMART_SECTION_TYPES.has(section.type) &&
@@ -3281,6 +3333,10 @@ const formatSmartItems = (results: SmartResult[], isKo: boolean, section: SmartS
 	const titleKeywordMatches = eligibleRanked.filter((r) =>
 		smartResultTitleMatchesSectionKeyword(r, section),
 	);
+	if (isKo && isArticleSmartSection(section)) {
+		console.log(`[smart-fmt] ranked=${ranked.length} eligible=${eligibleRanked.length} titleMatches=${titleKeywordMatches.length}`);
+		console.log(`[smart-fmt] eligibleTitles=`, eligibleRanked.map(r => r?.title?.slice(0, 50)));
+	}
 	const requiredKeywordMatches = eligibleRanked.filter((r) =>
 		smartResultMatchesRequiredSectionKeyword(r, section, isKo),
 	);
@@ -3410,6 +3466,7 @@ const fetchSmartTavily = (
 	isKo: boolean,
 	includeDomains: string[] = [],
 	timeRange: string | null | undefined = "month",
+	excludeDomains: string[] = [],
 ) => {
 	const payload: Record<string, unknown> = {
 		query: buildLatestSmartTavilyQuery(
@@ -3423,6 +3480,7 @@ const fetchSmartTavily = (
 			? Math.max((section.maxItems ?? 2) + 10, 12)
 			: Math.max((section.maxItems ?? 2) + 4, 6),
 		include_domains: includeDomains,
+		exclude_domains: excludeDomains,
 	};
 	if (timeRange) payload.time_range = timeRange;
 	return invokeFunction("tavily", payload);
@@ -3445,13 +3503,14 @@ const buildNonLatestArticleQuery = (section: SmartSectionPlan, isKo: boolean) =>
 		: `${keyword} news coverage`;
 };
 
-const fetchNonLatestArticleTavily = (section: SmartSectionPlan, isKo: boolean, includeDomains: string[] = []) =>
+const fetchNonLatestArticleTavily = (section: SmartSectionPlan, isKo: boolean, includeDomains: string[] = [], excludeDomains: string[] = []) =>
 	invokeFunction("tavily", {
 		query: buildNonLatestArticleQuery(section, isKo),
 		mode: "news",
 		search_topic: "news",
 		max_results: Math.max((section.maxItems ?? 2) + 10, 12),
 		include_domains: includeDomains,
+		exclude_domains: excludeDomains,
 	});
 
 const searchSmartSection = async (section: SmartSectionPlan, isKo: boolean) => {
@@ -3472,11 +3531,21 @@ const searchSmartSection = async (section: SmartSectionPlan, isKo: boolean) => {
 			: isKo
 				? null
 				: primaryTimeRange;
-	const tavilyData = preferredDomains.length > 0
-		? await fetchSmartTavily(section, mode, isKo, preferredDomains, primaryTimeRange)
-		: await fetchSmartTavily(section, mode, isKo, [], primaryTimeRange);
+	// 한국어 기사 섹션: include 제한 없이 전체 검색, 비뉴스 도메인만 제외
+	const isKoArticle = isKo && isArticleSmartSection(section) && !useFreshSearchMode;
+	const includeDomains = isKoArticle ? [] : preferredDomains;
+	const excludeDomains = isKoArticle ? KO_NEWS_EXCLUDE_DOMAINS : [];
+	const tavilyData = await fetchSmartTavily(section, mode, isKo, includeDomains, primaryTimeRange, excludeDomains);
 
-	let rawResults = (tavilyData?.results as SmartResult[] | undefined) ?? [];
+	let rawResults = ((tavilyData?.results as SmartResult[] | undefined) ?? []).filter((r) => !isBlockedSmartUrl(r?.url ?? ""));
+
+	if (isKoArticle) {
+		console.log(`[smart-ko-article] section=${section.type} keyword="${section.keyword}"`);
+		console.log(`[smart-ko-article] tavilyData null?`, tavilyData === null);
+		console.log(`[smart-ko-article] rawResults count=`, rawResults.length);
+		console.log(`[smart-ko-article] rawResults titles=`, rawResults.map(r => r?.title?.slice(0, 50)));
+	}
+
 	const titleMatchCount = rawResults.filter((r) =>
 		(smartSectionRequiresTitleKeyword(section)
 			? smartResultTitleMatchesSectionKeyword(r, section)
@@ -3484,14 +3553,16 @@ const searchSmartSection = async (section: SmartSectionPlan, isKo: boolean) => {
 		smartResultIsEligibleForSection(r, section, isKo),
 	).length;
 
+	if (isKoArticle) {
+		console.log(`[smart-ko-article] titleMatchCount=`, titleMatchCount);
+	}
+
 	if (
 		titleMatchCount < (section.maxItems ?? 2) &&
 		retryTimeRange !== primaryTimeRange
 	) {
-		const retry = preferredDomains.length > 0
-			? await fetchSmartTavily(section, mode, isKo, preferredDomains, retryTimeRange)
-			: await fetchSmartTavily(section, mode, isKo, [], retryTimeRange);
-		const retryResults = (retry?.results as SmartResult[] | undefined) ?? [];
+		const retry = await fetchSmartTavily(section, mode, isKo, includeDomains, retryTimeRange, excludeDomains);
+		const retryResults = ((retry?.results as SmartResult[] | undefined) ?? []).filter((r) => !isBlockedSmartUrl(r?.url ?? ""));
 		if (retryResults.length > 0) {
 			rawResults = dedupeByUrl([...rawResults, ...retryResults]);
 		}
@@ -3499,10 +3570,8 @@ const searchSmartSection = async (section: SmartSectionPlan, isKo: boolean) => {
 
 	let items = formatSmartItems(rawResults, isKo, section);
 	if ((isVideoSmartSection(section) || isBlogSmartSection(section)) && items.length === 0) {
-		const fallback = preferredDomains.length > 0
-			? await fetchSmartTavily(section, mode, isKo, preferredDomains, null)
-			: await fetchSmartTavily(section, mode, isKo, [], null);
-		const fallbackResults = (fallback?.results as SmartResult[] | undefined) ?? [];
+		const fallback = await fetchSmartTavily(section, mode, isKo, includeDomains, null, excludeDomains);
+		const fallbackResults = ((fallback?.results as SmartResult[] | undefined) ?? []).filter((r) => !isBlockedSmartUrl(r?.url ?? ""));
 		if (fallbackResults.length > 0) {
 			rawResults = dedupeByUrl([...rawResults, ...fallbackResults]);
 			items = formatSmartItems(rawResults, isKo, section);
@@ -3512,9 +3581,10 @@ const searchSmartSection = async (section: SmartSectionPlan, isKo: boolean) => {
 		const fallback = await fetchNonLatestArticleTavily(
 			section,
 			isKo,
-			preferredDomains,
+			includeDomains,
+			excludeDomains,
 		);
-		const fallbackResults2 = (fallback?.results as SmartResult[] | undefined) ?? [];
+		const fallbackResults2 = ((fallback?.results as SmartResult[] | undefined) ?? []).filter((r) => !isBlockedSmartUrl(r?.url ?? ""));
 		if (fallbackResults2.length > 0) {
 			rawResults = dedupeByUrl([...rawResults, ...fallbackResults2]);
 			items = formatSmartItems(rawResults, isKo, section);
