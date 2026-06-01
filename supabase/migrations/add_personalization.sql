@@ -13,7 +13,7 @@ create table if not exists public.diaries (
   answers jsonb default '[]',
   updated_at timestamptz default now(),
   unique(user_id, date)
-);
+); 
 
 -- Data API grants (Supabase는 2026-05-30부터 public 테이블에 자동 GRANT를 하지 않음)
 grant select on public.diaries to anon;
