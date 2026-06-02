@@ -420,7 +420,21 @@
       "precipitation": "Precipitation",
       "air_quality": "Air Quality",
       "loading": "Loading weather...",
-      "no_data": "No weather data available."
+      "no_data": "No weather data available.",
+      "change_city": "Change",
+      "default_location": "Default location",
+      "set_city": "Set city",
+      "city_placeholder": "e.g. Songdo, Incheon",
+      "set": "Set",
+      "auto_detect": "Auto",
+      "aqi": {
+        "good": "Good",
+        "fair": "Fair",
+        "moderate": "Moderate",
+        "poor": "Poor",
+        "very_poor": "Very Poor",
+        "unknown": "N/A"
+      }
     },
     "stocks": {
       "title": "Stocks/Exchange",

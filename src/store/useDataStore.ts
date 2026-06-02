@@ -863,12 +863,14 @@ const normalizeGroqWeather = (payload: unknown): WeatherData | null => {
 	const temp = Number(p.temp);
 	const humidity = Number(p.humidity);
 	const precipitation = Number(p.precipitation);
+	const airQualityIndex = typeof p.airQualityIndex === "number" ? p.airQualityIndex : undefined;
 	return {
 		temp: Number.isFinite(temp) ? temp : 20,
 		city: String(p.city || "Seoul"),
 		condition: String(p.condition || p.description || "N/A"),
 		precipitation: Number.isFinite(precipitation) ? precipitation : 0,
-		airQuality: String(p.airQuality || "N/A"),
+		airQuality: p.airQuality ? String(p.airQuality) : undefined,
+		airQualityIndex,
 		humidity: Number.isFinite(humidity) ? humidity : 50,
 	};
 };
@@ -1098,6 +1100,7 @@ export interface WeatherData {
 	condition: string;
 	precipitation: number;
 	airQuality?: string;
+	airQualityIndex?: number;
 	humidity?: number;
 	icon?: string;
 }
@@ -1356,8 +1359,8 @@ export const useDataStore = create<DataState>()((set, get) => ({
 			errors: { ...s.errors, weather: null },
 		}));
 		try {
-			// OpenWeatherMap Edge Function 호출
-			const edge = await invokeEdgeDetailed("weather", { lat: rLat, lon: rLon });
+			// OpenWeatherMap Edge Function 호출 (lang 전달 → 현지화 condition/city)
+			const edge = await invokeEdgeDetailed("weather", { lat: rLat, lon: rLon, lang: i18n.language });
 			const edgeData = edge?.data as Record<string, unknown> | null;
 
 			if (edge?.ok && edgeData && !edgeData.error) {
@@ -1903,12 +1906,20 @@ export const useDataStore = create<DataState>()((set, get) => ({
 				set((s) => ({ fetchedLanguage: { ...s.fetchedLanguage, news: lang } }));
 
 				// trends 상태가 비어 있으면 local 확장 결과(12건)에서 파생 — 별도 Tavily 호출 절약
+				// 뉴스와 중복되는 URL은 제외하여 브리핑에서 두 섹션이 동일해지지 않도록 함
 				if ((get().trends ?? []).length === 0 && localExtendedResults.length > 0) {
 					try {
+						const newsUrls = new Set(
+							(get().newsResults ?? []).map((a) => (a as ArticleItem).url).filter(Boolean),
+						);
+						const uniqueExtended = localExtendedResults.filter(
+							(a) => !newsUrls.has((a as ArticleItem).url),
+						);
+						const sourceForTrends = uniqueExtended.length >= 3 ? uniqueExtended : localExtendedResults;
 						const translatedExtended =
 							lang === "ko"
-								? await translateArticlesToKorean(localExtendedResults)
-								: localExtendedResults;
+								? await translateArticlesToKorean(sourceForTrends)
+								: sourceForTrends;
 						const derivedTrends = await buildLocalizedTrendTitles(
 							translatedExtended,
 							[],

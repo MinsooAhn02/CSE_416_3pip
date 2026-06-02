@@ -113,6 +113,7 @@ const App = () => {
 		const runFullInit = async () => {
 			// 이전 세션의 stale 타임스탬프 제거 (로그인 시 "9000분 전" 방지)
 			localStorage.removeItem("mb_last_fetched_at");
+			localStorage.removeItem("mb_last_access_time"); // 로그인 시 항상 fresh fetch
 			useDataStore.setState({ lastFetchedAt: {} });
 			try {
 				await Promise.all([
@@ -129,12 +130,12 @@ const App = () => {
 				);
 			}
 			setHydrateComplete(true);
-			// 캐시 우선: 6시간 이내 캐시 있으면 API 호출 없이 즉시 표시
-			await fetchAll({ useExistingCache: true });
+			// 로그인 시 access time 초기화 → isCacheStale()=true → 강제 새로고침
+			await fetchAll({ useExistingCache: false });
 		};
 
 		const runFallbackInit = async () => {
-			await fetchAll({ useExistingCache: true });
+			await fetchAll({ useExistingCache: false });
 		};
 
 		if (user?.id) {

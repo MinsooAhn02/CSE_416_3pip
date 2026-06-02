@@ -1256,6 +1256,15 @@ export async function generateDetailedBriefing({ tone, length, context }: { tone
 				? item
 				: `${item.title}${item.source ? ` — ${item.source}` : ""}${item.summary ? `: ${item.summary}` : ""}`;
 
+		// 스마트 위젯 개별 subBlock (키워드별 분리)
+		const smartSubBlocks = smartLines.length > 0
+			? smartLines.map((sl) => ({
+				id: `latest_smart_${sl.keyword}`,
+				title: sl.keyword,
+				lines: [sl],
+			  }))
+			: [{ id: "latest_smart", title: bs("smart_keywords", lang), lines: [smartFallback] }];
+
 		sections.push({
 			id: "latest_info",
 			title: bs("latest_info", lang),
@@ -1265,11 +1274,7 @@ export async function generateDetailedBriefing({ tone, length, context }: { tone
 				...trendsLines.map(toPlainLine),
 			],
 			subBlocks: [
-				{
-					id: "latest_smart",
-					title: bs("smart_keywords", lang),
-					lines: smartLines.length > 0 ? smartLines : [smartFallback],
-				},
+				...smartSubBlocks,
 				{
 					id: "latest_news",
 					title: bs("top_3_news", lang),
@@ -3491,6 +3496,125 @@ const fetchNonLatestArticleTavily = (section: SmartSectionPlan, isKo: boolean, i
 		exclude_domains: excludeDomains,
 	});
 
+// 한 섹션의 primary Tavily 파라미터를 반환 (배치 호출 시 재사용)
+const buildSectionParams = (section: SmartSectionPlan, isKo: boolean) => {
+	const useFreshSearchMode = isStreetwearFreshSearchSection(section);
+	const isKoArticle = isKo && isArticleSmartSection(section) && !useFreshSearchMode;
+	const mode = isKoArticle ? "search" : (isArticleSmartSection(section) && !useFreshSearchMode ? "news" : "search");
+	const includeDomains = isKoArticle ? KO_NEWS_DOMAINS : getSmartSearchDomains(section, isKo);
+	const excludeDomains: string[] = [];
+	const primaryTimeRange = (
+		isKeyInfoSmartSection(section) ||
+		isNutritionSmartSection(section) ||
+		(isArticleSmartSection(section) && !useFreshSearchMode)
+	)
+		? null
+		: isKo ? "year" : "month";
+	const retryTimeRange = (isKeyInfoSmartSection(section) || isNutritionSmartSection(section))
+		? null
+		: useFreshSearchMode ? null : isKo ? null : primaryTimeRange;
+
+	const query = buildLatestSmartTavilyQuery(buildSmartTavilyQuery(section, isKo), isKo, section);
+	const max_results = smartSectionRequiresTitleKeyword(section)
+		? Math.max((section.maxItems ?? 2) + 10, 12)
+		: Math.max((section.maxItems ?? 2) + 4, 6);
+
+	return {
+		useFreshSearchMode, isKoArticle, mode, includeDomains, excludeDomains,
+		primaryTimeRange, retryTimeRange, query, max_results,
+	};
+};
+
+// 모든 섹션의 primary 쿼리를 한 번의 배치 요청으로 처리
+const searchSmartSectionsBatched = async (sections: SmartSectionPlan[], isKo: boolean) => {
+	const params = sections.map((s) => buildSectionParams(s, isKo));
+
+	// 1단계: primary 배치
+	const primaryQueries = params.map(({ query, mode, max_results, includeDomains, excludeDomains, primaryTimeRange }) => {
+		const q: Record<string, unknown> = {
+			query, mode, max_results,
+			search_topic: mode === "news" ? "news" : "general",
+			include_domains: includeDomains,
+			exclude_domains: excludeDomains,
+		};
+		if (primaryTimeRange) q.time_range = primaryTimeRange;
+		return q;
+	});
+
+	const batchData = await invokeFunction("tavily", { queries: primaryQueries });
+	const primaryBatch = Array.isArray(batchData?.batch) ? batchData.batch as Record<string, unknown>[] : null;
+
+	// 2단계: 결과 처리 + retry가 필요한 섹션 수집
+	const rawResultsPerSection: SmartResult[][] = sections.map((section, i) => {
+		const batchItem = primaryBatch?.[i];
+		return ((batchItem?.results as SmartResult[] | undefined) ?? []).filter((r) => !isBlockedSmartUrl(r?.url ?? ""));
+	});
+
+	const retryIndices: number[] = [];
+	sections.forEach((section, i) => {
+		const rawResults = rawResultsPerSection[i];
+		const p = params[i];
+		const titleMatchCount = rawResults.filter((r) =>
+			(smartSectionRequiresTitleKeyword(section)
+				? smartResultTitleMatchesSectionKeyword(r, section)
+				: smartResultMatchesRequiredSectionKeyword(r, section, isKo)) &&
+			smartResultIsEligibleForSection(r, section, isKo),
+		).length;
+		if (titleMatchCount < (section.maxItems ?? 2) && p.retryTimeRange !== p.primaryTimeRange) {
+			retryIndices.push(i);
+		}
+	});
+
+	// 3단계: retry 배치 (필요한 섹션만)
+	if (retryIndices.length > 0) {
+		const retryQueries = retryIndices.map((i) => {
+			const p = params[i];
+			const q: Record<string, unknown> = {
+				query: p.query, mode: p.mode, max_results: p.max_results,
+				search_topic: p.mode === "news" ? "news" : "general",
+				include_domains: p.includeDomains,
+				exclude_domains: p.excludeDomains,
+			};
+			if (p.retryTimeRange) q.time_range = p.retryTimeRange;
+			return q;
+		});
+		const retryBatchData = await invokeFunction("tavily", { queries: retryQueries });
+		const retryBatch = Array.isArray(retryBatchData?.batch) ? retryBatchData.batch as Record<string, unknown>[] : null;
+		retryIndices.forEach((sectionIdx, batchPos) => {
+			const retryResults = ((retryBatch?.[batchPos]?.results as SmartResult[] | undefined) ?? [])
+				.filter((r) => !isBlockedSmartUrl(r?.url ?? ""));
+			if (retryResults.length > 0) {
+				rawResultsPerSection[sectionIdx] = dedupeByUrl([...rawResultsPerSection[sectionIdx], ...retryResults]);
+			}
+		});
+	}
+
+	// 4단계: 섹션별 최종 포맷팅 (fallback은 개별 처리)
+	return Promise.all(sections.map(async (section, i) => {
+		const p = params[i];
+		let rawResults = rawResultsPerSection[i];
+		let items = formatSmartItems(rawResults, isKo, section);
+
+		if ((isVideoSmartSection(section) || isBlogSmartSection(section)) && items.length === 0) {
+			const fallback = await fetchSmartTavily(section, p.mode, isKo, p.includeDomains, null, p.excludeDomains);
+			const fbResults = ((fallback?.results as SmartResult[] | undefined) ?? []).filter((r) => !isBlockedSmartUrl(r?.url ?? ""));
+			if (fbResults.length > 0) {
+				rawResults = dedupeByUrl([...rawResults, ...fbResults]);
+				items = formatSmartItems(rawResults, isKo, section);
+			}
+		}
+		if (isArticleSmartSection(section) && !p.useFreshSearchMode && items.length === 0) {
+			const fallback2 = await fetchNonLatestArticleTavily(section, isKo, p.includeDomains, p.excludeDomains);
+			const fb2Results = ((fallback2?.results as SmartResult[] | undefined) ?? []).filter((r) => !isBlockedSmartUrl(r?.url ?? ""));
+			if (fb2Results.length > 0) {
+				rawResults = dedupeByUrl([...rawResults, ...fb2Results]);
+				items = formatSmartItems(rawResults, isKo, section);
+			}
+		}
+		return { ...section, items };
+	}));
+};
+
 const searchSmartSection = async (section: SmartSectionPlan, isKo: boolean) => {
 	const useFreshSearchMode = isStreetwearFreshSearchSection(section);
 	// 한국어 기사 섹션: general 웹 크롤 인덱스 + 한국 뉴스 도메인 강제
@@ -4061,9 +4185,8 @@ export async function generateSmartWidgetData(keyword: string, context: SmartWid
 		: await classifySmartKeyword(keyword, isKo);
 	const { category, emoji } = classified;
 	const sectionPlan = buildSmartSectionPlan(keyword, category, isKo);
-	const searchedSections = await Promise.all(
-		sectionPlan.map((section) => searchSmartSection(section, isKo)),
-	);
+	// 배치 모드: 모든 섹션의 primary 쿼리를 한 번의 요청으로 처리 (5~20 호출 → 1~2 호출)
+	const searchedSections = await searchSmartSectionsBatched(sectionPlan, isKo);
 	const synthesizedSections = await synthesizeSmartSections({
 		keyword,
 		category,

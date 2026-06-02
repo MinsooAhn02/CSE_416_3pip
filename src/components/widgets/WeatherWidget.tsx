@@ -114,14 +114,14 @@ const WeatherWidget = () => {
 												className={`text-[10px] flex items-center gap-1 ${isDark ? "text-blue-400 hover:text-blue-300" : "text-blue-500 hover:text-blue-600"}`}
 											>
 												<MapPin size={9} /> {manualWeatherCity.displayName} ·
-												Change
+												{t("widgets.weather.change_city")}
 											</button>
 										) : (
 											<button
 												onClick={() => setShowCityInput(true)}
 												className={`text-[10px] flex items-center gap-1 ${isDark ? "text-yellow-500 hover:text-yellow-400" : "text-amber-500 hover:text-amber-600"}`}
 											>
-												<MapPin size={9} /> Default location — Set city
+												<MapPin size={9} /> {t("widgets.weather.default_location")} — {t("widgets.weather.set_city")}
 											</button>
 										)}
 									</div>
@@ -136,7 +136,7 @@ const WeatherWidget = () => {
 											type="text"
 											value={cityInput}
 											onChange={(e) => setCityInput(e.target.value)}
-											placeholder="e.g. Songdo, Incheon"
+											placeholder={t("widgets.weather.city_placeholder")}
 											className={`text-[11px] px-2 py-0.5 rounded border flex-1 min-w-0 outline-none ${
 												isDark
 													? "bg-gray-700 border-gray-600 text-white placeholder-gray-400"
@@ -147,7 +147,7 @@ const WeatherWidget = () => {
 											type="submit"
 											className="text-[11px] px-2 py-0.5 rounded bg-blue-500 text-white"
 										>
-											Set
+											{t("widgets.weather.set")}
 										</button>
 										{manualWeatherCity?.lat != null && (
 											<button
@@ -155,7 +155,7 @@ const WeatherWidget = () => {
 												onClick={handleClearCity}
 												className={`text-[11px] px-2 py-0.5 rounded ${isDark ? "bg-gray-600 text-gray-300" : "bg-gray-200 text-gray-600"}`}
 											>
-												Auto
+												{t("widgets.weather.auto_detect")}
 											</button>
 										)}
 										<button
@@ -212,7 +212,11 @@ const WeatherWidget = () => {
 						</div>
 						<div className={`p-2 rounded-lg text-center ${secondaryBgCls}`}>
 							<Wind size={14} className="mx-auto mb-1 text-green-400" />
-							<p className="font-medium" style={bodyStyle}>{weather.airQuality}</p>
+							<p className="font-medium" style={bodyStyle}>{
+								weather.airQualityIndex != null
+									? t(`widgets.weather.aqi.${["unknown","good","fair","moderate","poor","very_poor"][weather.airQualityIndex] ?? "unknown"}`)
+									: t("widgets.weather.aqi.unknown")
+							}</p>
 							<p
 								className={isDark ? "text-gray-400" : "text-slate-400"}
 								style={bodyStyle}

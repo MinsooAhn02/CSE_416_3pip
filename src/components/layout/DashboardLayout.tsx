@@ -61,6 +61,23 @@ const DashboardLayout = () => {
 		return () => window.removeEventListener("toggle-widget-panel", handler as EventListener);
 	}, [panelOpen]);
 
+	// 창 폭이 1200px 미만이면 사이드바 자동 닫힘
+	useEffect(() => {
+		const handleResize = () => {
+			if (window.innerWidth < 1200 && panelOpen) {
+				setPanelOpen(false);
+				window.dispatchEvent(
+					new CustomEvent("widget-panel-state", { detail: { open: false } }),
+				);
+			}
+		};
+		window.addEventListener("resize", handleResize);
+		handleResize(); // 초기 체크
+		return () => window.removeEventListener("resize", handleResize);
+	// panelOpen을 의존성에서 제외 — 자동 닫힘만 담당, 무한루프 방지
+	// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, []);
+
 	/* Build ordered list of widget IDs (respects priorityOrder + vis) */
 	const expandedWidgetOrder = useMemo(() => {
 		const list: string[] = [];
@@ -97,12 +114,12 @@ const DashboardLayout = () => {
 			className="mx-auto w-full max-w-[90vw] px-4 pb-6 mt-1"
 			data-widget-overlay-host="true"
 		>
-			{/* ── Main 3-column layout: 30% Brief | 20% Calendar | 50% Widgets ── */}
+			{/* ── Main 3-column layout: 27% Brief | 44% Calendar | 29% Widgets ── */}
 			<div className="flex items-start gap-4">
-				{/* Col A: AI Briefing + Diary — flex 3 (≈30% when panel open, expands when closed) */}
+				{/* Col A: AI Briefing + Diary — flex 2.6 (≈27% when panel open) */}
 				<div
 					className="flex flex-col gap-5 min-h-0"
-					style={{ flex: 3, minWidth: 0, height: DASHBOARD_VIEWPORT_H }}
+					style={{ flex: 2.6, minWidth: 0, height: DASHBOARD_VIEWPORT_H }}
 				>
 					<div className="basis-3/5 min-h-0">
 						<Suspense fallback={<WidgetSkeleton />}>
@@ -116,22 +133,22 @@ const DashboardLayout = () => {
 					</div>
 				</div>
 
-				{/* Col B: Calendar — flex 5 (≈50% when panel open, expands when closed) */}
+				{/* Col B: Calendar — flex 4.3 (≈44% when panel open) */}
 				<div
 					className={`min-w-0 ${pinModalVisible ? "" : "sticky top-[3.75rem]"}`}
-					style={{ flex: 5 }}
+					style={{ flex: 4.3 }}
 				>
 					<Suspense fallback={<WidgetSkeleton />}>
 						<CalendarWidget />
 					</Suspense>
 				</div>
 
-				{/* Col C: Collapsible widget panel — 20%, collapses to 0 */}
+				{/* Col C: Collapsible widget panel — 29%, collapses to 0 */}
 				<div
 					className="overflow-hidden shrink-0"
 					style={{
-						width: panelOpen ? "20%" : 0,
-						maxWidth: panelOpen ? "20%" : 0,
+						width: panelOpen ? "29%" : 0,
+						maxWidth: panelOpen ? "29%" : 0,
 						opacity: panelOpen ? 1 : 0,
 						transition: "width 0.38s cubic-bezier(0.4,0,0.2,1), max-width 0.38s cubic-bezier(0.4,0,0.2,1), opacity 0.38s cubic-bezier(0.4,0,0.2,1)",
 					}}

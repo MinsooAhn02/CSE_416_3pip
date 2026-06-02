@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { forwardRef, useEffect, useMemo, useRef, useState } from "react";
 import { X, Lock, AlertCircle } from "lucide-react";
 import { useTheme } from "../../hooks/useTheme";
 import { useDiaryStore } from "../../store/useDiaryStore";
@@ -17,7 +17,7 @@ interface MaskedPinFieldProps {
 	isDark: boolean;
 }
 
-const MaskedPinField = ({
+const MaskedPinField = forwardRef<HTMLInputElement, MaskedPinFieldProps>(({
 	label,
 	value,
 	onChange,
@@ -25,7 +25,7 @@ const MaskedPinField = ({
 	autoFocus = false,
 	inputCls,
 	isDark,
-}: MaskedPinFieldProps) => (
+}, ref) => (
 	<div>
 		<label
 			className={`text-xs font-medium block mb-2 ${isDark ? "opacity-70" : "text-gray-600"}`}
@@ -36,6 +36,7 @@ const MaskedPinField = ({
 			className={`relative rounded-lg border transition-all focus-within:ring-2 focus-within:ring-blue-500/30 ${inputCls}`}
 		>
 			<input
+				ref={ref}
 				type="text"
 				inputMode="numeric"
 				autoComplete="one-time-code"
@@ -66,7 +67,7 @@ const MaskedPinField = ({
 			{value.length}/4 digits
 		</p>
 	</div>
-);
+));
 
 /**
  * PINModal - Handles diary PIN setup, verification, and change flows.
@@ -168,6 +169,15 @@ const PINModal = ({ onSuccess, onCancel, mode = "verify" }: PINModalProps) => {
 			footer: "Your PIN protects sensitive diary content.",
 		};
 	}, [mode, stage]);
+
+	const confirmPinRef = useRef<HTMLInputElement>(null);
+
+	// PIN 4자리 완성 시 confirm 필드로 자동 포커스
+	useEffect(() => {
+		if (isSetupStage && pin.length === 4) {
+			confirmPinRef.current?.focus();
+		}
+	}, [pin, isSetupStage]);
 
 	const handlePinChange = (value: string) => {
 		setPin(value.replace(/\D/g, "").slice(0, 4));
@@ -315,6 +325,7 @@ const PINModal = ({ onSuccess, onCancel, mode = "verify" }: PINModalProps) => {
 
 					{isSetupStage && (
 						<MaskedPinField
+							ref={confirmPinRef}
 							label="Confirm PIN"
 							value={confirmPin}
 							onChange={handleConfirmPinChange}

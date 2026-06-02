@@ -25,6 +25,13 @@ const SMART_WIDGET_DATA_VERSION = "v55";
 export const getSmartWidgetCacheKey = (kw: string, lang = resolveSmartLang()) =>
 	`${kw}_${lang}_${SMART_WIDGET_DATA_VERSION}`;
 
+const SMART_WIDGET_STALE_MS = 3 * 60 * 60 * 1000; // 3시간
+const isSmartWidgetStale = (data: SmartWidgetData): boolean => {
+	const ts = data.lastUpdatedAt ?? data.lastUpdated;
+	if (!ts) return true;
+	return Date.now() - new Date(ts).getTime() > SMART_WIDGET_STALE_MS;
+};
+
 const SMART_WIDGET_CATEGORY_IDS = new Set(
 	SMART_WIDGET_CATEGORY_OPTIONS.map((option) => option.id),
 );
@@ -212,7 +219,7 @@ export const useWidgetStore = create<WidgetState>()((set, get) => ({
 		const lang = resolveSmartLang();
 		const cacheKey = getSmartWidgetCacheKey(kw, lang);
 		const existing = get().smartWidgetData?.[cacheKey];
-		if (existing && !force) return existing;
+		if (existing && !force && !isSmartWidgetStale(existing)) return existing;
 		const categoryOverride = get().smartWidgetCategoryOverrides?.[kw] ?? null;
 
 		set((s) => ({

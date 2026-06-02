@@ -1,6 +1,6 @@
 # MorningBriefing.AI — Developer Reference
 
-> Last updated: 2026-05-29
+> Last updated: 2026-06-02
 > Single source of truth for architecture. Change log → [CHANGELOG.md](./CHANGELOG.md).
 > Architecture diagrams (auth flow, onboarding, store map, fetch pipeline) inlined in §4–§6. Original standalone file archived at [archive/ARCHITECTURE.md](./archive/ARCHITECTURE.md).
 
@@ -1148,8 +1148,26 @@ npx wrangler deploy
 | `groq` Edge Function deploy | `charset=utf-8` header added; needs manual deploy |
 
 **Resolved since 2026-05-22:**
-- ~~Tavily token overuse~~ → ✅ Resolved 2026-05-23 (`86a34a8`): `api_cache` TTL extended 1 h → 6 h (GH [#3](https://github.com/MinsooAhn02/CSE_416_3pip/issues/3))
-- ~~Briefing "Tomorrow" section empty for non-UTC users~~ → ✅ Resolved 2026-05-24 (`5c7b7a6`): explicit `timeMin/timeMax` local-timezone ISO strings (GH [#17](https://github.com/MinsooAhn02/CSE_416_3pip/issues/17))
+- ~~Tavily token overuse~~ → ✅ Resolved 2026-05-23 (`86a34a8`): `api_cache` TTL extended 1 h → 6 h
+- ~~Briefing "Tomorrow" section empty for non-UTC users~~ → ✅ Resolved 2026-05-24 (`5c7b7a6`): explicit `timeMin/timeMax` local-timezone ISO strings
+
+**Resolved 2026-06-02 (todo.md batch fix):**
+- ~~이슈 1: 뉴스=트렌드~~ → ✅ `fetchNews` 파생 trends에서 뉴스 URL dedupe 적용
+- ~~이슈 2/13: 카테고리 표시 불일치~~ → ✅ override 우선 표시, 드롭다운 글자만, 버튼 UI 완화
+- ~~이슈 3: 스마트 위젯 stale 데이터~~ → ✅ `isSmartWidgetStale` 3시간 기준 자동 재생성
+- ~~이슈 4: 로그인 시 새로고침 안 됨~~ → ✅ `mb_last_access_time` 초기화 + `useExistingCache: false`
+- ~~이슈 5: 사이드바 너무 좁음~~ → ✅ 20% → 29%, Col A/B flex 축소
+- ~~이슈 6: 추가 버튼 우측 벽에 붙음~~ → ✅ `bottom-8 right-10`, 팝업 `right-16`
+- ~~이슈 7: 브리핑 임의 갱신~~ → ✅ interval 1h→3h, `activeWidgetIds` cascade 제거
+- ~~이슈 8: 리마인더 기본값 default~~ → ✅ `EMPTY_FORM.reminderMode: "none"`
+- ~~이슈 9: 이벤트 폼 가로 스크롤~~ → ✅ 모달 `max-w-md→max-w-xl`, `max-h-[85vh]`
+- ~~이슈 10: 캘린더 폰트 불균형~~ → ✅ 월간 날짜 `text-sm→text-base`, 버튼 `h-9 w-9→h-10 w-10`
+- ~~이슈 11: 스마트 위젯 그룹화~~ → ✅ 키워드별 개별 subBlock 생성
+- ~~이슈 12: PIN 자동 포커스~~ → ✅ `MaskedPinField` forwardRef, 4자리 완성 시 confirm focus
+- ~~이슈 14: 날씨 영어 표시~~ → ✅ AQI 인덱스 반환, `lang` 파라미터, UI 문자열 i18n
+- ~~이슈 16: 창 축소 시 사이드바~~ → ✅ resize 리스너 1200px 미만 자동 닫힘
+- ~~이슈 17: Tavily API 효율~~ → ✅ edge function 배치 지원, `searchSmartSectionsBatched` (N호출→1-2호출)
+- ~~이슈 18: Google 연결 끊김~~ → ✅ `google-refresh` edge function, `providerRefreshToken` 저장/교환 (requires `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` in Supabase secrets)
 
 ---
 

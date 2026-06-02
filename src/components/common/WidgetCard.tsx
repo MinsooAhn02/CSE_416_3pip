@@ -66,7 +66,7 @@ const WidgetCard = ({
 					{onRefresh && RefreshIcon && (
 						<button
 							onClick={onRefresh}
-							className={`${muted} hover:opacity-100 transition-opacity p-1 rounded-lg ${hoverCls}`}
+							className={`${muted} hover:opacity-100 opacity-40 transition-opacity p-1 rounded-lg ${hoverCls}`}
 							title={refreshTitle}
 						>
 							<RefreshIcon
@@ -78,7 +78,7 @@ const WidgetCard = ({
 					{widgetId && (
 						<button
 							onClick={() => closeWidget(widgetId)}
-							className={`${muted} hover:opacity-100 transition-opacity p-1 rounded-lg ${hoverCls}`}
+							className={`${muted} hover:opacity-100 opacity-40 transition-opacity p-1 rounded-lg ${hoverCls}`}
 							title={closeWidgetTitle}
 						>
 							<X size={13} />

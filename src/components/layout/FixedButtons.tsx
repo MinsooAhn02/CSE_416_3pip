@@ -44,12 +44,12 @@ const FixedButtons = () => {
 	if (pinModalVisible) return null;
 
 	return (
-		<div className="fixed bottom-6 right-6 z-30 flex flex-col gap-3 items-end">
+		<div className="fixed bottom-8 right-10 z-30 flex flex-col gap-3 items-end">
 			{/* Add Smart Widget */}
 			<div className="relative" ref={popupRef}>
 				{showPopup && (
 					<div
-						className={`absolute bottom-0 right-14 w-72 backdrop-blur-xl border rounded-2xl p-4 shadow-2xl ${
+						className={`absolute bottom-0 right-16 w-72 backdrop-blur-xl border rounded-2xl p-4 shadow-2xl ${
 							cardCls
 						}`}
 					>
@@ -91,7 +91,10 @@ const FixedButtons = () => {
 					</div>
 				)}
 				<button
-					onClick={() => setShowPopup((p) => !p)}
+					onClick={() => {
+						setNewKeyword(""); // 이전 입력 초기화
+						setShowPopup((p) => !p);
+					}}
 					title={t("widgets.smart.add_smart_widget")}
 					className={btnBase}
 				>

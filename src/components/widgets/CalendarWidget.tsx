@@ -356,7 +356,7 @@ const CalendarWidget = () => {
 								key={i}
 								type="button"
 								onClick={() => selectDate(dateStr)}
-								className={`relative mx-auto flex h-9 w-9 items-center justify-center text-sm rounded-full transition-colors ${
+								className={`relative mx-auto flex h-10 w-10 items-center justify-center text-base rounded-full transition-colors ${
 									isToday ? "bg-blue-500 text-white font-bold" : hoverCls
 								} ${isSelected && !isToday ? "ring-2 ring-blue-500" : ""} ${
 									isSelected && isToday ? "ring-2 ring-blue-300" : ""

@@ -29,6 +29,7 @@ const SmartWidgetContent = ({ keyword }: SmartWidgetContentProps) => {
 	const lang = isKo ? "ko" : "en";
 	const cacheKey = getSmartWidgetCacheKey(keyword, lang);
 	const generatedData = useWidgetStore((s) => s.smartWidgetData[cacheKey]);
+	const categoryOverride = useWidgetStore((s) => s.smartWidgetCategoryOverrides[keyword]);
 
 	const data = generatedData;
 	const [editingKeyword, setEditingKeyword] = useState(false);
@@ -218,16 +219,15 @@ const SmartWidgetContent = ({ keyword }: SmartWidgetContentProps) => {
 							setCategoryMenuOpen(false);
 							setSmartWidgetCategory(keyword, option.value);
 						}}
-						disabled={isRefreshing || option.value === data.category}
-						className={`flex w-full items-center gap-2 px-3 py-2 text-left text-xs transition-colors ${
-							option.value === data.category
+						disabled={isRefreshing || option.value === (categoryOverride ?? data?.category)}
+						className={`flex w-full items-center px-3 py-2 text-left text-xs transition-colors ${
+							option.value === (categoryOverride ?? data?.category)
 								? isDark
 									? "bg-white/15"
 									: "bg-blue-50 text-blue-700"
 								: hoverCls
 						}`}
 					>
-						<span>{option.emoji}</span>
 						<span>{option.label}</span>
 					</button>
 				))}
@@ -280,10 +280,10 @@ const SmartWidgetContent = ({ keyword }: SmartWidgetContentProps) => {
 								});
 							}}
 							aria-expanded={categoryMenuOpen}
-							className={`-ml-1 h-6 w-10 rounded-lg border flex items-center justify-center gap-0.5 shrink-0 transition-colors ${
+							className={`h-6 px-1.5 rounded-md border flex items-center justify-center gap-0.5 shrink-0 transition-colors ${
 								isDark
-									? "border-white/15 bg-white/10"
-									: "border-slate-200 bg-white shadow-sm"
+									? "border-white/10 bg-transparent"
+									: "border-slate-100 bg-transparent"
 							} ${hoverCls}`}
 							title={t("smart_widget.change_category")}
 						>

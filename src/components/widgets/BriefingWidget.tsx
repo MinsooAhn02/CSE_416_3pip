@@ -127,13 +127,13 @@ const BriefingWidget = () => {
 			!!weather ||
 			(Array.isArray(calEvents) && calEvents.length > 0) ||
 			(Array.isArray(stocks) && stocks.length > 0) ||
-			(Array.isArray(trends) && trends.length > 0) ||
-			activeWidgetIds.length > 0;
+			(Array.isArray(trends) && trends.length > 0);
 		if (!dataReady) return;
 		setInitialGenDone(true);
 		generateBriefingVersion(BRIEFING_LENGTH, true);
+		// activeWidgetIds는 의존성에서 제외 — 스마트위젯 추가 시 cascade 재생성 방지
 		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [weather, calEvents, stocks, trends, activeWidgetIds, initialGenDone]);
+	}, [weather, calEvents, stocks, trends, initialGenDone]);
 
 	// Post-init regen: tomorrowEvents typically arrives after initial gen
 	// (fetchTomorrowCalendar runs in parallel with other fetches). The initialGenDone
@@ -154,7 +154,7 @@ const BriefingWidget = () => {
 		if (!initialGenDone) return;
 		const interval = setInterval(() => {
 			generateBriefingVersion(BRIEFING_LENGTH, true, "auto");
-		}, 60 * 60 * 1000);
+		}, 3 * 60 * 60 * 1000);
 		return () => clearInterval(interval);
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [initialGenDone]);

@@ -57,7 +57,7 @@ const EMPTY_FORM = {
 	addGoogleMeet: false,
 	visibility: "default",
 	availability: "busy",
-	reminderMode: "default",
+	reminderMode: "none",
 	reminderMinutes: "30",
 	sendUpdates: true,
 	...formDataFromRepeat(null),
@@ -900,7 +900,7 @@ const EventPanel = ({ selectedDate, onClose }: EventPanelProps) => {
 						onClick={handleCloseAddForm}
 					>
 						<div
-							className={`z-[22010] w-full max-w-md max-h-[78vh] overflow-y-auto rounded-2xl border-2 shadow-2xl p-6 space-y-4 ${modalCardCls}`}
+							className={`z-[22010] w-full max-w-xl max-h-[85vh] overflow-y-auto rounded-2xl border-2 shadow-2xl p-6 space-y-4 ${modalCardCls}`}
 							onClick={(e) => e.stopPropagation()}
 						>
 							<div className="flex items-center justify-between mb-4">

@@ -415,7 +415,21 @@
       "precipitation": "강수",
       "air_quality": "대기질",
       "loading": "날씨 정보를 불러오는 중...",
-      "no_data": "표시할 날씨 정보가 없습니다."
+      "no_data": "표시할 날씨 정보가 없습니다.",
+      "change_city": "변경",
+      "default_location": "기본 위치",
+      "set_city": "도시 설정",
+      "city_placeholder": "예: 송도, 인천",
+      "set": "설정",
+      "auto_detect": "자동",
+      "aqi": {
+        "good": "좋음",
+        "fair": "보통",
+        "moderate": "보통",
+        "poor": "나쁨",
+        "very_poor": "매우 나쁨",
+        "unknown": "알 수 없음"
+      }
     },
     "stocks": {
       "title": "주식/환율",

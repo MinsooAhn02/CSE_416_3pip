@@ -7,12 +7,9 @@ const corsHeaders = {
 };
 
 const ZERO = { price: 0, change: 0, changePercent: "0%" };
-const TWELVEDATA_TIMEOUT_MS = 3200;
-const YAHOO_TIMEOUT_MS = 3200;
-const STOOQ_TIMEOUT_MS = 2600;
-const FX_FALLBACK_TIMEOUT_MS = 4500;
+const TWELVEDATA_TIMEOUT_MS = 8000;
 
-async function fetchJsonWithTimeout(url: string, timeoutMs = 7000) {
+async function fetchJsonWithTimeout(url: string, timeoutMs: number) {
 	const controller = new AbortController();
 	const timer = setTimeout(() => controller.abort(), timeoutMs);
 	try {
@@ -24,29 +21,16 @@ async function fetchJsonWithTimeout(url: string, timeoutMs = 7000) {
 	}
 }
 
-async function fetchTextWithTimeout(url: string, timeoutMs = 5000) {
-	const controller = new AbortController();
-	const timer = setTimeout(() => controller.abort(), timeoutMs);
-	try {
-		const res = await fetch(url, { signal: controller.signal });
-		if (!res.ok) throw new Error(`HTTP ${res.status}`);
-		return await res.text();
-	} finally {
-		clearTimeout(timer);
-	}
-}
-
-function isTwelveError(payload: any) {
-	return Boolean(
-		payload?.code || payload?.status === "error" || payload?.message,
-	);
+function isTwelveError(payload: unknown): boolean {
+	if (!payload || typeof payload !== "object") return true;
+	const p = payload as Record<string, unknown>;
+	if (p.status === "error") return true;
+	if (typeof p.code === "number" && p.code >= 400) return true;
+	return false;
 }
 
 const normalizeTwelveDataType = (type: string | undefined, symbol: string): string => {
-	if (!type) {
-		if (symbol.includes("/")) return "currency";
-		return "unknown";
-	}
+	if (!type) return symbol.includes("/") ? "currency" : "unknown";
 	const t = type.toLowerCase();
 	if (t.includes("index")) return "index";
 	if (t.includes("physical currency") || t.includes("currency")) return "currency";
@@ -54,151 +38,6 @@ const normalizeTwelveDataType = (type: string | undefined, symbol: string): stri
 	if (t.includes("common stock") || t.includes("equity")) return "stock";
 	return "unknown";
 };
-
-const normalizeYahooType = (instrumentType: string | undefined): string => {
-	if (!instrumentType) return "unknown";
-	switch (instrumentType.toUpperCase()) {
-		case "INDEX":    return "index";
-		case "CURRENCY": return "currency";
-		case "ETF":      return "etf";
-		case "EQUITY":   return "stock";
-		default:         return "unknown";
-	}
-};
-
-const yahooSymbolMap: Record<string, string> = {
-	KS11: "^KS11",
-	IXIC: "^IXIC",
-	SPX: "^GSPC",
-	VIX: "^VIX",
-	DJI: "^DJI",
-	RUT: "^RUT",
-	N225: "^N225",
-	HSI: "^HSI",
-	FTSE: "^FTSE",
-	VXN: "^VXN",
-	STOXX: "^STOXX50E",
-	EWY: "EWY",
-	QQQ: "QQQ",
-	SPY: "SPY",
-	"USD/KRW": "KRW=X",
-	"EUR/USD": "EURUSD=X",
-	"JPY/USD": "JPY=X",
-	USOIL: "CL=F",
-	DXY: "DX=F",
-};
-
-async function fetchYahooQuote(
-	alphaSymbol: string,
-): Promise<{ price: number; change: number; changePercent: string; quoteType?: string; currency?: string } | null> {
-	const primary = yahooSymbolMap[alphaSymbol] ?? alphaSymbol;
-	// For unknown symbols, also try the ^PREFIX variant that Yahoo uses for indices.
-	const candidates: string[] = [primary];
-	if (!primary.startsWith("^") && !(alphaSymbol in yahooSymbolMap)) {
-		candidates.push(`^${alphaSymbol}`);
-	}
-
-	for (const candidate of [...new Set(candidates)]) {
-		try {
-			const url = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${encodeURIComponent(candidate)}`;
-			const data = await fetchJsonWithTimeout(url, YAHOO_TIMEOUT_MS);
-			const quote = data?.quoteResponse?.result?.[0];
-			const price = Number(quote?.regularMarketPrice ?? quote?.postMarketPrice ?? 0);
-			if (!Number.isFinite(price) || price <= 0) continue;
-
-			const change = Number(quote?.regularMarketChange ?? 0);
-			const changePercentRaw = Number(quote?.regularMarketChangePercent);
-			const changePercent = Number.isFinite(changePercentRaw)
-				? toPercentString(changePercentRaw)
-				: toPercentString(change);
-
-			return {
-				price,
-				change: Number.isFinite(change) ? change : 0,
-				changePercent,
-				quoteType: quote?.quoteType,
-				currency: quote?.currency,
-			};
-		} catch {
-			continue;
-		}
-	}
-	return null;
-}
-
-// Yahoo Finance v8 chart endpoint — more reliably accessible than v7 for server-side calls.
-async function fetchYahooChart(
-	symbol: string,
-): Promise<{ price: number; change: number; changePercent: string; instrumentType?: string; currency?: string } | null> {
-	try {
-		const url = `https://query2.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=1d`;
-		const data = await fetchJsonWithTimeout(url, YAHOO_TIMEOUT_MS);
-		const meta = data?.chart?.result?.[0]?.meta;
-		if (!meta) return null;
-		const price = Number(meta.regularMarketPrice ?? 0);
-		if (!Number.isFinite(price) || price <= 0) return null;
-		const prevClose = Number(meta.chartPreviousClose ?? meta.previousClose ?? price);
-		const change = Number.isFinite(price - prevClose) ? price - prevClose : 0;
-		const changePercent = prevClose > 0 ? (change / prevClose) * 100 : 0;
-		return {
-			price,
-			change,
-			changePercent: toPercentString(changePercent),
-			instrumentType: meta?.instrumentType,
-			currency: meta?.currency,
-		};
-	} catch {
-		return null;
-	}
-}
-
-async function fetchStooqPrice(alphaSymbol: string): Promise<number | null> {
-	const map: Record<string, string[]> = {
-		KS11: ["^kospi", "^ks11", "ks11"],
-		IXIC: ["^ndq"],
-		SPX: ["^spx"],
-		VIX: ["^vix"],
-		DJI: ["^dji"],
-		RUT: ["^rut"],
-		N225: ["^nkx", "^n225"],
-		HSI: ["^hsi"],
-		FTSE: ["^ftm", "^ftse"],
-		VXN: ["^vxn"],
-		EWY: ["ewy.us"],
-		QQQ: ["qqq.us"],
-		SPY: ["spy.us"],
-		USOIL: ["usoil", "cl.f"],
-		DXY: ["dxy", "^dxy"],
-	};
-	const sym = alphaSymbol.toLowerCase();
-	const candidates = map[alphaSymbol]
-		? map[alphaSymbol]
-		: [`${sym}.us`, `^${sym}`, sym]; // US exchange → index prefix → bare symbol
-	for (const stooqSymbol of candidates) {
-		const url = `https://stooq.com/q/l/?s=${encodeURIComponent(stooqSymbol)}&f=sd2t2ohlcv&h&e=csv`;
-		try {
-			const csv = await fetchTextWithTimeout(url, STOOQ_TIMEOUT_MS);
-			const lines = csv.trim().split("\n");
-			if (lines.length < 2) continue;
-			const row = lines[1].split(",");
-			const close = parseFloat(row[6]);
-			if (Number.isFinite(close) && close > 0) return close;
-		} catch {
-			continue;
-		}
-	}
-	return null;
-}
-
-async function fetchUsdKrwFallback(): Promise<number | null> {
-	const data = await fetchJsonWithTimeout(
-		"https://open.er-api.com/v6/latest/USD",
-		FX_FALLBACK_TIMEOUT_MS,
-	);
-	const rate = Number(data?.rates?.KRW);
-	if (!Number.isFinite(rate) || rate <= 0) return null;
-	return rate;
-}
 
 const toPercentString = (value: unknown) => {
 	const n = Number(value);
@@ -220,145 +59,65 @@ serve(async (req) => {
 		return new Response("ok", { headers: corsHeaders });
 
 	try {
-		const { symbols = ["KOSPI", "NASDAQ", "SP500", "USDKRW"] } =
-			await req.json();
+		const { symbols = ["KOSPI", "NASDAQ", "SP500", "USDKRW"] } = await req.json();
 		const apiKey = Deno.env.get("TWELVEDATA_API_KEY")?.trim() ?? "";
 
-		// Internal symbol mapping -> TwelveData symbols
+		if (!apiKey) {
+			return new Response(JSON.stringify({ error: "TWELVEDATA_API_KEY not set" }), {
+				status: 500,
+				headers: { ...corsHeaders, "Content-Type": "application/json" },
+			});
+		}
+
+		// 내부 심볼 → TwelveData 심볼 매핑
 		const symbolMap: Record<string, string> = {
-			KOSPI:  "KS11",     // KOSPI Composite Index
-			NASDAQ: "IXIC",     // NASDAQ Composite
-			SP500:  "SPX",      // S&P 500 Index
+			KOSPI:  "KS11",
+			NASDAQ: "IXIC",
+			SP500:  "SPX",
 			USDKRW: "USD/KRW",
-			VIX:    "VIX",      // CBOE Volatility Index
-			CRUDE:  "USOIL",    // WTI Crude Oil
-			DXY:    "DXY",      // US Dollar Index
-			DJI:    "DJI",      // Dow Jones Industrial Average
+			VIX:    "VIX",
+			CRUDE:  "USOIL",
+			DXY:    "DXY",
+			DJI:    "DJI",
 		};
 
 		const results = await Promise.all(
 			symbols.map(async (sym: string) => {
 				try {
 					const tdSymbol = symbolMap[sym] || sym;
+					const exchange = tdSymbol === "KS11" ? "&exchange=XKOS" : "";
+					const url = `https://api.twelvedata.com/quote?symbol=${encodeURIComponent(tdSymbol)}${exchange}&apikey=${encodeURIComponent(apiKey)}`;
 
-					// For forex
-					if (sym === "USDKRW") {
-						if (apiKey) {
-							const url = `https://api.twelvedata.com/quote?symbol=${encodeURIComponent(tdSymbol)}&apikey=${encodeURIComponent(apiKey)}`;
-							const data = await fetchJsonWithTimeout(url, TWELVEDATA_TIMEOUT_MS);
-							if (!isTwelveError(data)) {
-								const price = Number(data?.close ?? 0);
-								const change = Number(data?.change ?? 0);
-								const percent = normalizePercent(data?.percent_change, change);
-								if (Number.isFinite(price) && price > 0) {
-									return {
-										symbol: sym,
-										price,
-										change: Number.isFinite(change) ? change : 0,
-										changePercent: percent,
-										type: normalizeTwelveDataType(data?.type, tdSymbol),
-										currency: String(data?.currency ?? "KRW").toUpperCase(),
-									};
-								}
-							}
-						}
-						const yahooFx = await fetchYahooQuote(tdSymbol).catch(() => null);
-						if (yahooFx) {
-							return {
-								symbol: sym,
-								...yahooFx,
-								type: normalizeYahooType(yahooFx.quoteType),
-								currency: String(yahooFx.currency ?? "KRW").toUpperCase(),
-							};
-						}
-						const fxChart = await fetchYahooChart(tdSymbol).catch(() => null);
-						if (fxChart) {
-							return {
-								symbol: sym,
-								...fxChart,
-								type: normalizeYahooType(fxChart.instrumentType),
-								currency: String(fxChart.currency ?? "KRW").toUpperCase(),
-							};
-						}
-						const fallback = await fetchUsdKrwFallback().catch(() => null);
-						if (fallback) {
-							return {
-								symbol: sym,
-								price: fallback,
-								change: 0,
-								changePercent: "0%",
-								type: "currency",
-								currency: "KRW",
-							};
-						}
-						return { symbol: sym, ...ZERO, type: "currency", currency: "KRW" };
+					const data = await fetchJsonWithTimeout(url, TWELVEDATA_TIMEOUT_MS);
+
+					if (isTwelveError(data)) {
+						const p = data as Record<string, unknown>;
+						console.error(`[stocks] TwelveData error for ${sym}:`, p.code, p.message, p.status);
+						return { symbol: sym, ...ZERO, type: "unknown", currency: "", error: String(p.message ?? "API error") };
 					}
 
-					// For stocks/ETFs (KS11 needs the exchange qualifier for TwelveData)
-					if (apiKey) {
-						const exchange = tdSymbol === "KS11" ? "&exchange=XKOS" : "";
-						const url = `https://api.twelvedata.com/quote?symbol=${encodeURIComponent(tdSymbol)}${exchange}&apikey=${encodeURIComponent(apiKey)}`;
-						const data = await fetchJsonWithTimeout(url, TWELVEDATA_TIMEOUT_MS);
-						if (!isTwelveError(data)) {
-							const price = Number(data?.close ?? 0);
-							const change = Number(data?.change ?? 0);
-							const percent = normalizePercent(data?.percent_change, change);
-							if (Number.isFinite(price) && price > 0) {
-								return {
-									symbol: sym,
-									price,
-									change: Number.isFinite(change) ? change : 0,
-									changePercent: percent,
-									type: normalizeTwelveDataType(data?.type, tdSymbol),
-									currency: String(data?.currency ?? "").toUpperCase(),
-								};
-							}
-						}
+					const p = data as Record<string, unknown>;
+					const price = Number(p.close ?? p.price ?? 0);
+					if (!Number.isFinite(price) || price <= 0) {
+						console.warn(`[stocks] Zero price for ${sym}, raw close:`, p.close);
+						return { symbol: sym, ...ZERO, type: normalizeTwelveDataType(p.type as string | undefined, tdSymbol), currency: String(p.currency ?? "").toUpperCase() };
 					}
-					const yahooQuote = await fetchYahooQuote(tdSymbol).catch(() => null);
-					if (yahooQuote) {
-						return {
-							symbol: sym,
-							...yahooQuote,
-							type: normalizeYahooType(yahooQuote.quoteType),
-							currency: String(yahooQuote.currency ?? "").toUpperCase(),
-						};
-					}
-					// v8 chart — try both the mapped symbol (e.g. "^GSPC") and original (e.g. "SPX")
-					for (const c of [...new Set([tdSymbol, sym])]) {
-						const chart = await fetchYahooChart(c).catch(() => null);
-						if (chart) return {
-							symbol: sym,
-							...chart,
-							type: normalizeYahooType(chart.instrumentType),
-							currency: String(chart.currency ?? "").toUpperCase(),
-						};
-						if (!c.startsWith("^")) {
-							const chartCaret = await fetchYahooChart(`^${c}`).catch(() => null);
-							if (chartCaret) return {
-								symbol: sym,
-								...chartCaret,
-								type: normalizeYahooType(chartCaret.instrumentType),
-								currency: String(chartCaret.currency ?? "").toUpperCase(),
-							};
-						}
-					}
-					const fallbackPrice = await fetchStooqPrice(tdSymbol).catch(
-						() => null,
-					);
-					if (fallbackPrice) {
-						return {
-							symbol: sym,
-							price: fallbackPrice,
-							change: 0,
-							changePercent: "0%",
-							type: "unknown",
-							currency: "",
-						};
-					}
-					return { symbol: sym, ...ZERO, type: "unknown", currency: "" };
-				} catch {
-					return { symbol: sym, ...ZERO, type: "unknown", currency: "" };
+
+					const change = Number(p.change ?? 0);
+					const percent = normalizePercent(p.percent_change, change);
+
+					return {
+						symbol: sym,
+						price,
+						change: Number.isFinite(change) ? change : 0,
+						changePercent: percent,
+						type: normalizeTwelveDataType(p.type as string | undefined, tdSymbol),
+						currency: String(p.currency ?? "").toUpperCase(),
+					};
+				} catch (e: unknown) {
+					const msg = e instanceof Error ? e.message : String(e);
+					console.error(`[stocks] fetch error for ${sym}:`, msg);
+					return { symbol: sym, ...ZERO, type: "unknown", currency: "", error: msg };
 				}
 			}),
 		);
@@ -366,8 +125,9 @@ serve(async (req) => {
 		return new Response(JSON.stringify(results), {
 			headers: { ...corsHeaders, "Content-Type": "application/json" },
 		});
-	} catch (e) {
-		return new Response(JSON.stringify({ error: e.message }), {
+	} catch (e: unknown) {
+		const msg = e instanceof Error ? e.message : String(e);
+		return new Response(JSON.stringify({ error: msg }), {
 			status: 400,
 			headers: { ...corsHeaders, "Content-Type": "application/json" },
 		});

@@ -6,24 +6,19 @@ const corsHeaders = {
 		"authorization, x-client-info, apikey, content-type",
 };
 
-const AQI_LABELS: Record<number, string> = {
-	1: "Good",
-	2: "Fair",
-	3: "Moderate",
-	4: "Poor",
-	5: "Very Poor",
-};
-
 serve(async (req) => {
 	if (req.method === "OPTIONS")
 		return new Response("ok", { headers: corsHeaders });
 
 	try {
-		const { lat = 37.5665, lon = 126.978, city } = await req.json();
+		const { lat = 37.5665, lon = 126.978, city, lang = "en" } = await req.json();
 		const apiKey = Deno.env.get("OPENWEATHER_API_KEY");
 		if (!apiKey) throw new Error("OPENWEATHER_API_KEY not set");
 
 		const baseUrl = "https://api.openweathermap.org/data/2.5";
+
+		// OpenWeather lang 코드 매핑 (ko → ko, others → en)
+		const owLang = lang === "ko" ? "ko" : "en";
 
 		// city 이름으로 검색하면 lat/lon은 응답에서 추출
 		const weatherQuery = city
@@ -31,7 +26,7 @@ serve(async (req) => {
 			: `lat=${lat}&lon=${lon}`;
 
 		const weatherRes = await fetch(
-			`${baseUrl}/weather?${weatherQuery}&units=metric&lang=en&appid=${apiKey}`,
+			`${baseUrl}/weather?${weatherQuery}&units=metric&lang=${owLang}&appid=${apiKey}`,
 		);
 		if (!weatherRes.ok) throw new Error(`OpenWeather ${weatherRes.status}`);
 		const data = await weatherRes.json();
@@ -48,9 +43,8 @@ serve(async (req) => {
 
 		const aqData = aqRes.ok ? await aqRes.json() : null;
 
-		// 대기질 (AQI 1~5)
-		const aqi: number = aqData?.list?.[0]?.main?.aqi ?? 0;
-		const airQuality = AQI_LABELS[aqi] ?? "Moderate";
+		// 대기질 인덱스 (1~5) — 라벨링은 클라이언트에서 i18n으로 처리
+		const airQualityIndex: number = aqData?.list?.[0]?.main?.aqi ?? 0;
 
 		// 강수 확률 추정 (현재날씨 API는 확률 미제공 → 운량 + 강수량으로 추정)
 		const rainVol = (data.rain?.["1h"] ?? data.rain?.["3h"] ?? 0) as number;
@@ -72,7 +66,7 @@ serve(async (req) => {
 				icon: data.weather?.[0]?.icon ?? "01d",
 				city: data.name,
 				precipitation,
-				airQuality,
+				airQualityIndex,
 			}),
 			{ headers: { ...corsHeaders, "Content-Type": "application/json" } },
 		);
