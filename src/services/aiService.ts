@@ -1472,28 +1472,6 @@ const KO_NEWS_DOMAINS = [
 	"yonhapnews.co.kr",
 ];
 
-// 한국어 기사 검색 시 제외할 비뉴스 도메인 (naver.com 제외 - news.naver.com 차단 방지)
-const KO_NEWS_EXCLUDE_DOMAINS = [
-	"namu.wiki",
-	"wikipedia.org",
-	"blog.naver.com",
-	"m.blog.naver.com",
-	"post.naver.com",
-	"kin.naver.com",
-	"cafe.naver.com",
-	"tistory.com",
-	"brunch.co.kr",
-	"velog.io",
-	"dcinside.com",
-	"fmkorea.com",
-	"ruliweb.com",
-	"clien.net",
-	"ppomppu.co.kr",
-	"reddit.com",
-	"youtube.com",
-	"youtu.be",
-];
-
 const KO_INFO_DOMAINS = [
 	"blog.naver.com",
 	"m.blog.naver.com",
@@ -3333,10 +3311,10 @@ const formatSmartItems = (results: SmartResult[], isKo: boolean, section: SmartS
 	const titleKeywordMatches = eligibleRanked.filter((r) =>
 		smartResultTitleMatchesSectionKeyword(r, section),
 	);
-	if (isKo && isArticleSmartSection(section)) {
-		console.log(`[smart-fmt] ranked=${ranked.length} eligible=${eligibleRanked.length} titleMatches=${titleKeywordMatches.length}`);
-		console.log(`[smart-fmt] eligibleTitles=`, eligibleRanked.map(r => r?.title?.slice(0, 50)));
-	}
+	// if (isKo && isArticleSmartSection(section)) {
+	// 	console.log(`[smart-fmt] ranked=${ranked.length} eligible=${eligibleRanked.length} titleMatches=${titleKeywordMatches.length}`);
+	// 	console.log(`[smart-fmt] eligibleTitles=`, eligibleRanked.map(r => r?.title?.slice(0, 50)));
+	// }
 	const requiredKeywordMatches = eligibleRanked.filter((r) =>
 		smartResultMatchesRequiredSectionKeyword(r, section, isKo),
 	);
@@ -3515,8 +3493,13 @@ const fetchNonLatestArticleTavily = (section: SmartSectionPlan, isKo: boolean, i
 
 const searchSmartSection = async (section: SmartSectionPlan, isKo: boolean) => {
 	const useFreshSearchMode = isStreetwearFreshSearchSection(section);
-	const mode = isArticleSmartSection(section) && !useFreshSearchMode ? "news" : "search";
+	// 한국어 기사 섹션: general 웹 크롤 인덱스 + 한국 뉴스 도메인 강제
+	// → Tavily news 인덱스는 영어 위주라 한국 기사가 안 잡힘
+	const isKoArticle = isKo && isArticleSmartSection(section) && !useFreshSearchMode;
+	const mode = isKoArticle ? "search" : (isArticleSmartSection(section) && !useFreshSearchMode ? "news" : "search");
 	const preferredDomains = getSmartSearchDomains(section, isKo);
+	const includeDomains = isKoArticle ? KO_NEWS_DOMAINS : preferredDomains;
+	const excludeDomains: string[] = [];
 	const primaryTimeRange = (
 		isKeyInfoSmartSection(section) ||
 		isNutritionSmartSection(section) ||
@@ -3531,20 +3514,16 @@ const searchSmartSection = async (section: SmartSectionPlan, isKo: boolean) => {
 			: isKo
 				? null
 				: primaryTimeRange;
-	// 한국어 기사 섹션: include 제한 없이 전체 검색, 비뉴스 도메인만 제외
-	const isKoArticle = isKo && isArticleSmartSection(section) && !useFreshSearchMode;
-	const includeDomains = isKoArticle ? [] : preferredDomains;
-	const excludeDomains = isKoArticle ? KO_NEWS_EXCLUDE_DOMAINS : [];
 	const tavilyData = await fetchSmartTavily(section, mode, isKo, includeDomains, primaryTimeRange, excludeDomains);
 
 	let rawResults = ((tavilyData?.results as SmartResult[] | undefined) ?? []).filter((r) => !isBlockedSmartUrl(r?.url ?? ""));
 
-	if (isKoArticle) {
-		console.log(`[smart-ko-article] section=${section.type} keyword="${section.keyword}"`);
-		console.log(`[smart-ko-article] tavilyData null?`, tavilyData === null);
-		console.log(`[smart-ko-article] rawResults count=`, rawResults.length);
-		console.log(`[smart-ko-article] rawResults titles=`, rawResults.map(r => r?.title?.slice(0, 50)));
-	}
+	// if (isKoArticle) {
+	// 	console.log(`[smart-ko-article] section=${section.type} keyword="${section.keyword}"`);
+	// 	console.log(`[smart-ko-article] tavilyData null?`, tavilyData === null);
+	// 	console.log(`[smart-ko-article] rawResults count=`, rawResults.length);
+	// 	console.log(`[smart-ko-article] rawResults titles=`, rawResults.map(r => r?.title?.slice(0, 50)));
+	// }
 
 	const titleMatchCount = rawResults.filter((r) =>
 		(smartSectionRequiresTitleKeyword(section)
@@ -3553,9 +3532,9 @@ const searchSmartSection = async (section: SmartSectionPlan, isKo: boolean) => {
 		smartResultIsEligibleForSection(r, section, isKo),
 	).length;
 
-	if (isKoArticle) {
-		console.log(`[smart-ko-article] titleMatchCount=`, titleMatchCount);
-	}
+	// if (isKoArticle) {
+	// 	console.log(`[smart-ko-article] titleMatchCount=`, titleMatchCount);
+	// }
 
 	if (
 		titleMatchCount < (section.maxItems ?? 2) &&
