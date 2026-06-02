@@ -25,6 +25,8 @@ interface AuthState {
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string | undefined;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
 
+let _pendingProviderTokenRefresh: Promise<string | null> | null = null;
+
 export const useAuthStore = create<AuthState>()((set, get) => ({
 	isLoggedIn: load<boolean>("mb_login", false),
 	user: null,
@@ -128,59 +130,67 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
 
 		if (!supabase) return null;
 
-		try {
-			// 1) 세션에 아직 토큰이 살아있는지 확인
-			const {
-				data: { session },
-			} = await supabase.auth.getSession();
-			const token = session?.provider_token ?? null;
-			// session에서 받은 refresh_token을 저장 (있을 때만)
-			if (session?.provider_refresh_token) {
-				set({ providerRefreshToken: session.provider_refresh_token });
-			}
-			if (token) {
-				set({ providerToken: token });
-				return token;
-			}
+		if (_pendingProviderTokenRefresh) return _pendingProviderTokenRefresh;
 
-			// 2) Supabase 세션 refresh (provider_token은 보통 null로 옴)
-			const {
-				data: { session: refreshedSession },
-			} = await supabase.auth.refreshSession();
-			const refreshedToken = refreshedSession?.provider_token ?? null;
-			if (refreshedToken) {
-				set({ providerToken: refreshedToken });
-				return refreshedToken;
-			}
-
-			// 3) provider_refresh_token으로 Google 토큰 직접 갱신
-			const refreshToken = session?.provider_refresh_token ?? get().providerRefreshToken;
-			if (refreshToken && SUPABASE_URL && SUPABASE_ANON_KEY) {
-				try {
-					const res = await fetch(`${SUPABASE_URL}/functions/v1/google-refresh`, {
-						method: "POST",
-						headers: {
-							"Content-Type": "application/json",
-							Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-						},
-						body: JSON.stringify({ refresh_token: refreshToken }),
-					});
-					const data = await res.json() as { access_token?: string; error?: string };
-					if (data.access_token) {
-						set({ providerToken: data.access_token });
-						return data.access_token;
-					}
-					console.warn("[gcal] google-refresh failed:", data.error);
-				} catch (refreshErr) {
-					console.warn("[gcal] google-refresh request failed:", refreshErr);
+		_pendingProviderTokenRefresh = (async () => {
+			try {
+				// 1) 세션에 아직 토큰이 살아있는지 확인
+				const {
+					data: { session },
+				} = await supabase.auth.getSession();
+				const token = session?.provider_token ?? null;
+				// session에서 받은 refresh_token을 저장 (있을 때만)
+				if (session?.provider_refresh_token) {
+					set({ providerRefreshToken: session.provider_refresh_token });
 				}
-			}
+				if (token) {
+					set({ providerToken: token });
+					return token;
+				}
 
-			return null;
-		} catch (err) {
-			console.warn("[gcal] ensureProviderToken failed:", err);
-			return null;
-		}
+				// 2) Supabase 세션 refresh (provider_token은 보통 null로 옴)
+				const {
+					data: { session: refreshedSession },
+				} = await supabase.auth.refreshSession();
+				const refreshedToken = refreshedSession?.provider_token ?? null;
+				if (refreshedToken) {
+					set({ providerToken: refreshedToken });
+					return refreshedToken;
+				}
+
+				// 3) provider_refresh_token으로 Google 토큰 직접 갱신
+				const refreshToken = session?.provider_refresh_token ?? get().providerRefreshToken;
+				if (refreshToken && SUPABASE_URL && SUPABASE_ANON_KEY) {
+					try {
+						const res = await fetch(`${SUPABASE_URL}/functions/v1/google-refresh`, {
+							method: "POST",
+							headers: {
+								"Content-Type": "application/json",
+								Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+							},
+							body: JSON.stringify({ refresh_token: refreshToken }),
+						});
+						const data = await res.json() as { access_token?: string; error?: string };
+						if (data.access_token) {
+							set({ providerToken: data.access_token });
+							return data.access_token;
+						}
+						console.warn("[gcal] google-refresh failed:", data.error);
+					} catch (refreshErr) {
+						console.warn("[gcal] google-refresh request failed:", refreshErr);
+					}
+				}
+
+				return null;
+			} catch (err) {
+				console.warn("[gcal] ensureProviderToken failed:", err);
+				return null;
+			} finally {
+				_pendingProviderTokenRefresh = null;
+			}
+		})();
+
+		return _pendingProviderTokenRefresh;
 	},
 
 	loadUserSettings: async () => {
