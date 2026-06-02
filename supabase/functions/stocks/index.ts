@@ -8,12 +8,25 @@ const corsHeaders = {
 
 const ZERO = { price: 0, change: 0, changePercent: "0%" };
 const TWELVEDATA_TIMEOUT_MS = 8000;
+const YAHOO_TIMEOUT_MS = 8000;
 
-async function fetchJsonWithTimeout(url: string, timeoutMs: number) {
+// 지수/원자재는 TwelveData 무료 플랜에서 미지원(404) → Yahoo Finance에서 조회.
+// 환율(USD/KRW)·개별주식은 TwelveData에서 정상 동작하므로 그대로 둔다.
+const YAHOO_SYMBOL_MAP: Record<string, string> = {
+	SP500:  "^GSPC",
+	KOSPI:  "^KS11",
+	NASDAQ: "^IXIC",
+	VIX:    "^VIX",
+	DJI:    "^DJI",
+	DXY:    "DX-Y.NYB", // ^DXY는 Yahoo에서 죽은 데이터라 ICE Dollar Index 사용
+	CRUDE:  "CL=F",
+};
+
+async function fetchJsonWithTimeout(url: string, timeoutMs: number, init?: RequestInit) {
 	const controller = new AbortController();
 	const timer = setTimeout(() => controller.abort(), timeoutMs);
 	try {
-		const res = await fetch(url, { signal: controller.signal });
+		const res = await fetch(url, { ...init, signal: controller.signal });
 		if (!res.ok) throw new Error(`HTTP ${res.status}`);
 		return await res.json();
 	} finally {
@@ -54,6 +67,39 @@ const normalizePercent = (value: unknown, fallbackChange: unknown) => {
 	return toPercentString(fallbackChange);
 };
 
+// Yahoo Finance chart v8: meta.regularMarketPrice / chartPreviousClose 기반으로 일간 변동 계산
+async function fetchYahooQuote(internalSymbol: string, yahooSymbol: string) {
+	const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(yahooSymbol)}?interval=1d&range=1d`;
+	const data = await fetchJsonWithTimeout(url, YAHOO_TIMEOUT_MS, {
+		headers: { "User-Agent": "Mozilla/5.0" },
+	});
+
+	const result = (data as { chart?: { result?: Array<{ meta?: Record<string, unknown> }> } })
+		?.chart?.result?.[0];
+	const meta = result?.meta ?? null;
+	const currency = String(meta?.currency ?? "").toUpperCase();
+	const type = internalSymbol === "CRUDE" ? "commodity" : "index";
+
+	const price = Number(meta?.regularMarketPrice ?? 0);
+	if (!meta || !Number.isFinite(price) || price <= 0) {
+		console.warn(`[stocks] Yahoo zero/invalid price for ${internalSymbol} (${yahooSymbol})`);
+		return { symbol: internalSymbol, ...ZERO, type, currency };
+	}
+
+	const prevClose = Number(meta?.chartPreviousClose ?? meta?.previousClose ?? 0);
+	const change = Number.isFinite(prevClose) ? price - prevClose : 0;
+	const percentNum = Number.isFinite(prevClose) && prevClose > 0 ? (change / prevClose) * 100 : 0;
+
+	return {
+		symbol: internalSymbol,
+		price,
+		change: Number.isFinite(change) ? change : 0,
+		changePercent: toPercentString(percentNum),
+		type,
+		currency,
+	};
+}
+
 serve(async (req) => {
 	if (req.method === "OPTIONS")
 		return new Response("ok", { headers: corsHeaders });
@@ -69,24 +115,22 @@ serve(async (req) => {
 			});
 		}
 
-		// 내부 심볼 → TwelveData 심볼 매핑
+		// 내부 심볼 → TwelveData 심볼 매핑 (환율은 TwelveData에서 정상 동작).
+		// 지수/원자재는 YAHOO_SYMBOL_MAP을 통해 Yahoo에서 처리한다.
 		const symbolMap: Record<string, string> = {
-			KOSPI:  "KS11",
-			NASDAQ: "IXIC",
-			SP500:  "SPX",
 			USDKRW: "USD/KRW",
-			VIX:    "VIX",
-			CRUDE:  "USOIL",
-			DXY:    "DXY",
-			DJI:    "DJI",
 		};
 
 		const results = await Promise.all(
 			symbols.map(async (sym: string) => {
 				try {
+					const yahooSymbol = YAHOO_SYMBOL_MAP[sym];
+					if (yahooSymbol) {
+						return await fetchYahooQuote(sym, yahooSymbol);
+					}
+
 					const tdSymbol = symbolMap[sym] || sym;
-					const exchange = tdSymbol === "KS11" ? "&exchange=XKOS" : "";
-					const url = `https://api.twelvedata.com/quote?symbol=${encodeURIComponent(tdSymbol)}${exchange}&apikey=${encodeURIComponent(apiKey)}`;
+					const url = `https://api.twelvedata.com/quote?symbol=${encodeURIComponent(tdSymbol)}&apikey=${encodeURIComponent(apiKey)}`;
 
 					const data = await fetchJsonWithTimeout(url, TWELVEDATA_TIMEOUT_MS);
 
