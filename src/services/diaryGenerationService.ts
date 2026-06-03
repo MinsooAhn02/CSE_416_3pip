@@ -21,6 +21,7 @@ interface DiaryGenerationOptions {
 interface DiaryGenerationContext {
 	completedTodos: TodoItem[];
 	diaryAnswers: unknown[];
+	qaPairs: { question: string; answer: string }[];
 	memo: string;
 	weather: WeatherData | null;
 	trends: string[];
@@ -100,11 +101,13 @@ export const buildDiaryGenerationContext = async (
 	const diaryStore = useDiaryStore.getState();
 	const existingEntry = diaryStore.getDiary(dateStr);
 	const diaryAnswers = diaryStore.getAnswers(dateStr) || [];
+	const qaPairs = await diaryStore.fetchQAForDate(dateStr);
+	const answers = diaryAnswers.length > 0 ? diaryAnswers : qaPairs.map((p) => p.answer).filter(Boolean);
 
 	const inferredWasActiveDay =
 		diaryStore.wasActiveOn?.(dateStr) ||
 		dateStr === formatLocalDate() ||
-		diaryAnswers.length > 0 ||
+		answers.length > 0 ||
 		!!(existingEntry?.notes || existingEntry?.memo || "").trim() ||
 		!!(existingEntry?.diary || "").trim() ||
 		(Array.isArray(briefingSnapshots) && briefingSnapshots.length > 0);
@@ -126,7 +129,8 @@ export const buildDiaryGenerationContext = async (
 
 	return {
 		completedTodos: await fetchCompletedTasksForDate(dateStr),
-		diaryAnswers,
+		diaryAnswers: answers,
+		qaPairs,
 		memo: existingEntry?.notes || existingEntry?.memo || "",
 		weather: dataStore.weather as WeatherData | null,
 		trends: dataStore.trends as string[],

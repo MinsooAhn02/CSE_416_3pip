@@ -4675,6 +4675,7 @@ export async function generateDiary({
 	trends = [] as string[],
 	calEvents = [] as CalEvent[],
 	diaryAnswers = [] as unknown[],
+	qaPairs = [] as { question: string; answer: string }[],
 	memo = "",
 	date = "",
 	wasActiveDay = false,
@@ -4690,6 +4691,7 @@ export async function generateDiary({
 	trends?: string[];
 	calEvents?: CalEvent[];
 	diaryAnswers?: unknown[];
+	qaPairs?: { question: string; answer: string }[];
 	memo?: string;
 	date?: string;
 	wasActiveDay?: boolean;
@@ -4766,6 +4768,7 @@ export async function generateDiary({
 		weather,
 		trends: Array.isArray(trends) ? trends.slice(0, 5) : [],
 		diaryAnswers: Array.isArray(diaryAnswers) ? diaryAnswers.slice(0, 3) : [],
+		qaPairs: Array.isArray(qaPairs) ? qaPairs.slice(0, 3).map((p) => ({ question: p.question, answer: p.answer })) : [],
 		memo: normalizeDiaryLineText(memo),
 		briefingText: snapshotLines.length > 0
 			? snapshotLines.join("\n")
@@ -4810,7 +4813,8 @@ export async function generateDiary({
 				"- 앱 미접속일이면 summary에 그 사실을 자연스럽게 포함",
 				"- briefingText에 시간대별 브리핑 스냅샷이 있으면 이를 그날의 주요 내용으로 활용",
 				"- previousDayDiary는 문체·톤·스타일 참고용입니다. 전날 사건이나 내용은 오늘 일기에 절대 포함하지 마세요.",
-				"- 오늘 내용은 오직 입력 데이터(briefingText, completedLines, scheduleLines, diaryAnswers)에서만 가져오세요.",
+				"- 오늘 내용은 오직 입력 데이터(briefingText, completedLines, scheduleLines, diaryAnswers, qaPairs)에서만 가져오세요.",
+				"- qaPairs는 사용자가 오늘 직접 답한 질문/답변입니다. 답변 내용을 그날의 개인적 사실로 자연스럽게 반영하되, 질문 문구를 그대로 옮겨 적지는 마세요.",
 				"- previousDayFeedback이 있으면 해당 선호도(포함·제외 항목 등)를 오늘 일기에 반영하세요.",
 				"",
 				"입력 데이터:",
@@ -4830,7 +4834,8 @@ export async function generateDiary({
 				"- If user interests are listed and relevant data (trends, news) exists, briefly reference them naturally.",
 				"- briefingText contains time-stamped briefing snapshots saved throughout the day — use them as the primary source for what actually happened.",
 				"- previousDayDiary is a STYLE REFERENCE ONLY. Do not copy or reference any events, facts, or content from it into today's entry.",
-				"- All content for today must come exclusively from the input data (briefingText, completedLines, scheduleLines, diaryAnswers).",
+				"- All content for today must come exclusively from the input data (briefingText, completedLines, scheduleLines, diaryAnswers, qaPairs).",
+				"- qaPairs are the user's own answers to today's reflection questions. Use the answers as personal facts woven naturally into the entry; do not quote the question text verbatim.",
 				"- If previousDayFeedback is provided, apply those preferences (e.g. what to include or exclude) to today's entry.",
 				"",
 				"Input data:",

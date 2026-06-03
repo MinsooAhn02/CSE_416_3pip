@@ -950,7 +950,7 @@ Trends: no interest injection — global/domestic real-time trends only.
 | News query | Top-5 keywords inserted into Tavily query | `useDataStore.js` |
 | Simple AI briefing | `keywordInterests` → `Interest guidance:` line in Groq prompt | `aiService.generateBriefing()` |
 | Diary Q&A question | `fixedInterestIds` → `INTEREST_TOPIC_MAP` → 1 interest + 1 general topic | `aiService.generatePersonalizedQuestion()` |
-| Auto diary generation | `interests` + `briefingSnapshots` + `previousDayDiary/Feedback` → `promptContext` | `aiService.generateDiary()` |
+| Auto diary generation | `interests` + `briefingSnapshots` + `previousDayDiary/Feedback` → `promptContext`; `user_qa` Q&A pairs (question+answer, context-only) now also fed as `qaPairs` | `aiService.generateDiary()` |
 | Persona context | `fixedInterestIds` + `keywordInterests` merged → `interests[]` | `personaContext.buildPersonaContext()` |
 | Q&A answer save | Token extraction → `bumpKeyword(kw, "qa", 5)` | `DiaryCard.jsx` |
 | Note save | Token extraction → `bumpKeyword(kw, "note", 10)` | `DiaryPanel.jsx` |
@@ -968,6 +968,7 @@ New day, first login
                   - briefingSnapshots: time-stamped texts (max 6, first 200 chars each) + up to 8 `[Headlines]` lines extracted from `snapshot.sections.latest_info` (news + trends + smart titles)
                   - previousDayDiary: prior day diary (max 400 chars)
                   - previousDayFeedback: prior day cumulative feedback (max 200 chars)
+                  - qaPairs: today's user_qa question/answer pairs (context only)
               └─ aiService.generateDiary() → Groq → diaryText
               └─ useDiaryStore.saveGeneratedDiary(date, diaryText)
               └─ useBriefingHistoryStore.clearDate(date)

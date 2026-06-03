@@ -186,6 +186,7 @@ interface DiaryState {
 
 	addAnswer: (dateStr: string, question: string, answer: string) => Promise<void>;
 	fetchTodayQA: () => Promise<void>;
+	fetchQAForDate: (dateStr: string) => Promise<{ question: string; answer: string }[]>;
 	getAnswers: (dateStr: string) => string[];
 
 	hydrateFromDB: () => Promise<void>;
@@ -652,6 +653,20 @@ export const useDiaryStore = create<DiaryState>()((set, get) => ({
 			.eq("asked_date", todayStr())
 			.order("created_at", { ascending: true });
 		if (data) set({ todayQA: data as { question: string; answer: string }[] });
+	},
+
+	/** 특정 날짜의 Q&A 쌍을 user_qa 테이블에서 읽기 전용으로 조회 */
+	fetchQAForDate: async (dateStr) => {
+		if (!supabase) return [];
+		const { data: { user } } = await supabase.auth.getUser();
+		if (!user) return [];
+		const { data } = await supabase
+			.from("user_qa")
+			.select("question, answer")
+			.eq("user_id", user.id)
+			.eq("asked_date", dateStr)
+			.order("created_at", { ascending: true });
+		return (data ?? []) as { question: string; answer: string }[];
 	},
 
 	/** 특정 날짜의 답변 가져오기 (레거시 호환) */
