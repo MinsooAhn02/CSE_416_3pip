@@ -219,7 +219,13 @@ export const useDiaryStore = create<DiaryState>()((set, get) => ({
 		}
 		const hashed = await hashPin(pin);
 		save(PIN_KEY, hashed);
-		set({ pinSet: true });
+		clearPersistedPinSession();
+		const pinLockMode = getPinLockMode();
+		set({
+			pinSet: true,
+			isPinAuthenticated: pinLockMode === "off",
+			pinAuthExpiresAt: null,
+		});
 	},
 
 	verifyPIN: async (pin) => {
@@ -312,7 +318,7 @@ export const useDiaryStore = create<DiaryState>()((set, get) => ({
 
 		if (pinLockMode === "immediate") {
 			clearPersistedPinSession();
-			set({ pinAuthExpiresAt: null });
+			set({ isPinAuthenticated: false, pinAuthExpiresAt: null });
 			return;
 		}
 
