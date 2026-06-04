@@ -1340,7 +1340,8 @@ export const useDataStore = create<DataState>()((set, get) => ({
 		// 좌표를 소수점 1자리로 반올림 → 동일 지역 캐시 재사용
 		const rLat = Math.round(lat * 10) / 10;
 		const rLon = Math.round(lon * 10) / 10;
-		const cacheKey = `weather_${rLat}_${rLon}`;
+		const lang = i18n.language?.startsWith("ko") ? "ko" : "en";
+		const cacheKey = `weather_${rLat}_${rLon}_${lang}`;
 
 		// ✅ 캐시 우선 확인
 		if (!force) {
@@ -1360,7 +1361,7 @@ export const useDataStore = create<DataState>()((set, get) => ({
 		}));
 		try {
 			// OpenWeatherMap Edge Function 호출 (lang 전달 → 현지화 condition/city)
-			const edge = await invokeEdgeDetailed("weather", { lat: rLat, lon: rLon, lang: i18n.language });
+			const edge = await invokeEdgeDetailed("weather", { lat: rLat, lon: rLon, lang });
 			const edgeData = edge?.data as Record<string, unknown> | null;
 
 			if (edge?.ok && edgeData && !edgeData.error) {
