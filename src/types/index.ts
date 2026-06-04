@@ -33,6 +33,7 @@ export interface WeatherData {
 	city?: string;
 	temp?: number;
 	condition?: string;
+	conditionId?: number;
 	precipitation?: number;
 	icon?: string;
 	humidity?: number;

@@ -16,37 +16,40 @@ serve(async (req) => {
 		if (!apiKey) throw new Error("OPENWEATHER_API_KEY not set");
 
 		const baseUrl = "https://api.openweathermap.org/data/2.5";
+		const geoUrl = "https://api.openweathermap.org/geo/1.0";
 
-		// OpenWeather lang 코드 매핑 (ko → ko, others → en)
-		const owLang = lang === "ko" ? "ko" : "en";
-
-		// city 이름으로 검색하면 lat/lon은 응답에서 추출
 		const weatherQuery = city
 			? `q=${encodeURIComponent(city)}`
 			: `lat=${lat}&lon=${lon}`;
 
+		// 날씨는 항상 영어로 받음 — 번역은 클라이언트에서 처리
 		const weatherRes = await fetch(
-			`${baseUrl}/weather?${weatherQuery}&units=metric&lang=${owLang}&appid=${apiKey}`,
+			`${baseUrl}/weather?${weatherQuery}&units=metric&lang=en&appid=${apiKey}`,
 		);
 		if (!weatherRes.ok) throw new Error(`OpenWeather ${weatherRes.status}`);
 		const data = await weatherRes.json();
 
-		// city 검색 시 실제 좌표를 응답에서 추출해 AQI 조회
 		const coordLat = data.coord?.lat ?? lat;
 		const coordLon = data.coord?.lon ?? lon;
 
-		// 날씨 + 대기질 병렬 호출
-		const [, aqRes] = await Promise.all([
-			Promise.resolve(),
+		// AQ + 한국어 도시명 역지오코딩 병렬 호출
+		const [aqRes, geoRes] = await Promise.all([
 			fetch(`${baseUrl}/air_pollution?lat=${coordLat}&lon=${coordLon}&appid=${apiKey}`),
+			lang === "ko"
+				? fetch(`${geoUrl}/reverse?lat=${coordLat}&lon=${coordLon}&limit=1&appid=${apiKey}`)
+				: Promise.resolve(null),
 		]);
 
 		const aqData = aqRes.ok ? await aqRes.json() : null;
+		const geoData = geoRes?.ok ? await geoRes.json() : null;
 
-		// 대기질 인덱스 (1~5) — 라벨링은 클라이언트에서 i18n으로 처리
+		// 한국어 도시명: Geocoding local_names.ko 우선, 없으면 영어 그대로
+		const cityName = (lang === "ko" && Array.isArray(geoData) && geoData[0]?.local_names?.ko)
+			? geoData[0].local_names.ko
+			: data.name;
+
 		const airQualityIndex: number = aqData?.list?.[0]?.main?.aqi ?? 0;
 
-		// 강수 확률 추정 (현재날씨 API는 확률 미제공 → 운량 + 강수량으로 추정)
 		const rainVol = (data.rain?.["1h"] ?? data.rain?.["3h"] ?? 0) as number;
 		const snowVol = (data.snow?.["1h"] ?? data.snow?.["3h"] ?? 0) as number;
 		const clouds = (data.clouds?.all ?? 0) as number;
@@ -63,8 +66,9 @@ serve(async (req) => {
 				feels_like: Math.round(data.main.feels_like),
 				humidity: data.main.humidity,
 				condition: data.weather?.[0]?.description ?? "N/A",
+				conditionId: data.weather?.[0]?.id ?? null,
 				icon: data.weather?.[0]?.icon ?? "01d",
-				city: data.name,
+				city: cityName,
 				precipitation,
 				airQualityIndex,
 			}),

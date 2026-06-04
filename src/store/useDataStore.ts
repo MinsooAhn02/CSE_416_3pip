@@ -864,10 +864,12 @@ const normalizeGroqWeather = (payload: unknown): WeatherData | null => {
 	const humidity = Number(p.humidity);
 	const precipitation = Number(p.precipitation);
 	const airQualityIndex = typeof p.airQualityIndex === "number" ? p.airQualityIndex : undefined;
+	const conditionId = typeof p.conditionId === "number" ? p.conditionId : undefined;
 	return {
 		temp: Number.isFinite(temp) ? temp : 20,
 		city: String(p.city || "Seoul"),
 		condition: String(p.condition || p.description || "N/A"),
+		conditionId,
 		precipitation: Number.isFinite(precipitation) ? precipitation : 0,
 		airQuality: p.airQuality ? String(p.airQuality) : undefined,
 		airQualityIndex,
@@ -1098,6 +1100,7 @@ export interface WeatherData {
 	temp: number;
 	city: string;
 	condition: string;
+	conditionId?: number;
 	precipitation: number;
 	airQuality?: string;
 	airQualityIndex?: number;
