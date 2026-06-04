@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { useTheme } from "../../hooks/useTheme";
 import { useSettingsStore } from "../../store/useSettingsStore";
 import { useAuthStore } from "../../store/useAuthStore";
+import { useDataStore } from "../../store/useDataStore";
 import QuickLinks from "./QuickLinks";
 import DiaryListModal from "../modals/DiaryListModal";
 
@@ -12,6 +13,7 @@ const TopNav = () => {
 	const { t, i18n } = useTranslation();
 	const setTheme = useSettingsStore((s) => s.setTheme);
 	const user = useAuthStore((s) => s.user);
+	const fetchWeather = useDataStore((s) => s.fetchWeather);
 
 	const [currentTime, setCurrentTime] = useState<Date>(new Date());
 	const [searchQuery, setSearchQuery] = useState<string>("");
@@ -24,6 +26,7 @@ const TopNav = () => {
 		const newLang = i18n.language === "ko" ? "en" : "ko";
 		i18n.changeLanguage(newLang);
 		localStorage.setItem("language", newLang);
+		fetchWeather(undefined, undefined, undefined, true);
 	};
 
 	// Clock tick
