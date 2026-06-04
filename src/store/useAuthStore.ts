@@ -18,7 +18,7 @@ interface AuthState {
 	reconnectGoogle: () => Promise<boolean>;
 	logout: () => Promise<void>;
 	handleAuthChange: (session: Session | null) => Promise<void>;
-	ensureProviderToken: () => Promise<string | null>;
+	ensureProviderToken: (forceRefresh?: boolean) => Promise<string | null>;
 	loadUserSettings: () => Promise<void>;
 }
 
@@ -124,13 +124,19 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
 		save("mb_login", false);
 	},
 
-	ensureProviderToken: async () => {
-		const existing = get().providerToken;
-		if (existing) return existing;
+	ensureProviderToken: async (forceRefresh = false) => {
+		// forceRefresh: 만료(401)로 강제 갱신 — 캐시/persisted provider_token을 신뢰하지 않음
+		if (!forceRefresh) {
+			const existing = get().providerToken;
+			if (existing) return existing;
+		} else {
+			set({ providerToken: null });
+		}
 
 		if (!supabase) return null;
 
-		if (_pendingProviderTokenRefresh) return _pendingProviderTokenRefresh;
+		// force 갱신은 항상 새 refresh를 시작 (stale 토큰으로 piggyback 방지)
+		if (!forceRefresh && _pendingProviderTokenRefresh) return _pendingProviderTokenRefresh;
 
 		_pendingProviderTokenRefresh = (async () => {
 			try {
@@ -138,14 +144,17 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
 				const {
 					data: { session },
 				} = await supabase.auth.getSession();
-				const token = session?.provider_token ?? null;
 				// session에서 받은 refresh_token을 저장 (있을 때만)
 				if (session?.provider_refresh_token) {
 					set({ providerRefreshToken: session.provider_refresh_token });
 				}
-				if (token) {
-					set({ providerToken: token });
-					return token;
+				// forceRefresh일 땐 persisted provider_token이 만료됐을 수 있으므로 신뢰하지 않음
+				if (!forceRefresh) {
+					const token = session?.provider_token ?? null;
+					if (token) {
+						set({ providerToken: token });
+						return token;
+					}
 				}
 
 				// 2) Supabase 세션 refresh (provider_token은 보통 null로 옴)

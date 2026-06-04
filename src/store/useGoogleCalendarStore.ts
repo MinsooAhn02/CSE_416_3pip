@@ -552,6 +552,23 @@ const invokeGoogleFunction = async (name: string, body: Record<string, unknown>)
 	}
 };
 
+// Google edge 호출 + 인증 실패(401/403) 시 토큰 강제 갱신 후 1회 자동 재시도.
+// 세션 복원으로 provider_token이 만료된 경우 재로그인 없이 복구한다.
+const invokeGoogleWithAuth = async (
+	name: string,
+	body: Record<string, unknown>,
+	token: string,
+): Promise<unknown> => {
+	try {
+		return await invokeGoogleFunction(name, { ...body, token });
+	} catch (err) {
+		if (!isGoogleAuthErrorMessage((err as { message?: string })?.message ?? "")) throw err;
+		const fresh = await useAuthStore.getState().ensureProviderToken?.(true);
+		if (!fresh || fresh === token) throw err; // 새 토큰을 못 받으면 원래 에러 전파
+		return invokeGoogleFunction(name, { ...body, token: fresh });
+	}
+};
+
 const eventMatchesMonth = (event: CalendarEvent, monthKey: string): boolean => {
 	if (!monthKey) return true;
 	return String(event?.date || "").slice(0, 7) === monthKey;
@@ -619,12 +636,11 @@ export const useGoogleCalendarStore = create<GoogleCalendarState>()((set, get) =
 				throw new Error(GOOGLE_SYNC_AUTH_ERROR);
 			}
 
-			const data = await invokeGoogleFunction("events", {
-				token,
+			const data = await invokeGoogleWithAuth("events", {
 				action: "list",
 				timeMin,
 				timeMax,
-			});
+			}, token);
 
 			const events = Array.isArray(data)
 				? (data as unknown[]).map((e) => normalizeEvent(e as Record<string, unknown>))
@@ -678,20 +694,18 @@ export const useGoogleCalendarStore = create<GoogleCalendarState>()((set, get) =
 			const [listsData, data] = await Promise.all([
 				get().taskListsLoaded && hasRealTaskLists(get().taskLists)
 					? Promise.resolve(get().taskLists)
-					: invokeGoogleFunction("tasks", {
-						token,
+					: invokeGoogleWithAuth("tasks", {
 						action: "listTaskLists",
-					}).catch((err) => {
+					}, token).catch((err) => {
 						console.warn("[gcal] listTaskLists failed, using fallback:", err);
 						return FALLBACK_TASK_LISTS;
 					}),
-				invokeGoogleFunction("tasks", {
-					token,
+				invokeGoogleWithAuth("tasks", {
 					action: "list",
 					showCompleted: true,
 					showHidden: true,
 					allTaskLists: true,
-				}),
+				}, token),
 			]);
 
 			const tasks = Array.isArray(data) ? (data as unknown[]).map(normalizeTask) : [];
@@ -758,10 +772,9 @@ export const useGoogleCalendarStore = create<GoogleCalendarState>()((set, get) =
 				});
 				return FALLBACK_TASK_LISTS;
 			}
-			const data = await invokeGoogleFunction("tasks", {
-				token,
+			const data = await invokeGoogleWithAuth("tasks", {
 				action: "listTaskLists",
-			});
+			}, token);
 			const lists = normalizeTaskListsPayload(data);
 			const selectedTaskListFilter = resolveTaskListFilterId(
 				get().selectedTaskListFilter,
@@ -803,11 +816,10 @@ export const useGoogleCalendarStore = create<GoogleCalendarState>()((set, get) =
 			if (supabase) {
 				const token = await getProviderToken();
 				if (!token) throw new Error(GOOGLE_SYNC_AUTH_ERROR);
-				const data = await invokeGoogleFunction("tasks", {
-					token,
+				const data = await invokeGoogleWithAuth("tasks", {
 					action: "createTaskList",
 					title: trimmedTitle,
-				}) as Record<string, unknown> | null;
+				}, token) as Record<string, unknown> | null;
 				created = {
 					id: String(data?.id || created.id).trim() || created.id,
 					title: String(data?.title || trimmedTitle).trim() || trimmedTitle,
@@ -871,11 +883,10 @@ export const useGoogleCalendarStore = create<GoogleCalendarState>()((set, get) =
 			const token = await getProviderToken();
 			if (!token) throw new Error(GOOGLE_SYNC_AUTH_ERROR);
 
-			const data = await invokeGoogleFunction("events", {
-				token,
+			const data = await invokeGoogleWithAuth("events", {
 				action: "read",
 				eventId,
-			});
+			}, token);
 			return data ? normalizeEvent(data as Record<string, unknown>) : null;
 		} catch (err) {
 			set({
@@ -899,12 +910,11 @@ export const useGoogleCalendarStore = create<GoogleCalendarState>()((set, get) =
 			if (supabase) {
 				const token = await getProviderToken();
 				if (!token) throw new Error(GOOGLE_SYNC_AUTH_ERROR);
-				const data = await invokeGoogleFunction("events", {
-					token,
+				const data = await invokeGoogleWithAuth("events", {
 					action: "create",
 					...(normalizedEvent as unknown as Record<string, unknown>),
 					timeZone: getLocalTimeZone(),
-				});
+				}, token);
 				created = normalizeEvent(data as Record<string, unknown>);
 				await get().fetchEvents({
 					date: normalizedEvent.date || get().selectedDate || formatLocalDate(),
@@ -975,13 +985,12 @@ export const useGoogleCalendarStore = create<GoogleCalendarState>()((set, get) =
 			if (supabase) {
 				const token = await getProviderToken();
 				if (!token) throw new Error(GOOGLE_SYNC_AUTH_ERROR);
-				const data = await invokeGoogleFunction("events", {
-					token,
+				const data = await invokeGoogleWithAuth("events", {
 					action: "update",
 					eventId,
 					...(merged as unknown as Record<string, unknown>),
 					timeZone: getLocalTimeZone(),
-				});
+				}, token);
 				updated = normalizeEvent(data as Record<string, unknown>);
 				await get().fetchEvents({
 					date: merged.date || get().selectedDate || formatLocalDate(),
@@ -1020,11 +1029,10 @@ export const useGoogleCalendarStore = create<GoogleCalendarState>()((set, get) =
 			if (supabase) {
 				const token = await getProviderToken();
 				if (!token) throw new Error(GOOGLE_SYNC_AUTH_ERROR);
-				await invokeGoogleFunction("events", {
-					token,
+				await invokeGoogleWithAuth("events", {
 					action: "delete",
 					eventId,
-				});
+				}, token);
 				await get().fetchEvents({
 					date: current?.date || get().selectedDate || formatLocalDate(),
 					force: true,
@@ -1079,12 +1087,11 @@ export const useGoogleCalendarStore = create<GoogleCalendarState>()((set, get) =
 			if (supabase) {
 				const token = await getProviderToken();
 				if (!token) throw new Error(GOOGLE_SYNC_AUTH_ERROR);
-				const data = await invokeGoogleFunction("tasks", {
-					token,
+				const data = await invokeGoogleWithAuth("tasks", {
 					action: "create",
 					taskListId,
 					...payload,
-				}) as Record<string, unknown> | null;
+				}, token) as Record<string, unknown> | null;
 				created = normalizeTask({
 					...normalizedTask,
 					...(data || {}),
@@ -1157,21 +1164,19 @@ export const useGoogleCalendarStore = create<GoogleCalendarState>()((set, get) =
 				const token = await getProviderToken();
 				if (!token) throw new Error(GOOGLE_SYNC_AUTH_ERROR);
 				if (currentTaskListId !== taskListId) {
-					await invokeGoogleFunction("tasks", {
-						token,
+					await invokeGoogleWithAuth("tasks", {
 						action: "move",
 						taskId,
 						sourceTaskListId: currentTaskListId,
 						destinationTaskListId: taskListId,
-					});
+					}, token);
 				}
-				const data = await invokeGoogleFunction("tasks", {
-					token,
+				const data = await invokeGoogleWithAuth("tasks", {
 					action: "update",
 					taskId,
 					taskListId,
 					...payload,
-				}) as Record<string, unknown> | null;
+				}, token) as Record<string, unknown> | null;
 				updated = normalizeTask({
 					...merged,
 					...(data || {}),
@@ -1210,12 +1215,11 @@ export const useGoogleCalendarStore = create<GoogleCalendarState>()((set, get) =
 			if (supabase) {
 				const token = await getProviderToken();
 				if (!token) throw new Error(GOOGLE_SYNC_AUTH_ERROR);
-				await invokeGoogleFunction("tasks", {
-					token,
+				await invokeGoogleWithAuth("tasks", {
 					action: "delete",
 					taskId,
 					taskListId: current?.taskListId || "@default",
-				});
+				}, token);
 			}
 
 			const nextLocalTasks = (readLocalTasks() as unknown[])

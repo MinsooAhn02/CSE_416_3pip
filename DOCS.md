@@ -370,7 +370,9 @@ graph TD
 | `perms` | `{fit, cal}` | DB (`user_settings.onboarding_perms`) |
 | `persona` | string | DB (`user_settings.persona`) |
 
-**Key actions:** `login()` (Google OAuth, `prompt:"select_account"`, `access_type:"offline"`), `logout()`, `handleAuthChange(session)`, `ensureProviderToken()` (memory cache → `getSession()` → `refreshSession()`), `loadUserSettings()`, `finishOB()`.
+**Key actions:** `login()` (Google OAuth, `prompt:"select_account"`, `access_type:"offline"`), `logout()`, `handleAuthChange(session)`, `ensureProviderToken(forceRefresh?)`, `loadUserSettings()`, `finishOB()`.
+
+> **`ensureProviderToken(forceRefresh?)`** — 기본 동작: memory cache → `getSession()` → `refreshSession()` → `google-refresh` edge 함수. `forceRefresh: true`이면 캐시된 토큰과 `getSession()`이 돌려주는 persisted `provider_token`을 **신뢰하지 않고**(둘 다 만료됐을 수 있음) 곧장 `refreshSession()` / `google-refresh`로 새 Google access token을 발급한다. 세션 복원 후 만료된 토큰으로 인한 401을 복구하는 데 쓰인다 (§5.8 `useGoogleCalendarStore`의 `invokeGoogleWithAuth` 참고).
 
 ---
 
@@ -528,6 +530,8 @@ Ownership of the multi-step onboarding flow lives here; `OnboardingModal.tsx` re
 **State:** `events`, `tasks`, `taskLists`, `selectedDate`, `loading`, `error`
 
 **Key actions:** `fetchEvents()` (month-scoped, fails → local cache fallback), `fetchTasks()`, `addTask / updateTask / deleteTask` (Google Tasks API — `title`, `notes`, `due`, `completed`, `taskListId`).
+
+> **인증 재시도** — 모든 Google edge 호출(`events`/`tasks`)은 `invokeGoogleWithAuth(name, body, token)` 래퍼를 경유한다. 응답이 인증 오류(401/403, `isGoogleAuthErrorMessage`로 판별)면 `ensureProviderToken(true)`로 토큰을 강제 갱신한 뒤 **1회 자동 재시도**한다. 세션이 복원돼 `provider_token`이 만료된 경우(예: 다음 날 앱 재진입) 재로그인 없이 복구되어, 이전 달 이벤트가 빈 화면으로 남던 버그를 방지한다.
 
 Legacy `[MB_META]...[/MB_META]` task metadata is stripped on read; no longer written.
 
