@@ -168,13 +168,33 @@ const SettingsModal = () => {
 	};
 
 	// Get widget labels for priority display
-	const getWidgetLabel = (widgetId: string) =>
-		t(`settings_modal.widget_names.${widgetId}`, { defaultValue: widgetId });
+	const getWidgetLabel = (widgetId: string) => {
+		if (widgetId.startsWith("smart_")) {
+			const kw = widgetId.slice(6);
+			return `✨ ${kw}`;
+		}
+		return t(`settings_modal.widget_names.${widgetId}`, { defaultValue: widgetId });
+	};
+
+	// Effective priority order: core widgets + individual smart widgets
+	const effectivePriorityOrder = useMemo(() => {
+		// Remove legacy "smart" group entry, keep individual smart_xxx entries
+		const withoutSmartGroup = priorityOrder.filter((id) => id !== "smart");
+		// Append any new smart keywords not yet in the order
+		const existing = new Set(withoutSmartGroup);
+		const result = [...withoutSmartGroup];
+		for (const kw of smartKeywords) {
+			if (!existing.has(`smart_${kw}`)) result.push(`smart_${kw}`);
+		}
+		// Remove entries for smart keywords that no longer exist
+		const validSmartIds = new Set(smartKeywords.map((kw) => `smart_${kw}`));
+		return result.filter((id) => !id.startsWith("smart_") || validSmartIds.has(id));
+	}, [priorityOrder, smartKeywords]);
 
 	// Handle priority DnD reorder
 	const handlePriorityDragEnd = (result: { destination?: { index: number } | null; source: { index: number } }) => {
 		if (!result.destination) return;
-		const newOrder = Array.from(priorityOrder);
+		const newOrder = Array.from(effectivePriorityOrder);
 		const [removed] = newOrder.splice(result.source.index, 1);
 		newOrder.splice(result.destination.index, 0, removed);
 		setPriorityOrder(newOrder);
@@ -645,7 +665,7 @@ const SettingsModal = () => {
 												{...provided.droppableProps}
 												className="space-y-2"
 											>
-												{priorityOrder.map((widgetId, index) => (
+												{effectivePriorityOrder.map((widgetId, index) => (
 													<Draggable
 														key={widgetId}
 														draggableId={widgetId}
@@ -692,7 +712,7 @@ const SettingsModal = () => {
 									</Droppable>
 								</DragDropContext>
 								<button
-									onClick={() => setPriorityOrder(DEFAULT_PRIORITY_ORDER)}
+									onClick={() => setPriorityOrder([...DEFAULT_PRIORITY_ORDER, ...smartKeywords.map((kw) => `smart_${kw}`)])}
 									className={`w-full p-3 rounded-xl text-sm font-medium transition-colors ${
 										isDark
 											? "bg-white/5 hover:bg-white/10"

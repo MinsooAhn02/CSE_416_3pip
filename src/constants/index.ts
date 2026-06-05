@@ -29,7 +29,8 @@ export const STANDARD_WIDGETS = [
 ];
 
 // Default priority order for Standard Widgets (REQ-US-006)
-export const DEFAULT_PRIORITY_ORDER = ["weather", "stocks", "trends", "health", "news", "smart"];
+// Note: smart widgets are user-defined and appended dynamically; "smart" is not included here
+export const DEFAULT_PRIORITY_ORDER = ["weather", "stocks", "trends", "health", "news"];
 
 export const WIDGET_LIST = [
 	{ id: "health", label: "Health (Google Fit)", category: "core" },

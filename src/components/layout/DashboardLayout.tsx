@@ -81,13 +81,30 @@ const DashboardLayout = () => {
 	/* Build ordered list of widget IDs (respects priorityOrder + vis) */
 	const expandedWidgetOrder = useMemo(() => {
 		const list: string[] = [];
+		const seenSmartKws = new Set<string>();
 		priorityOrder.forEach((id: string) => {
+			// Legacy: "smart" group entry → expand to all keywords
 			if (id === "smart") {
-				(smartKeywords ?? []).forEach((kw: string) => list.push(`smart_${kw}`));
+				(smartKeywords ?? []).forEach((kw: string) => {
+					if (!seenSmartKws.has(kw)) { seenSmartKws.add(kw); list.push(`smart_${kw}`); }
+				});
+				return;
+			}
+			// Individual smart widget entry
+			if (id.startsWith("smart_")) {
+				const kw = id.slice(6);
+				if ((smartKeywords ?? []).includes(kw) && !seenSmartKws.has(kw)) {
+					seenSmartKws.add(kw);
+					list.push(id);
+				}
 				return;
 			}
 			if (vis[id] === false) return;
 			list.push(id);
+		});
+		// Append any smart keywords not yet accounted for
+		(smartKeywords ?? []).forEach((kw: string) => {
+			if (!seenSmartKws.has(kw)) list.push(`smart_${kw}`);
 		});
 		return list;
 	}, [priorityOrder, smartKeywords, vis]);
