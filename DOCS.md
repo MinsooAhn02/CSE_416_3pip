@@ -1,6 +1,6 @@
 # MorningBriefing.AI — Developer Reference
 
-> Last updated: 2026-06-02
+> Last updated: 2026-06-05
 > Single source of truth for architecture. Change log → [CHANGELOG.md](./CHANGELOG.md).
 > Architecture diagrams (auth flow, onboarding, store map, fetch pipeline) inlined in §4–§6. Original standalone file archived at [archive/ARCHITECTURE.md](./archive/ARCHITECTURE.md).
 
@@ -1115,7 +1115,7 @@ npx wrangler deploy
 
 1. Confirm all environment variables are set
 2. Verify Auth/DB/RLS policies are in place
-3. Confirm Edge Functions are deployed (especially `stocks`, `groq` after recent changes)
+3. Confirm Edge Functions are deployed (`stocks` and `groq` last deployed 2026-06-04)
 4. Confirm all migrations have been run (`add_personalization.sql`, `add_user_qa.sql`, `add_fixed_interests.sql`)
 
 ### Runtime verification
