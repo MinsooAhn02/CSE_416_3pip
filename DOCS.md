@@ -1143,14 +1143,11 @@ npx wrangler deploy
 
 | Item | Status |
 |------|--------|
-| Google Calendar live API sync | Edge Function implemented; frontend store partially mock-based |
 | Google Fitness live API sync | Edge Function implemented; live token connection needed |
 | Voice feature (`voiceOn`) | State exists; no UI or TTS implementation |
 | `NewsDetailModal` | File exists but unused — replaced by direct URL navigation |
 | Trends detail view | News/stocks "view all" modals implemented; trends left/right pagination unimplemented |
 | Diary PIN setup | PIN hashing + storage + verify done; PIN set/modify/recovery UI not yet exposed in settings |
-| Stocks Edge Function deploy | Local modification done (type/currency metadata + validation fixes); needs Supabase Dashboard manual deploy |
-| `groq` Edge Function deploy | `charset=utf-8` header added; needs manual deploy |
 
 **Resolved since 2026-05-22:**
 - ~~Tavily token overuse~~ → ✅ Resolved 2026-05-23 (`86a34a8`): `api_cache` TTL extended 1 h → 6 h
@@ -1173,6 +1170,12 @@ npx wrangler deploy
 - ~~이슈 16: 창 축소 시 사이드바~~ → ✅ resize 리스너 1200px 미만 자동 닫힘
 - ~~이슈 17: Tavily API 효율~~ → ✅ edge function 배치 지원, `searchSmartSectionsBatched` (N호출→1-2호출)
 - ~~이슈 18: Google 연결 끊김~~ → ✅ `google-refresh` edge function, `providerRefreshToken` 저장/교환 (requires `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` in Supabase secrets)
+
+**Resolved 2026-06-04:**
+- ~~Google Calendar live API sync~~ → ✅ `invokeGoogleWithAuth` wrapper with auto-retry on 401/403 (`b4ee88a`); `ensureProviderToken(forceRefresh:true)` recovers expired sessions on next-day re-entry without re-login
+- ~~Smart Widget Korean mode (Latest Updates / Latest Coverage not loading)~~ → ✅ Korean article fetch reworked (`4ba0d4b`): `include_domains` opened for non-news sections, `exclude_domains` used to filter low-quality domains
+- ~~Stocks Edge Function deploy~~ → ✅ Manually deployed to Supabase 2026-06-04 (universal-ticker fallback, type/currency metadata, ticker validation live)
+- ~~`groq` Edge Function deploy~~ → ✅ Manually deployed to Supabase 2026-06-04 (`Content-Type: application/json; charset=utf-8` header live; Korean text no longer garbled)
 
 ---
 
@@ -1228,9 +1231,8 @@ Updated 2026-05-29. All five Milestone 4 documentation deliverables complete; Sp
 
 ### Remaining pre-submission items
 
-1. **Stocks + groq Edge Function manual deploys** — Local code is ready; Supabase Dashboard upload pending so the deployed app picks up the universal-ticker fallback (stocks) and `charset=utf-8` header (groq).
-2. **Cross-verification** — Each completed feature verified by a team member who did not implement it; any bugs found should be filed in GitHub Issues.
-3. **Team sign-offs** — Each member signs `Milestone/MILESTONE4_PROGRESS.md`; file copied to Brightspace.
+1. **Cross-verification** — Each completed feature verified by a team member who did not implement it; any bugs found should be filed in GitHub Issues.
+2. **Team sign-offs** — Each member signs `Milestone/MILESTONE4_PROGRESS.md`; file copied to Brightspace.
 
 ---
 

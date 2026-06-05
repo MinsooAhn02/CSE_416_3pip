@@ -5,34 +5,36 @@
 > **After all issues are filed, this file can be deleted.**
 >
 > **Compiled from:** `todo.md` (open items) + `DOCS.md §16` (Known Incomplete Items) as of 2026-05-22.
-> **Last updated:** 2026-05-29 — items #3 (Tavily token overuse) and #15b (briefing timezone) marked ✅ Resolved; 9 retroactive issues filed-and-closed for transparency (see "Closed retroactively" subsection at bottom).
+> **Last updated:** 2026-06-05 — items #1, #8, #15, #16 marked ✅ closed (2026-06-04 fixes); see "Closed 2026-06-04" section at bottom.
 
 ## Tracking Table
 
 | # | GH# | Title | Severity | Suggested Owner | Source |
 |---|-----|-------|----------|-----------------|--------|
-| 1 | [#1](https://github.com/MinsooAhn02/CSE_416_3pip/issues/1) | Smart Widget Korean mode: Latest Updates / Latest Coverage not loading | Major | Minsoo Ahn | todo.md |
+| ~~1~~ | ✅ closed | ~~Smart Widget Korean mode: Latest Updates / Latest Coverage not loading~~ — **Resolved 2026-06-04** (commit `4ba0d4b`): Korean article fetch reworked; `include_domains` opened for non-news sections, low-quality domains excluded. Issue [#1](https://github.com/MinsooAhn02/CSE_416_3pip/issues/1) closed. | ~~Major~~ | — | todo.md |
 | 2 | [#2](https://github.com/MinsooAhn02/CSE_416_3pip/issues/2) | Diary feedback rewrite not applying | Major | Sungmin Choo | todo.md |
 | ~~3~~ | ✅ closed | ~~Tavily token overuse — too many redundant calls~~ — **Resolved 2026-05-23** (commit `86a34a8`): `api_cache` TTL extended 1 h → 6 h cuts redundant Tavily calls by ~6×. Issue [#3](https://github.com/MinsooAhn02/CSE_416_3pip/issues/3) closed retroactively. | ~~Major~~ | — | todo.md |
 | 4 | [#4](https://github.com/MinsooAhn02/CSE_416_3pip/issues/4) | Briefing "Today's latest info" shows generic definitions instead of personalized search | Major | Minsoo Ahn | todo.md |
 | 5 | [#5](https://github.com/MinsooAhn02/CSE_416_3pip/issues/5) | Briefing "Smart keywords: No keyword info collected yet" — unclear when it populates | Minor | Sungmin Choo | todo.md |
 | 6 | [#6](https://github.com/MinsooAhn02/CSE_416_3pip/issues/6) | Google integration toggle (연동 끄기) not working; consider removing the option | Minor | Sungmin Choo | todo.md |
 | 7 | [#7](https://github.com/MinsooAhn02/CSE_416_3pip/issues/7) | Verify smart widget keywords are reflected in personalization context | Minor | Sungmin Choo | todo.md |
-| 8 | [#8](https://github.com/MinsooAhn02/CSE_416_3pip/issues/8) | Google Calendar live API sync — frontend store still partially mock-based | Major | Sungmin Choo | DOCS.md §16 |
+| ~~8~~ | ✅ closed | ~~Google Calendar live API sync — frontend store still partially mock-based~~ — **Resolved 2026-06-04** (commit `b4ee88a`): `invokeGoogleWithAuth` wrapper with auto-retry on 401/403; `ensureProviderToken(forceRefresh:true)` recovers expired sessions without re-login. Issue [#8](https://github.com/MinsooAhn02/CSE_416_3pip/issues/8) closed. | ~~Major~~ | — | DOCS.md §16 |
 | 9 | [#9](https://github.com/MinsooAhn02/CSE_416_3pip/issues/9) | Google Fitness live API sync — Edge Function implemented but live token connection missing | Major | Minsoo Ahn | DOCS.md §16 |
 | 10 | [#10](https://github.com/MinsooAhn02/CSE_416_3pip/issues/10) | Voice feature (`voiceOn`) — state exists but no UI or TTS implementation | Minor | Dahyun Kwon | DOCS.md §16 |
 | ~~11~~ | ✅ resolved | ~~`keyword_score_log` aggregation — internal batch logic unverified~~ — **Resolved 2026-05-22:** implementation verified in `src/services/personalizationService.js` (`VALID_CATEGORIES`, `SOURCE_WEIGHTS = {personal: 2, diary: 1}` matching spec). Do not file. | ~~Minor~~ | — | — |
 | 12 | [#11](https://github.com/MinsooAhn02/CSE_416_3pip/issues/11) | `NewsDetailModal` file exists but unused — should be removed | Trivial | Dahyun Kwon | DOCS.md §16 |
 | 13 | [#12](https://github.com/MinsooAhn02/CSE_416_3pip/issues/12) | Trends widget — no detail view / pagination implemented | Minor | Dahyun Kwon | DOCS.md §16 |
 | 14 | [#13](https://github.com/MinsooAhn02/CSE_416_3pip/issues/13) | Diary PIN setup flow — save/modify in settings and self-verification question unimplemented | Major | Sungmin Choo | DOCS.md §16 |
-| 15 | [#14](https://github.com/MinsooAhn02/CSE_416_3pip/issues/14) | Stocks Edge Function — local changes pending manual deploy via Supabase Dashboard | Major | Minsoo Ahn | DOCS.md §16 |
-| 16 | [#15](https://github.com/MinsooAhn02/CSE_416_3pip/issues/15) | `groq` Edge Function — `charset=utf-8` header pending manual deploy | Minor | Minsoo Ahn | DOCS.md §16 |
+| ~~15~~ | ✅ closed | ~~Stocks Edge Function — local changes pending manual deploy via Supabase Dashboard~~ — **Resolved 2026-06-04**: manually deployed to Supabase; universal-ticker fallback, type/currency metadata, and ticker validation now live. Issue [#14](https://github.com/MinsooAhn02/CSE_416_3pip/issues/14) closed. | ~~Major~~ | — | DOCS.md §16 |
+| ~~16~~ | ✅ closed | ~~`groq` Edge Function — `charset=utf-8` header pending manual deploy~~ — **Resolved 2026-06-04**: manually deployed to Supabase; `Content-Type: application/json; charset=utf-8` header now live. Issue [#15](https://github.com/MinsooAhn02/CSE_416_3pip/issues/15) closed. | ~~Minor~~ | — | DOCS.md §16 |
 
 ---
 
 ## Issue Drafts (copy-paste into GitHub Issues)
 
-### Issue 1: Smart Widget Korean mode: Latest Updates / Latest Coverage not loading
+### ~~Issue 1: Smart Widget Korean mode: Latest Updates / Latest Coverage not loading~~ ✅ CLOSED 2026-06-04
+
+> **Resolved** by commit `4ba0d4b` (Dahyun Kwon, 2026-06-04): Korean article fetch reworked in `aiService.ts` — `include_domains` opened for non-news sections, `exclude_domains` used for low-quality domains, freshness window set to 1 year. Close GH [#1](https://github.com/MinsooAhn02/CSE_416_3pip/issues/1).
 
 **Title:** `[BUG] Smart Widget Korean mode: Latest Updates / Latest Coverage not loading`
 **Labels:** `bug`, `smart-widget`, `i18n`
@@ -167,7 +169,9 @@ Add a debug log or unit test to verify the data flow.
 
 ---
 
-### Issue 8: Google Calendar — replace mock fallback with live API
+### ~~Issue 8: Google Calendar — replace mock fallback with live API~~ ✅ CLOSED 2026-06-04
+
+> **Resolved** by commit `b4ee88a` (Sungmin Choo, 2026-06-04): `invokeGoogleWithAuth` wrapper added to `useGoogleCalendarStore`; auto-retries on 401/403 with `ensureProviderToken(forceRefresh:true)`. Sessions restored on next-day re-entry without re-login. Close GH [#8](https://github.com/MinsooAhn02/CSE_416_3pip/issues/8).
 
 **Title:** `[BUG] Google Calendar — `useGoogleCalendarStore` still has partial mock fallback paths`
 **Labels:** `bug`, `calendar`, `tech-debt`
@@ -275,7 +279,9 @@ Diary PIN is currently hashed with SHA-256 on save (good), but there's no UI to:
 
 ---
 
-### Issue 15: Stocks Edge Function — manual deploy pending
+### ~~Issue 15: Stocks Edge Function — manual deploy pending~~ ✅ CLOSED 2026-06-04
+
+> **Resolved**: manually deployed to Supabase 2026-06-04. Universal-ticker fallback, type/currency metadata, and ticker validation (`price > 0`) are now live. Close GH [#14](https://github.com/MinsooAhn02/CSE_416_3pip/issues/14).
 
 **Title:** `[DEPLOY] Stocks Edge Function changes pending deployment`
 **Labels:** `deployment`, `stocks`
@@ -320,7 +326,9 @@ Local `supabase/functions/stocks/index.ts` has been significantly overhauled but
 
 ---
 
-### Issue 16: groq Edge Function — manual deploy pending
+### ~~Issue 16: groq Edge Function — manual deploy pending~~ ✅ CLOSED 2026-06-04
+
+> **Resolved**: manually deployed to Supabase 2026-06-04. `Content-Type: application/json; charset=utf-8` header is now live; Korean text no longer garbled. Close GH [#15](https://github.com/MinsooAhn02/CSE_416_3pip/issues/15).
 
 **Title:** `[DEPLOY] groq Edge Function `charset=utf-8` header pending deployment`
 **Labels:** `deployment`, `groq`, `i18n`
@@ -335,6 +343,19 @@ Local change to `supabase/functions/groq/index.ts` adds `Content-Type: applicati
 - After deploy, generate a Korean AI briefing → confirm no character garbling.
 
 **Reference:** `DOCS.md §16`
+
+---
+
+## Closed 2026-06-04
+
+The following issues were fixed in code or deployed on 2026-06-04. Update GitHub Issues to close these.
+
+| Local ref | Title | Severity | Resolution | GH# |
+|-----------|-------|----------|------------|-----|
+| #1 | Smart Widget Korean mode: Latest Updates not loading | Major | Commit `4ba0d4b` — Korean article fetch reworked | [#1](https://github.com/MinsooAhn02/CSE_416_3pip/issues/1) |
+| #8 | Google Calendar live API sync — partial mock | Major | Commit `b4ee88a` — `invokeGoogleWithAuth` auto-retry | [#8](https://github.com/MinsooAhn02/CSE_416_3pip/issues/8) |
+| #15 | Stocks Edge Function pending deploy | Major | Manually deployed to Supabase 2026-06-04 | [#14](https://github.com/MinsooAhn02/CSE_416_3pip/issues/14) |
+| #16 | groq Edge Function `charset=utf-8` pending deploy | Minor | Manually deployed to Supabase 2026-06-04 | [#15](https://github.com/MinsooAhn02/CSE_416_3pip/issues/15) |
 
 ---
 
