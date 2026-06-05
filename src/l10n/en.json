@@ -147,7 +147,13 @@
     "profile_tab": {
       "no_login": "No login info",
       "restart_onboarding": "🔄 Restart onboarding",
-      "profile_alt": "Profile"
+      "profile_alt": "Profile",
+      "connected_services": "Connected Services",
+      "connected_services_desc": "Toggle to enable or disable Google service integrations.",
+      "google_calendar": "Google Calendar",
+      "google_calendar_desc": "Sync your Google Calendar events",
+      "google_fit": "Google Fit",
+      "google_fit_desc": "Sync your Google Fit health data"
     },
     "priority_tab": {
       "title": "Data priority",

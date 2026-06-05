@@ -123,13 +123,14 @@ const SettingsModal = () => {
 		newKeyword,
 		globalFontSize,
 		toggleVis,
+		setVis,
 		setNewKeyword,
 		setGlobalFontSize,
 		addSmartWidget,
 		removeSmartWidget,
 	} = useWidgetStore();
 	const { logout } = useAuthStore();
-	const { setShowOnboarding, setObStep, setOnboarded } = useOnboardingStore();
+	const { setShowOnboarding, setObStep, setOnboarded, perms, savePerm } = useOnboardingStore();
 	const pinSet = useDiaryStore((s) => s.pinSet);
 	const applyPinLockMode = useDiaryStore((s) => s.applyPinLockMode);
 
@@ -286,7 +287,7 @@ const SettingsModal = () => {
 								<p className={`text-xs mb-2 ${muted}`}>
 									{t("settings_modal.widgets_tab.intro")}
 								</p>
-								{WIDGET_LIST.filter((w) => w.category === "core" && w.id !== "briefing").map((w) => (
+								{WIDGET_LIST.filter((w) => w.category === "core" && w.id !== "briefing" && w.id !== "health" && w.id !== "calendar").map((w) => (
 									<div
 										key={w.id}
 										className={`flex items-center justify-between p-3 rounded-xl ${isDark ? "bg-white/5" : "bg-gray-50"}`}
@@ -629,6 +630,37 @@ const SettingsModal = () => {
 												t("settings_modal.profile_tab.no_login")}
 										</p>
 									</div>
+								</div>
+								<div
+									className={`rounded-2xl border p-4 space-y-3 ${isDark ? "border-white/10 bg-white/5" : "border-gray-200 bg-gray-50"}`}
+								>
+									<div>
+										<p className="text-sm font-medium">
+											{t("settings_modal.profile_tab.connected_services")}
+										</p>
+										<p className={`text-xs mt-1 ${muted}`}>
+											{t("settings_modal.profile_tab.connected_services_desc")}
+										</p>
+									</div>
+									{[
+										{ key: "cal" as const, visId: "calendar", label: t("settings_modal.profile_tab.google_calendar"), desc: t("settings_modal.profile_tab.google_calendar_desc") },
+										{ key: "fit" as const, visId: "health", label: t("settings_modal.profile_tab.google_fit"), desc: t("settings_modal.profile_tab.google_fit_desc") },
+									].map(({ key, visId, label, desc }) => (
+										<div key={key} className={`flex items-center justify-between p-3 rounded-xl ${isDark ? "bg-white/5" : "bg-white border border-gray-200"}`}>
+											<div>
+												<p className="text-sm font-medium">{label}</p>
+												<p className={`text-xs ${muted}`}>{desc}</p>
+											</div>
+											<Toggle
+												on={perms[key]}
+												onToggle={() => {
+													const next = !perms[key];
+													savePerm(key, next);
+													setVis((prev) => ({ ...prev, [visId]: next }));
+												}}
+											/>
+										</div>
+									))}
 								</div>
 								<button
 									onClick={() => {
