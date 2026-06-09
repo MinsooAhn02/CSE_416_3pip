@@ -1,6 +1,6 @@
 # MorningBriefing.AI — Developer Reference
 
-> Last updated: 2026-06-05
+> Last updated: 2026-06-09
 > Single source of truth for architecture. Change log → [CHANGELOG.md](./CHANGELOG.md).
 > Architecture diagrams (auth flow, onboarding, store map, fetch pipeline) inlined in §4–§6. Original standalone file archived at [archive/ARCHITECTURE.md](./archive/ARCHITECTURE.md).
 
@@ -57,14 +57,17 @@ Browser
 ├── Supabase (BaaS)
 │   ├── Auth  ←─ Google OAuth
 │   ├── Postgres + RLS  ←─ user data (8 tables)
-│   └── Edge Functions (Deno)  ←─ secret-holding API proxy (8 functions)
+│   └── Edge Functions (Deno)  ←─ secret-holding API proxy (9 functions)
 │
 └── External APIs (all behind Edge Functions, secrets never in browser)
     ├── Google Calendar / Tasks / Fit  (OAuth-gated)
+    ├── Google OAuth token refresh  (google-refresh)
     ├── OpenWeatherMap
     ├── TwelveData / Yahoo / Stooq  (stocks)
     ├── Tavily Search
     └── Groq LLM
+
+(Google Maps Places JS API loads directly in the browser via VITE_GOOGLE_MAPS_API_KEY — location autocomplete only, not behind an Edge Function.)
 ```
 
 ---
@@ -75,14 +78,18 @@ Browser
 
 | Library | Version | Purpose |
 |---------|---------|---------|
-| TypeScript | — | Language (`.ts` / `.tsx`); full migration 2026-05-24; `tsconfig.json strict:false` |
-| React | 18 | UI framework |
+| TypeScript | 5 | Language (`.ts` / `.tsx`); full migration 2026-05-24; `tsconfig.json strict:false`. `npm run build` runs `tsc -b && vite build`; `npm run typecheck` = `tsc --noEmit` |
+| React | 18 | UI framework (entry: `src/main.tsx` → `App.tsx` in `React.StrictMode`) |
 | Vite | 6 | Build tool |
 | Tailwind CSS | 3 | Styling |
 | Zustand | 5 | State management (10 stores; `useOnboardingStore` extracted 2026-05-24) |
-| framer-motion | — | Animation |
-| @hello-pangea/dnd | — | Drag-and-drop |
-| i18next / react-i18next | — | Korean / English i18n |
+| framer-motion | 12 | Animation |
+| three | 0.184 | WebGL shader animation for the login background (`FloatingLines.tsx`) |
+| @hello-pangea/dnd | 17 | Drag-and-drop (stock reorder, layout) |
+| react-hot-toast | 2 | Toast notifications |
+| lucide-react | — | Icon set |
+| i18next / react-i18next | 24 / 15 | Korean / English i18n |
+| Google Maps Places JS API | weekly | Location autocomplete (`src/lib/googleMaps.ts`, `GooglePlacesLocationField.tsx`) |
 | `src/utils/errorHandler.ts` | — | Central `ApiError` class + `handleApiError()` for all Edge Function call sites |
 
 ### Backend / Infra
@@ -103,40 +110,46 @@ Browser
 
 ```text
 src/
-  App.tsx                         # App entry point, auth bootstrap, initialization
+  main.tsx                        # React entry — renders <App/> in StrictMode, imports l10n/i18n
+  App.tsx                         # App shell, auth bootstrap, initialization, ExtensionInstallBanner
+  index.css                       # Global Tailwind + base styles
   vite-env.d.ts                   # Vite client type declarations
   types/
     index.ts                      # Shared TypeScript type definitions
   constants/
-    index.ts                      # CATEGORIES, WIDGET_LIST, DEFAULT_VIS, DEFAULT_LAYOUTS
+    index.ts                      # CATEGORIES, WIDGET_LIST, FIXED/STANDARD_WIDGETS, DEFAULT_VIS, DEFAULT_LAYOUTS, DEFAULT_PRIORITY_ORDER
   components/
+    banners/
+      ExtensionInstallBanner.tsx  # Top banner prompting Chrome extension install (dismissible, hidden inside extension)
     common/
       ConfirmDialog.tsx
       DragHandle.tsx
-      GooglePlacesLocationField.tsx
+      FloatingLines.tsx           # three.js WebGL shader animation (login background)
+      FloatingLines.css           # Container styles for FloatingLines
+      GooglePlacesLocationField.tsx  # Google Maps Places autocomplete input
       TimeInput.tsx
       Toggle.tsx
       WidgetCard.tsx              # Shared card wrapper for all widgets
     layout/
-      DashboardLayout.tsx         # 1:3:3 column layout with slide panel
+      DashboardLayout.tsx         # 3-column layout with slide panel
       DatePanelContainer.tsx      # Events/Tasks/Diary container for selected date
       DiaryPanel.tsx
       EventPanel.tsx
       FixedButtons.tsx
-      LoginScreen.tsx
+      LoginScreen.tsx             # Google login screen (FloatingLines background)
       QuickLinks.tsx
       TaskPanel.tsx
       TopNav.tsx                  # Language toggle, settings button, profile
     modals/
-      BriefSettingsModal.tsx
       DiaryListModal.tsx
       FirstLoginBriefingModal.tsx
       NewsDetailModal.tsx         # Currently unused — replaced by direct URL navigation
       OnboardingModal.tsx
       PINModal.tsx
-      SettingsModal.tsx
+      SettingsModal.tsx           # 7-tab settings hub (widgets/smart/priority/briefing/interests/diary/profile)
       WidgetSettingsModal.tsx
     widgets/
+      BriefingSectionsView.tsx    # Shared presentational sections renderer (BriefingWidget + FirstLoginBriefingModal); exports BriefingSkeleton
       BriefingWidget.tsx
       CalendarWidget.tsx
       DiaryCard.tsx
@@ -147,24 +160,26 @@ src/
       TrendsWidget.tsx
       WeatherWidget.tsx
   hooks/
-    useBriefingContext.ts         # Shared briefing context builder (14 fields)
+    useBriefingContext.ts         # Shared briefing context builder
+    useFontSize.ts                # globalFontSize → {body, title, key} inline style objects (multiplier arg)
     useMidnightTrigger.ts         # Runs once on login: diary synthesis + todo reset
     useTheme.ts                   # Theme CSS class utilities
   l10n/
     i18n.ts                       # i18next config, language-change event emission
+    index.ts                      # Re-exports default i18n + changeLanguage/getCurrentLanguage/toggleLanguage
     ko.json
     en.json
   lib/
-    supabase.ts                   # Supabase client initialization
-  mock/
-    data.ts                       # Fallback data for API failures
+    supabase.ts                   # Supabase client init + secureStorage adapter (strips provider_refresh_token)
+    googleMaps.ts                 # Google Maps Places JS API loader + place-label helpers
   services/
-    aiService.ts                  # Groq LLM calls (briefing, diary generation, diary rewrite)
+    aiService.ts                  # Groq LLM calls (briefing, diary generation, diary rewrite, smart-widget)
     diaryGenerationService.ts     # Diary context builder + generateAndSaveDiaryForDate
+    personalizationService.ts     # runPersonalizationBatch() — keyword extraction + 30-day decayed scoring
   store/
     useAuthStore.ts
     useBriefingHistoryStore.ts    # Time-stamped briefing snapshots (localStorage + Supabase)
-    useDataStore.ts
+    useDataStore.ts               # Weather/stocks/news/trends/health/calendar fetch + cache (inline mock fallbacks)
     useDiaryStore.ts
     useGoogleCalendarStore.ts     # Google Calendar/Tasks sync + local fallback
     useOnboardingStore.ts         # Onboarding state (step, perms flow) — extracted 2026-05-24
@@ -176,22 +191,25 @@ src/
     contentUtils.ts               # cleanContent() — strips markdown/hashtags/SNS boilerplate
     date.ts                       # formatLocalDate(), shiftDateString() — local-time date utils
     errorHandler.ts               # ApiError class + handleApiError() — central Edge Function error surface
+    eventRepeat.ts                # RRULE build/parse + localized repeat labels for calendar events
     interests.ts                  # Fixed + dynamic interest management utilities
     personaContext.ts             # buildPersonaContext() for Groq prompts
     storage.ts                    # load() / save() localStorage wrappers
     taskRecurrence.ts             # Task date filtering and materialization
 
 supabase/
+  config.toml                     # Supabase CLI project config
   schema.sql                      # Base table definitions
   migrations/
     add_personalization.sql       # diaries, keyword_score_log, keyword_interests columns
     add_fixed_interests.sql       # fixed_interests, onboarding_perms columns
     add_user_qa.sql               # user_qa table
   functions/
-    calendar/  events/  fitness/  groq/  smart-widget/
-    stocks/    tasks/   tavily/   weather/
-    kakao-places/                 # Unused (planned)
+    events/    fitness/   google-refresh/   groq/   smart-widget/
+    stocks/    tasks/     tavily/            weather/
 ```
+
+> **Note:** `src/mock/data.ts` was removed — API-failure fallbacks are now defined inline inside `useDataStore.ts` fetch functions. There is no `kakao-places` Edge Function (removed); `google-refresh` was added for Google OAuth token renewal.
 
 ---
 
@@ -386,8 +404,8 @@ graph TD
 | `tempUnit` | `"c"\|"f"` | localStorage |
 | `stockSymbols` | string[] | localStorage | User-added custom tickers (default `["KOSPI","NASDAQ","SP500","USDKRW"]`). |
 | `fixedIndexSymbols` | string[] | localStorage | 8 hardcoded indices (`["SP500","KOSPI","NASDAQ","USDKRW","VIX","CRUDE","DXY","DJI"]`); user can drag-reorder in the modal but cannot add or remove. |
-| `tone` | `"friendly"\|"formal"\|"casual"` | localStorage |
-| `bLen` | `"short"\|"medium"\|"long"` | localStorage |
+| `tone` | `"friendly"\|"formal"\|"casual"` | localStorage (default `"friendly"`) |
+| `showFirstLoginBriefing` | boolean | localStorage + DB (first-login briefing toggle) |
 | `priorityOrder` | string[] | localStorage |
 | `fixedInterestIds` | string[] | DB (`user_settings.fixed_interests`) |
 | `keywordInterests` | `[{keyword, category, score}]` | DB (`user_settings.keyword_interests`) |
@@ -797,9 +815,9 @@ sequenceDiagram
 5. Groq bullets: if no Korean characters in output → request re-translation (1 extra call); only validated Korean items accepted
 
 **Key files:**
-- `src/services/aiService.js`: category classification, section planning, Tavily search, filtering
-- `src/store/useWidgetStore.js`: smart widget state, cache, category override
-- `src/components/widgets/SmartWidgetContent.jsx`: widget UI, keyword editing, category dropdown, card rendering
+- `src/services/aiService.ts`: category classification, section planning, Tavily search, filtering
+- `src/store/useWidgetStore.ts`: smart widget state, cache, category override
+- `src/components/widgets/SmartWidgetContent.tsx`: widget UI, keyword editing, category dropdown, card rendering
 
 ---
 
@@ -808,15 +826,16 @@ sequenceDiagram
 | Modal | Role |
 |-------|------|
 | `OnboardingModal` | Initial category selection, persona selection, permission toggles |
-| `SettingsModal` | Theme, clock, temp unit, stock symbols, priority order, diary language/PIN lock |
-| `BriefSettingsModal` | AI briefing tone + length selection |
+| `SettingsModal` | **7-tab settings hub** — `widgets` (visibility toggles), `smart` (smart-widget keywords), `priority` (center-column order, drag-to-reorder), `briefing` (first-login briefing toggle + factual/AI-augmentation toggle), `interests` (fixed + keyword interest management), `diary` (PIN setup/change/disable, diary generation language, PIN lock timing), `profile` (avatar/email, Google Calendar/Fit connection toggles, restart onboarding, logout) |
 | `FirstLoginBriefingModal` | First daily login briefing display — today's date recorded to prevent re-display |
 | `WidgetSettingsModal` | News view type (text/news/grid), Smart Widget interest toggle |
 | `PINModal` | Diary access PIN input/confirmation |
 | `DiaryListModal` | Browse diary entries by date |
 | `NewsDetailModal` | **Currently unused** — replaced by direct URL navigation |
-| `NewsAllModal` (inline) | NewsWidget "More" → full news grid via `createPortal` (defined inside `NewsWidget.jsx`) |
-| `StocksViewAllModal` (inline) | StocksWidget "View More" → read-only full ticker grid (defined inside `StocksWidget.jsx`) |
+| `NewsAllModal` (inline) | NewsWidget "More" → full news grid via `createPortal` (defined inside `NewsWidget.tsx`) |
+| `StocksViewAllModal` (inline) | StocksWidget "View More" → read-only full ticker grid (defined inside `StocksWidget.tsx`) |
+
+> **Note:** The standalone `BriefSettingsModal` was removed. Briefing `tone` lives in `useSettingsStore` and is consumed by `BriefingWidget`; briefing length is now a hardcoded `BRIEFING_LENGTH = "medium"` constant (the old `bLen` setting was removed). The first-login-briefing and factual/AI-augmentation toggles now live in the SettingsModal **briefing** tab.
 
 ---
 
@@ -834,7 +853,7 @@ sequenceDiagram
 | `tasks` 🔒 | `/functions/v1/tasks` | JWT | `{token, action?, taskListId?}` | Google Tasks CRUD. `action`: `list` / `create` / `update` / `delete` / `move` / `clearCompleted` |
 | `fitness` 🔒 | `/functions/v1/fitness` | JWT | `{token}` | `{steps, sleep, calories, heartRate}` |
 | `smart-widget` 🔒 | `/functions/v1/smart-widget` | JWT | `{keyword, persona, token?, ...context}` | Personalized content structure |
-| `kakao-places` | `/functions/v1/kakao-places` | — | `{query, lat, lon}` | Place search results (currently unused) |
+| `google-refresh` | `/functions/v1/google-refresh` | — | `{refresh_token}` | `{access_token, expires_in}` — exchanges a Google OAuth refresh token for a fresh access token. Requires `GOOGLE_CLIENT_ID` + `GOOGLE_CLIENT_SECRET` in Supabase Secrets. Called by `useAuthStore.ensureProviderToken()` to recover expired provider tokens. |
 
 ### Calling convention from the browser
 
@@ -875,14 +894,15 @@ The `Authorization: Bearer <anon-key>` header is required by Supabase; the anon 
 | `widget_layouts` | `id` | Per-user widget grid positions (`{lg, md, sm}` breakpoints) |
 | `todos` | `id` | Daily todo items; `is_fixed`, `is_recurring` (generated column) |
 | `smart_keywords` | `id`, UNIQUE(`user_id`, `keyword`) | Smart widget keyword list |
-| `api_cache` | `id` (text, e.g. `u:{userId}:news_KR_ko_base`) | 1-hour TTL external API response cache |
+| `api_cache` | `id` (text, e.g. `u:{userId}:news_KR_ko_base`) | External API response cache (6-hour app-level TTL via `CACHE_THRESHOLD_MS`) |
 
 **`user_settings` notable columns:**
 ```sql
-keyword_interests     jsonb default '[]'   -- [{keyword, category, score}]
-fixed_interests       jsonb default '[]'   -- onboarding category ID array
-onboarding_perms      jsonb default '{"fit": false, "cal": false}'
-pin_lock_mode         text  default 'immediate'  -- "immediate" | "off" | "timed"
+keyword_interests          jsonb default '[]'   -- [{keyword, category, score}]
+keyword_interests_updated  date                 -- today-guard for runPersonalizationBatch
+fixed_interests            jsonb default '[]'   -- onboarding category ID array
+onboarding_perms           jsonb default '{"fit": false, "cal": false}'
+pin_lock_mode              text  default 'immediate'  -- "immediate" | "off" | "timed"
 ```
 
 ### Migration tables
@@ -930,10 +950,12 @@ score = Σ(base_weight × (30 - elapsed_days) / 30)  where elapsed_days < 30
 
 ```
 Daily Q&A/diary collection (source = "personal" | "diary")
-  └─ Midnight batch (runPersonalizationBatch via useMidnightTrigger)
-  └─ AI → JSON keyword array
+  └─ Login-time batch (runPersonalizationBatch in useAuthStore.handleAuthChange)
+     ├─ today-guard: skips if user_settings.keyword_interests_updated === today
+     └─ Reads YESTERDAY's user_qa + diaries text
+  └─ AI (groq) → JSON keyword array (category ∈ food|place|content|shopping|lifestyle|mood|interest)
   └─ Insert into keyword_score_log
-  └─ Aggregate → update user_settings.keyword_interests
+  └─ Aggregate (30-day decay) → update user_settings.keyword_interests + keyword_interests_updated
   └─ Purge logs older than 30 days
 ```
 
@@ -951,13 +973,13 @@ Trends: no interest injection — global/domestic real-time trends only.
 
 | Touchpoint | Mechanism | File |
 |------------|-----------|------|
-| News query | Top-5 keywords inserted into Tavily query | `useDataStore.js` |
+| News query | Top-5 keywords inserted into Tavily query | `useDataStore.ts` |
 | Simple AI briefing | `keywordInterests` → `Interest guidance:` line in Groq prompt | `aiService.generateBriefing()` |
 | Diary Q&A question | `fixedInterestIds` → `INTEREST_TOPIC_MAP` → 1 interest + 1 general topic | `aiService.generatePersonalizedQuestion()` |
 | Auto diary generation | `interests` + `briefingSnapshots` + `previousDayDiary/Feedback` → `promptContext`; `user_qa` Q&A pairs (question+answer, context-only) now also fed as `qaPairs` | `aiService.generateDiary()` |
 | Persona context | `fixedInterestIds` + `keywordInterests` merged → `interests[]` | `personaContext.buildPersonaContext()` |
-| Q&A answer save | Token extraction → `bumpKeyword(kw, "qa", 5)` | `DiaryCard.jsx` |
-| Note save | Token extraction → `bumpKeyword(kw, "note", 10)` | `DiaryPanel.jsx` |
+| Q&A answer save | Token extraction → `bumpKeyword(kw, "qa", 5)` | `DiaryCard.tsx` |
+| Note save | Token extraction → `bumpKeyword(kw, "note", 10)` | `DiaryPanel.tsx` |
 
 ### 11.7 Diary generation flow
 
@@ -980,7 +1002,7 @@ New day, first login
 
 **Diary language resolution:**
 ```
-resolveDiaryGenerationLanguage()  [diaryGenerationService.js]
+resolveDiaryGenerationLanguage()  [diaryGenerationService.ts]
   1. useSettingsStore.diaryLanguage === "ko"|"en" → explicit setting wins
   2. Otherwise → i18n.language → "en"/"ko" mapping
 ```
@@ -1007,18 +1029,35 @@ DiaryPanel → Dislike
 
 | File | Exports |
 |------|---------|
-| `contentUtils.js` | `cleanContent(text)`: strips markdown headers/bold/italic/links, hashtags, "follow us/subscribe/sign up/newsletter/click here", normalizes line breaks |
-| `storage.js` | `load(key, fallback)`, `save(key, value)`: localStorage wrappers |
-| `date.js` | `formatLocalDate()` (YYYY-MM-DD in local time), `shiftDateString(date, days)` |
-| `interests.js` | `normalizeFixedInterestIds()`, `buildFixedInterests(ids)`, `mergeInterestLists(fixedIds, dynamicInterests)`, `getTopInterestKeywords()`, `getInterestFingerprint()`. 8 fixed IDs: `news·tech·fashion·finance·health·food·entertainment·sports` |
-| `taskRecurrence.js` | `doesTaskOccurOnDate()`, `isTaskCompletedOnDate()`, `materializeTasksForDate()`, `getTaskDisplayDate()` |
-| `personaContext.js` | `buildPersonaContext(fixedInterestIds, keywordInterests, persona)` — merged interest list for Groq prompts |
+| `contentUtils.ts` | `cleanContent(text)`: strips markdown headers/bold/italic/links, hashtags, "follow us/subscribe/sign up/newsletter/click here", normalizes line breaks |
+| `storage.ts` | `load(key, fallback)`, `save(key, value)`: localStorage wrappers |
+| `date.ts` | `formatLocalDate()` (YYYY-MM-DD in local time), `shiftDateString(date, days)` |
+| `errorHandler.ts` | `ApiError` class + `handleApiError(err, context)` — central Edge Function error surface |
+| `eventRepeat.ts` | RRULE build/parse for Google Calendar recurrence + localized repeat labels: `getRepeatOptions()`, `getRepeatLabel()`, `buildRepeatObject()`, `formDataFromRepeat()`, `buildEventRecurrence()`, `parseEventRepeat()`, `getWeekDaysShort()` |
+| `interests.ts` | `normalizeFixedInterestIds()`, `buildFixedInterests(ids)`, `mergeInterestLists(fixedIds, dynamicInterests)`, `getTopInterestKeywords()`, `getInterestFingerprint()`. 8 fixed IDs: `news·tech·fashion·finance·health·food·entertainment·sports` |
+| `taskRecurrence.ts` | `doesTaskOccurOnDate()`, `isTaskCompletedOnDate()`, `materializeTasksForDate()`, `getTaskDisplayDate()` |
+| `personaContext.ts` | `buildPersonaContext(fixedInterestIds, keywordInterests, persona)` — merged interest list for Groq prompts |
+
+### src/services/
+
+| File | Exports |
+|------|---------|
+| `aiService.ts` | Groq LLM calls: `generateBriefing()`, `generateDetailedBriefing()`, `generateDiary()`, `rewriteDiaryWithFeedback()`, `generatePersonalizedQuestion()`, smart-widget category classification / section planning / Tavily search & filtering |
+| `diaryGenerationService.ts` | `buildDiaryGenerationContext()`, `generateAndSaveDiaryForDate()`, `resolveDiaryGenerationLanguage()` |
+| `personalizationService.ts` | `runPersonalizationBatch()` (login-time keyword extraction + 30-day decayed scoring → `keyword_score_log` → `user_settings.keyword_interests`), `getTopKeywords()`, `getTopKeywordsByCategory()`, `saveKeywordInterests()` |
+
+### src/lib/
+
+| File | Exports |
+|------|---------|
+| `supabase.ts` | Supabase client init + `secureStorage` adapter (strips `provider_refresh_token` from auth-token writes) |
+| `googleMaps.ts` | `loadGoogleMapsPlacesLibrary()`, `hasGoogleMapsPlacesKey()`, `getPlacesLanguageTag()`, `formatGooglePlaceLabel()` — Google Maps Places JS API loader |
 
 ### src/hooks/
 
 | Hook | Role |
 |------|------|
-| `useBriefingContext` | Subscribes to all stores, returns `buildContext()` — used by both `BriefingWidget` and `FirstLoginBriefingModal` for identical 14-field context |
+| `useBriefingContext` | Subscribes to all stores, returns `buildContext()` (~18 fields: weather, stocks, trends, calEvents [future-only], tomorrowEvents, todos, keywordInterests, fixedInterestIds, persona, newsResults, newsAnswer, trendsResults, todayQA, smartSummaries, healthData, yesterdayDiary/Memo …) — shared by `BriefingWidget` and `FirstLoginBriefingModal` |
 | `useMidnightTrigger` | Runs once on login (after hydrate complete). Lazy diary synthesis for missed days + todo reset. No midnight polling. |
 | `useTheme` | Returns theme CSS classes: `isDark, cardCls, listItemBgCls, secondaryBgCls, muted, hoverCls, borderCls` |
 | `useFontSize(multiplier?)` | Subscribes to `globalFontSize`. Returns `{body, title, key}` inline style objects. body: S=10/M=12/L=14px; title: S=12/M=14/L=16px. `multiplier` defaults to 1.0; BriefingWidget modal uses 1.2. |
@@ -1147,7 +1186,7 @@ npx wrangler deploy
 | Voice feature (`voiceOn`) | State exists; no UI or TTS implementation |
 | `NewsDetailModal` | File exists but unused — replaced by direct URL navigation |
 | Trends detail view | News/stocks "view all" modals implemented; trends left/right pagination unimplemented |
-| Diary PIN setup | PIN hashing + storage + verify done; PIN set/modify/recovery UI not yet exposed in settings |
+| Chrome extension publishing | `ExtensionInstallBanner` + `build:extension` script exist; `STORE_URL`/`EXTENSION_ID` are placeholders pending Web Store publish |
 
 **Resolved since 2026-05-22:**
 - ~~Tavily token overuse~~ → ✅ Resolved 2026-05-23 (`86a34a8`): `api_cache` TTL extended 1 h → 6 h
@@ -1176,6 +1215,11 @@ npx wrangler deploy
 - ~~Smart Widget Korean mode (Latest Updates / Latest Coverage not loading)~~ → ✅ Korean article fetch reworked (`4ba0d4b`): `include_domains` opened for non-news sections, `exclude_domains` used to filter low-quality domains
 - ~~Stocks Edge Function deploy~~ → ✅ Manually deployed to Supabase 2026-06-04 (universal-ticker fallback, type/currency metadata, ticker validation live)
 - ~~`groq` Edge Function deploy~~ → ✅ Manually deployed to Supabase 2026-06-04 (`Content-Type: application/json; charset=utf-8` header live; Korean text no longer garbled)
+
+**Resolved 2026-06-09:**
+- ~~Diary PIN set/modify/recovery UI not exposed~~ → ✅ PIN setup/change/disable now exposed in the SettingsModal **diary** tab, alongside diary generation language and PIN lock timing (`immediate`/`off`/`timed`)
+- ~~`BriefSettingsModal` standalone~~ → ✅ Removed; AI-briefing toggles folded into the SettingsModal **briefing** tab
+- ~~Google connection toggles in widget management~~ → ✅ Moved to the SettingsModal **profile** tab (`c6762b0`)
 
 ---
 
