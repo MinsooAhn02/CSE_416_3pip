@@ -8,6 +8,7 @@ import { useSettingsStore } from "./useSettingsStore";
 import { useOnboardingStore } from "./useOnboardingStore";
 import type { AppUser, Perms, Interest } from "../types";
 import { handleApiError } from "../utils/errorHandler";
+import { isGuest } from "../lib/guest";
 
 let settingsLoadedFor: string | null = null;
 
@@ -80,6 +81,11 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
 	},
 
 	logout: async () => {
+		// 게스트 상태는 메모리에만 있음 → 새로고침이 샘플 데이터까지 깔끔하게 지움
+		if (isGuest()) {
+			window.location.reload();
+			return;
+		}
 		set({ isLoggedIn: false, user: null, providerToken: null, providerRefreshToken: null });
 		useOnboardingStore.getState().reset();
 		useSettingsStore.getState().resetInterests();
@@ -126,6 +132,7 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
 			return;
 		}
 
+		if (isGuest()) return; // 세션 없음 이벤트가 둘러보기 화면을 로그인 화면으로 튕기지 않게
 		settingsLoadedFor = null;
 		set({ isLoggedIn: false, user: null, providerToken: null, providerRefreshToken: null });
 		useOnboardingStore.getState().reset();

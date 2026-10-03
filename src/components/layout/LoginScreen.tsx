@@ -73,6 +73,12 @@ const LoginScreen = () => {
 		if (!supabase) setLoading(false);
 	};
 
+	// 샘플 데이터 모듈은 버튼을 눌렀을 때만 로드
+	const handleGuest = async () => {
+		const { enterGuestMode } = await import("../../demo/demoData");
+		enterGuestMode();
+	};
+
 	// Forward pointer events from the scroll layer (z-10) down to the THREE.js
 	// canvas (z-0) so FloatingLines' interactive wave-bending + parallax still work.
 	const forwardPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
@@ -131,6 +137,12 @@ const LoginScreen = () => {
 					>
 						<span className="text-2xl">G</span>
 						{loading ? t("auth.signing_in") : t("auth.start_with_google")}
+					</button>
+					<button
+						onClick={handleGuest}
+						className="mt-4 text-sm text-white/70 underline underline-offset-4 hover:text-white transition-colors"
+					>
+						{t("auth.explore_as_guest")}
 					</button>
 					<p className="text-white/30 text-xs mt-8">
 						{supabase ? t("auth.oauth_note") : t("auth.demo_note")}
@@ -249,9 +261,8 @@ const LoginScreen = () => {
 									First sign-in: a Google notice you can safely pass
 								</h2>
 								<p className="text-white/70 leading-relaxed text-sm">
-									This is a student project running in Google's{" "}
-									<span className="font-semibold">Testing</span> mode, so on your
-									first sign-in Google may show a{" "}
+									This is a student project that hasn't gone through Google's app
+									verification, so on your first sign-in Google shows a{" "}
 									<span className="font-semibold">
 										&ldquo;Google hasn&rsquo;t verified this app&rdquo;
 									</span>{" "}

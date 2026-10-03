@@ -528,7 +528,12 @@
     "signing_in": "Signing in...",
     "start_with_google": "Continue with Google",
     "oauth_note": "Google OAuth · a private experience with no ads",
-    "demo_note": "Demo mode · add Supabase keys in .env to enable real login"
+    "demo_note": "Demo mode · add Supabase keys in .env to enable real login",
+    "explore_as_guest": "Explore without signing in"
+  },
+  "guest": {
+    "banner": "You're exploring with sample data. Nothing you change is saved.",
+    "sign_in": "Sign in with Google"
   },
   "errors": {
     "network_error": "Network error. Please try again.",

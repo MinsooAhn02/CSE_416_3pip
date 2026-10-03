@@ -3,6 +3,7 @@ import i18n, { getCurrentLanguage } from "../l10n/i18n";
 const bs = (key: string, lng: string) => i18n.t(`briefing_sections.${key}`, { lng }) as string;
 import { handleApiError } from "../utils/errorHandler";
 import { supabase } from "../lib/supabase";
+import { isGuest } from "../lib/guest";
 import type {
 	WeatherData,
 	StockItem,
@@ -404,7 +405,7 @@ const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
 const invokeFunction = async (name: string, body: Record<string, unknown>): Promise<Record<string, unknown> | null> => {
-	if (!SUPABASE_URL || !SUPABASE_ANON_KEY) return null;
+	if (!SUPABASE_URL || !SUPABASE_ANON_KEY || isGuest()) return null;
 	const startedAt = Date.now();
 	const controller = new AbortController();
 	const timer = setTimeout(() => controller.abort(), AI_TIMEOUT_MS);

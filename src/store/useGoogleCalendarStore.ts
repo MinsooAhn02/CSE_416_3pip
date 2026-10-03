@@ -1,6 +1,7 @@
 /// <reference types="vite/client" />
 import { create } from "zustand";
 import { supabase } from "../lib/supabase";
+import { isGuest } from "../lib/guest";
 import { load, save } from "../utils/storage";
 import { formatLocalDate } from "../utils/date";
 import { buildEventRecurrence, parseEventRepeat, EventRepeat } from "../utils/eventRepeat";
@@ -510,7 +511,7 @@ const parseEdgeResponse = async (response: Response): Promise<unknown> => {
 };
 
 const invokeGoogleFunction = async (name: string, body: Record<string, unknown>): Promise<unknown> => {
-	if (!supabase || !SUPABASE_URL || !SUPABASE_ANON_KEY) return null;
+	if (!supabase || !SUPABASE_URL || !SUPABASE_ANON_KEY || isGuest()) return null;
 
 	const { data: { session } } = await supabase.auth.getSession();
 	const bearerToken = session?.access_token ?? SUPABASE_ANON_KEY;

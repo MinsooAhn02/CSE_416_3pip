@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { supabase } from "../lib/supabase";
+import { isGuest } from "../lib/guest";
 import { load, save } from "../utils/storage";
 import { DEFAULT_VIS } from "../constants";
 import { formatLocalDate, shiftDateString } from "../utils/date";
@@ -55,7 +56,7 @@ interface EdgeResult {
 }
 
 const invokeEdgeDetailed = async (fnName: string, body: Record<string, unknown> = {}): Promise<EdgeResult | null> => {
-	if (!SUPABASE_URL || !SUPABASE_ANON_KEY) return null;
+	if (!SUPABASE_URL || !SUPABASE_ANON_KEY || isGuest()) return null;
 	const url = `${SUPABASE_URL}/functions/v1/${fnName}`;
 	const startedAt = Date.now();
 	const controller = new AbortController();
@@ -1277,6 +1278,7 @@ export const useDataStore = create<DataState>()((set, get) => ({
 	},
 
 	fetchWeather: async (latArg, lonArg, userId, force = false) => {
+		if (isGuest()) return; // 샘플 날씨 유지 + 위치 권한 팝업 방지
 		const manualCity = get().manualWeatherCity;
 
 		// ── 위치 결정: 수동 도시 > Geolocation > 서울 기본값 ──
@@ -1377,6 +1379,7 @@ export const useDataStore = create<DataState>()((set, get) => ({
 	   사용자 선택 심볼을 파라미터로 전달
 	   ══════════════════════════════════════════ */
 	fetchStocks: async (symbols = defaultStockSymbols, userId, force = false) => {
+		if (isGuest()) return; // 새로고침 버튼이 샘플 데이터를 지우지 않게
 		const normalizedSymbols = normalizeStockSymbols(symbols);
 		const cacheKey = `stocks_${normalizedSymbols.join("_")}`;
 		const localCachedStocks = cached<unknown[]>("stocks", []);
@@ -1553,6 +1556,7 @@ export const useDataStore = create<DataState>()((set, get) => ({
 	   trendsResults: 출처 배열 [{title, url, content}, ...]
 	   ══════════════════════════════════════════ */
 	fetchTrends: async (userId, force = false) => {
+		if (isGuest()) return; // 새로고침 버튼이 샘플 데이터를 지우지 않게
 		const lang = resolveAppLanguage();
 		const isEn = lang === "en";
 
@@ -1752,6 +1756,7 @@ export const useDataStore = create<DataState>()((set, get) => ({
 	   newsResults: 뉴스 기사 배열 [{title, url, content}, ...]
 	   ══════════════════════════════════════════ */
 	fetchNews: async (userId, force = false) => {
+		if (isGuest()) return; // 새로고침 버튼이 샘플 데이터를 지우지 않게
 		const lang = resolveAppLanguage();
 		const isEn = lang === "en";
 
@@ -1966,6 +1971,7 @@ export const useDataStore = create<DataState>()((set, get) => ({
 	   오늘 일정(Today's Schedule)만 가져오기
 	   ══════════════════════════════════════════ */
 	fetchCalendar: async (userId, force = false) => {
+		if (isGuest()) return; // 새로고침 버튼이 샘플 데이터를 지우지 않게
 		if (!useOnboardingStore.getState().perms.cal) {
 			set({ calEvents: [] });
 			get().markFetched("calendar");
@@ -2032,6 +2038,7 @@ export const useDataStore = create<DataState>()((set, get) => ({
 	   오후 브리핑에서 사용
 	   ══════════════════════════════════════════ */
 	fetchTomorrowCalendar: async (userId, force = false) => {
+		if (isGuest()) return; // 새로고침 버튼이 샘플 데이터를 지우지 않게
 		if (!useOnboardingStore.getState().perms.cal) {
 			set({ tomorrowEvents: [] });
 			return;
@@ -2086,6 +2093,7 @@ export const useDataStore = create<DataState>()((set, get) => ({
 	   Steps + Sleep 중심, 나머지는 보조 데이터
 	   ══════════════════════════════════════════ */
 	fetchHealth: async (userId, force = false) => {
+		if (isGuest()) return; // 새로고침 버튼이 샘플 데이터를 지우지 않게
 		if (!useOnboardingStore.getState().perms.fit) {
 			set({ healthData: null });
 			get().markFetched("health");
@@ -2192,6 +2200,7 @@ export const useDataStore = create<DataState>()((set, get) => ({
 	   3) 위젯별 수동 새로고침 → 개별 fetch 함수에서 force=true로 직접 호출
 	   ══════════════════════════════════════════ */
 	fetchAll: async (options = {}) => {
+		if (isGuest()) return; // 게스트는 샘플 데이터만 사용
 		const { useExistingCache = false } = options;
 		const store = get();
 

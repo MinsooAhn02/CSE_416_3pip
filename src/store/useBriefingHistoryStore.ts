@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { load, save } from "../utils/storage";
 import { supabase } from "../lib/supabase";
+import { isGuest } from "../lib/guest";
 import { formatLocalDate } from "../utils/date";
 
 const STORAGE_KEY = "mb_briefing_history";
@@ -34,6 +35,8 @@ export const useBriefingHistoryStore = create<BriefingHistoryState>()((set, get)
 	byDate: loadLocal(),
 
 	addSnapshot: async (snapshot: Partial<BriefingSnapshot>) => {
+		// 샘플 브리핑이 일기 합성 입력(localStorage)에 섞이지 않게
+		if (isGuest()) return;
 		const date = todayStr();
 		const current = get().byDate;
 		const existing = current[date] ?? [];

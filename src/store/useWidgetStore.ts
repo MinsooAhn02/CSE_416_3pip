@@ -2,6 +2,7 @@ import { create } from "zustand";
 import toast from "react-hot-toast";
 import { load, save } from "../utils/storage";
 import { supabase } from "../lib/supabase";
+import { isGuest } from "../lib/guest";
 import {
 	generateSmartWidgetData,
 	SMART_WIDGET_CATEGORY_OPTIONS,
@@ -218,6 +219,7 @@ export const useWidgetStore = create<WidgetState>()((set, get) => ({
 	loadSmartWidget: async (kw: string, force = false): Promise<SmartWidgetData | null> => {
 		const lang = resolveSmartLang();
 		const cacheKey = getSmartWidgetCacheKey(kw, lang);
+		if (isGuest()) return get().smartWidgetData[cacheKey] ?? null; // 샘플 데이터만
 		const existing = get().smartWidgetData?.[cacheKey];
 		if (existing && !force && !isSmartWidgetStale(existing)) return existing;
 		const categoryOverride = get().smartWidgetCategoryOverrides?.[kw] ?? null;

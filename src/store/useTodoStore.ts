@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { load, save } from "../utils/storage";
 import { formatLocalDate } from "../utils/date";
+import { isGuest } from "../lib/guest";
 import { materializeTasksForDate } from "../utils/taskRecurrence";
 import {
 	useGoogleCalendarStore,
@@ -84,7 +85,7 @@ export const syncTodosFromCalendarStore = (tasksArg?: unknown[]): NormalizedTodo
 		(filteredTasks as unknown) as Parameters<typeof materializeTasksForDate>[0],
 		todayStamp(),
 	).map(normalizeTaskAsTodo);
-	save(TODO_CACHE_KEY, todos);
+	if (!isGuest()) save(TODO_CACHE_KEY, todos); // 샘플 할 일이 실제 사용자 캐시에 남지 않게
 	useTodoStore.setState({ todos });
 	return todos;
 };
@@ -103,6 +104,7 @@ export const useTodoStore = create<TodoState>()((set, get) => ({
 	showAddTodo: false,
 
 	ensureDailyReset: async () => {
+		if (isGuest()) return; // 리셋 날짜 기록이 실제 사용자의 그날 리셋을 막지 않게
 		try {
 			const lastReset = load(TODAY_KEY, "");
 			const today = todayStamp();

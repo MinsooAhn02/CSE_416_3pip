@@ -28,6 +28,9 @@ manual script that calls the live `groq` function.
 
 Setup from scratch: `.env.example` → `.env`, then the SQL and secrets steps in README §4–5.
 Without `.env`, `supabase` is `null` and the app boots in Demo mode.
+Separately, the login screen's "Explore without signing in" enters **guest mode** (`src/lib/guest.ts`,
+`src/demo/demoData.ts`): sample data, no network. New fetchers or Edge Function calls must respect `isGuest()`
+and must not `save()` sample data to localStorage.
 
 ## Layout
 

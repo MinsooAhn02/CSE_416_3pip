@@ -12,6 +12,11 @@
 
 ## 2026-10-04
 
+### [Feature] Guest mode ("Explore without signing in")
+- Login screen button opens the dashboard with sample data (weather, stocks, news, trends, calendar, tasks, health, diary, a Formula 1 smart widget) and a banner linking to Google sign-in. For portfolio/recruiter visits.
+- Zero network: `src/lib/guest.ts` flag short-circuits the three Edge Function helpers and the data fetchers; sample data (`src/demo/demoData.ts`, lazy chunk) is injected with `setState` only, and briefing snapshots / todo cache / daily-reset stamp are not written, so nothing leaks into a real user's localStorage. Reload returns to the login screen.
+- Login-screen notice no longer says the app is in Google "Testing" mode (it is in Production, unverified).
+
 ### [Fix] Audit fixes: diaries, Edge Function auth, duplicate AI calls, bundle
 - Diaries now actually save to Supabase: the live table lacked `ai_generated_diary`/`edited_diary` (every write failed silently). Columns added, 38 legacy `diary_text` rows backfilled, hydrate and personalization read the new columns, diary writes throw on DB errors.
 - All Edge Functions require a logged-in user (`supabase/functions/_shared/auth.ts`); groq/tavily/stocks/weather got input caps. Clients send the session JWT (`invokeFunction`, google-refresh).
