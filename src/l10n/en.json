@@ -49,6 +49,8 @@
   },
   "banner": {
     "extension_prompt": "Open MorningBriefing.AI every time you open a new tab —",
+    "google_reconnect": "Your Google connection expired, so calendar, tasks and health may be out of date.",
+    "google_reconnect_button": "Reconnect Google",
     "install_extension": "Install Chrome Extension"
   },
   "categories": {

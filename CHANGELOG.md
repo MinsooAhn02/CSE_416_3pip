@@ -12,6 +12,9 @@
 
 ## 2026-10-04
 
+### [Fix] Tell the user when Google needs reconnecting
+- When the Google access token (1h) can no longer be refreshed, calendar/tasks/health used to fall back to the local cache with no sign. A banner now says the data may be out of date and offers "Reconnect Google" (dismissible). Not shown in guest mode.
+
 ### [Fix] Fewer API calls on reload, small UX fixes
 - Reloading no longer bypasses the 6h cache: a forced refetch happens only right after Google sign-in. A reload now makes ~4 Groq calls instead of ~20 Edge Function calls (Tavily, weather, stocks, calendar, fitness).
 - `fetchAll` calls that overlap (init, 5-minute poll, tab focus) share one run; news is refetched only when the set of top interests changes, not their order.

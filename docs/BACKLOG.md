@@ -15,12 +15,13 @@ Single list of open work. Replaces the old root `todo.md`, `tasks/todo.md` (stoc
 
 | # | Issue | Where |
 |---|---|---|
-| R2 | Google reconnect is fragile: Google access token lasts 1h and `provider_refresh_token` is not available (memory-only, and `prompt:"select_account"` may not return one). Confirmed 2026-10-04: ~80 min after login, calendar/tasks silently fall back to the localStorage cache (no network call, no error shown). | `src/store/useAuthStore.ts`, `useGoogleCalendarStore.ts` (`skipLoading` path) |
+| R2 | Google reconnect is fragile (minimal fix done: `googleReconnectNeeded` flag + reconnect banner; root fix = store the refresh token server-side and refresh there): Google access token lasts 1h and `provider_refresh_token` is not available (memory-only, and `prompt:"select_account"` may not return one). Confirmed 2026-10-04: ~80 min after login, calendar/tasks silently fall back to the localStorage cache (no network call, no error shown). | `src/store/useAuthStore.ts`, `useGoogleCalendarStore.ts` (`skipLoading` path) |
 | R4 | Smart widget component is recreated each render → loses local state (edit mode, open menu). | `DashboardLayout.tsx` (smart widget render) |
 | R6 | `todos` table is created in `schema.sql` but never queried (todos mirror Google Tasks + localStorage). Drop or use. | `supabase/schema.sql` |
 | R7 | Migration files have no timestamp prefix, so `supabase db push/reset` ignores them; they are applied by hand (order in AGENTS.md). | `supabase/migrations/` |
 | R8 | `npm audit` reports 15 vulnerabilities (1 critical) in dependencies — not triaged. | `package-lock.json` |
 | R10 | Two tabs open at once → `Hydrate failed: Lock "lock:sb-…-auth-token" was released because another request stole it`; diary/tasks/gcal hydrate fail and the interest-onboarding modal can show wrongly. Matters for the new-tab extension (many tabs). Observed once in Chrome, not yet root-caused. | `src/App.tsx` (runFullInit), `src/lib/supabase.ts` |
+| R12 | Groq free tier limit for `openai/gpt-oss-120b` is 8,000 tokens/min per org (all users share one key). Observed 2026-10-04: 5 of 6 calls returned 429 after a few reloads + first-login modal. Options: lighter model for small tasks, share/cache the briefing (A3), pass 429 through instead of mapping every error to 400. | `supabase/functions/groq`, `aiService.ts` |
 | R11 | News widget shows raw scraped page text (nav menus); smart keyword "Games" top result is a Wikipedia style-guide page. Tavily result quality/filtering. | `useDataStore.ts` (fetchNews), `aiService.ts` |
 
 ## Audit 2026-10-04 (second pass: bugs, security, bloat)

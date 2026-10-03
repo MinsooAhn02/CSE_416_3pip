@@ -18,6 +18,7 @@ import TopNav from "./components/layout/TopNav";
 import DashboardLayout from "./components/layout/DashboardLayout";
 import ExtensionInstallBanner from "./components/banners/ExtensionInstallBanner";
 import GuestBanner from "./components/banners/GuestBanner";
+import GoogleReconnectBanner from "./components/banners/GoogleReconnectBanner";
 
 const FixedButtons = lazy(() => import("./components/layout/FixedButtons"));
 const OnboardingModal = lazy(() => import("./components/modals/OnboardingModal"));
@@ -230,6 +231,7 @@ const App = () => {
 			}}
 		>
 			<GuestBanner />
+			<GoogleReconnectBanner />
 			<ExtensionInstallBanner />
 			<TopNav />
 

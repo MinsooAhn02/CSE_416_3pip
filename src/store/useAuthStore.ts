@@ -14,6 +14,9 @@ let settingsLoadedFor: string | null = null;
 
 interface AuthState {
 	isLoggedIn: boolean;
+	/** Google 토큰을 더 이상 갱신할 수 없음 → 재연결 배너 표시 (캘린더/할 일이 캐시로 조용히 대체되던 문제) */
+	googleReconnectNeeded: boolean;
+	dismissGoogleReconnect: () => void;
 	user: AppUser | null;
 	providerToken: string | null;
 	providerRefreshToken: string | null;
@@ -33,6 +36,8 @@ let _pendingProviderTokenRefresh: Promise<string | null> | null = null;
 
 export const useAuthStore = create<AuthState>()((set, get) => ({
 	isLoggedIn: load<boolean>("mb_login", false),
+	googleReconnectNeeded: false,
+	dismissGoogleReconnect: () => set({ googleReconnectNeeded: false }),
 	user: null,
 	providerToken: null,
 	providerRefreshToken: null,
@@ -149,7 +154,7 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
 			set({ providerToken: null });
 		}
 
-		if (!supabase) return null;
+		if (!supabase || isGuest()) return null;
 
 		// force 갱신은 항상 새 refresh를 시작 (stale 토큰으로 piggyback 방지)
 		if (!forceRefresh && _pendingProviderTokenRefresh) return _pendingProviderTokenRefresh;
@@ -168,7 +173,7 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
 				if (!forceRefresh) {
 					const token = session?.provider_token ?? null;
 					if (token) {
-						set({ providerToken: token });
+						set({ providerToken: token, googleReconnectNeeded: false });
 						return token;
 					}
 				}
@@ -179,7 +184,7 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
 				} = await supabase.auth.refreshSession();
 				const refreshedToken = refreshedSession?.provider_token ?? null;
 				if (refreshedToken) {
-					set({ providerToken: refreshedToken });
+					set({ providerToken: refreshedToken, googleReconnectNeeded: false });
 					return refreshedToken;
 				}
 
@@ -198,7 +203,7 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
 						});
 						const data = await res.json() as { access_token?: string; error?: string };
 						if (data.access_token) {
-							set({ providerToken: data.access_token });
+							set({ providerToken: data.access_token, googleReconnectNeeded: false });
 							return data.access_token;
 						}
 						console.warn("[gcal] google-refresh failed:", data.error);
@@ -207,6 +212,8 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
 					}
 				}
 
+				// 세션·refresh token 모두 실패 → 재로그인 외엔 방법 없음
+				set({ googleReconnectNeeded: true });
 				return null;
 			} catch (err) {
 				console.warn("[gcal] ensureProviderToken failed:", err);

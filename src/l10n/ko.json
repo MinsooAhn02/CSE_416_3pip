@@ -49,6 +49,8 @@
   },
   "banner": {
     "extension_prompt": "새 탭을 열 때마다 MorningBriefing.AI를 바로 만나보세요 —",
+    "google_reconnect": "Google 연결이 만료되어 캘린더·할 일·건강 정보가 최신이 아닐 수 있습니다.",
+    "google_reconnect_button": "Google 다시 연결",
     "install_extension": "Chrome 확장 설치하기"
   },
   "categories": {
