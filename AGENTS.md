@@ -75,7 +75,7 @@ archive/course/          old course deliverables — historical, do not treat as
   widgets track status with `setApiStatus` / `markFetched`.
 - localStorage: use `load()` / `save()` from `src/utils/storage.ts`; keys are prefixed `mb_`.
 - Dates: use `src/utils/date.ts` (`formatLocalDate`), never `toISOString().slice(0, 10)` — that is the
-  UTC date and is "yesterday" in Korea before 09:00. Some legacy spots still do it (BACKLOG R9).
+  UTC date and is "yesterday" in Korea before 09:00. (All legacy spots were fixed 2026-10-04.)
 - i18n: user-facing text goes through `t("…")`; add every key to **both** `en.json` and `ko.json`.
 - `supabase` from `src/lib/supabase.ts` can be `null` — guard every use.
 - Code comments are mostly Korean; docs are English. Either is fine, match the surrounding file.
@@ -89,7 +89,14 @@ archive/course/          old course deliverables — historical, do not treat as
   check docs/BACKLOG.md for pending deploys.
 - `provider_refresh_token` is stripped from localStorage on purpose (`secureStorage` in `src/lib/supabase.ts`);
   `provider_token` is persisted. See docs/security/localStorage-audit.md.
-- Every reload currently triggers a full refetch (Tavily/Groq cost) — known, BACKLOG R1.
+- Reloads read the 6h `api_cache`; only the page opened by the Google OAuth callback forces a refetch
+  (`openedFromOAuthRedirect`). Don't reintroduce unconditional cache clearing in `runFullInit`.
+- Google access tokens last 1h and no refresh token is kept, so Google data stops syncing after ~1h until
+  the user reconnects (banner via `googleReconnectNeeded`; BACKLOG R2).
+- Groq free tier: `openai/gpt-oss-120b` allows 8,000 tokens/min for the whole project (BACKLOG R12) —
+  avoid adding Groq calls on page load.
+- Every Edge Function requires a logged-in user (`supabase/functions/_shared/auth.ts`); call them with the
+  session JWT, never just the anon key.
 - Don't commit `dist/`, `.env`, `supabase/.temp/` or extension zips (all gitignored).
 
 ## Docs to keep in sync

@@ -1,68 +1,56 @@
 # Backlog
 
-Single list of open work. Replaces the old root `todo.md`, `tasks/todo.md` (stocks) and the open items of
-`archive/course/Milestone/KNOWN_ISSUES.md`. Status verified against code on 2026-10-04; file:line refs may drift.
+Single list of open work, verified against the code on 2026-10-04 (file refs may drift).
+Finished work is not kept here — see [CHANGELOG.md](../CHANGELOG.md) and `git log`.
+IDs (R*, A*, B*) come from the 2026-10-04 reviews and are referenced from commits and docs.
+
+## Next up (suggested order)
+
+| # | Issue | Approach | Where |
+|---|---|---|---|
+| R12 | Groq free tier: `openai/gpt-oss-120b` allows 8,000 tokens/min for the whole project (all users share one key). After a few reloads + the first-login modal, 5 of 6 calls returned 429. | Lighter model (`gpt-oss-20b`) for small tasks; cache/share the briefing (A3); pass 429 through instead of mapping every error to 400. Check per-model limits at console.groq.com/settings/limits. | `supabase/functions/groq`, `src/services/aiService.ts` |
+| R2 | Google data stops syncing ~1h after sign-in: the access token lasts 1h and no refresh token is kept (`secureStorage` strips it; `prompt:"select_account"` may not return one). Minimal fix shipped: reconnect banner (`googleReconnectNeeded`). | Root fix: keep the Google refresh token server-side (encrypted, per user) and refresh in an Edge Function. Needs a security design. | `src/store/useAuthStore.ts`, `supabase/functions/google-refresh` |
+| A8 | Diary localStorage (`mb_diary_entries`) is not user-scoped and not cleared on logout → a second account on the same browser sees the first user's diaries. | Key by user id, clear on logout, migrate the old key once. | `src/store/useDiaryStore.ts`, `useAuthStore.ts` (logout) |
+| R10 | Two tabs at once → `Lock "lock:sb-…-auth-token" was released because another request stole it`; diary/tasks/gcal hydrate fail. Matters for the new-tab extension. | Pass the session user id into each `hydrateFromDB` instead of each calling `auth.getUser()`; `Promise.allSettled` in `runFullInit`. | `src/App.tsx`, stores' `hydrateFromDB` |
+| A3 | First visit of the day: first-login modal and BriefingWidget each generate a briefing (2 Groq calls each). | Generate once, share the result (store or snapshot). | `FirstLoginBriefingModal.tsx`, `BriefingWidget.tsx` |
+| R11 | News widget shows raw scraped page text (nav menus); smart keyword top results can be Wikipedia meta pages. | Filter boilerplate content, exclude wiki domains for news-type sections; tune against real results. | `useDataStore.ts` (fetchNews), `aiService.ts` |
 
 ## Needs a manual (infra) step
 
 | Item | What's left |
 |---|---|
-| Stocks indices via Yahoo | Code done (`supabase/functions/stocks/index.ts`: `YAHOO_SYMBOL_MAP`, `fetchYahooQuote`; TwelveData kept for USD/KRW only). Deploy: `npx supabase functions deploy stocks`, then force-refresh the Stocks widget and check SP500/KOSPI/NASDAQ levels. |
-| Google "unverified app" warning | Consent screen is in **Production, unverified** (project CalendarTaskAPI, 11/100 users). Warning stays for every user; removing it needs Google verification (own domain + Supabase custom auth domain). Decided not needed for a team/portfolio app. |
-| `smart-widget` Edge Function | Source removed from the repo (no frontend caller). If still deployed, delete it: `npx supabase functions delete smart-widget`. |
+| A9 anon grants | `grant select ... to anon` on 8 tables (RLS blocks rows today). Revoke in the SQL editor and drop the lines from `schema.sql` / migrations. Also remove `http://localhost:3000/*` from the production extension's `externally_connectable`. |
+| R6 `todos` table | Created in `schema.sql`, never queried (todos mirror Google Tasks + localStorage). Drop it. |
+| `smart-widget` Edge Function | Source removed from the repo (no caller). If still deployed: `npx supabase functions delete smart-widget`. |
+| Deploy after changes | Web: `npm run build && npx wrangler deploy`. Extension: `npm run build:extension` and redistribute the zip (not on the Web Store, no auto-update). |
 
-## Bugs / risks found during the 2026-10-04 review
+## Other open issues / tech debt
 
 | # | Issue | Where |
 |---|---|---|
-| R2 | Google reconnect is fragile (minimal fix done: `googleReconnectNeeded` flag + reconnect banner; root fix = store the refresh token server-side and refresh there): Google access token lasts 1h and `provider_refresh_token` is not available (memory-only, and `prompt:"select_account"` may not return one). Confirmed 2026-10-04: ~80 min after login, calendar/tasks silently fall back to the localStorage cache (no network call, no error shown). | `src/store/useAuthStore.ts`, `useGoogleCalendarStore.ts` (`skipLoading` path) |
-| R4 | Smart widget component is recreated each render → loses local state (edit mode, open menu). | `DashboardLayout.tsx` (smart widget render) |
-| R6 | `todos` table is created in `schema.sql` but never queried (todos mirror Google Tasks + localStorage). Drop or use. | `supabase/schema.sql` |
-| R7 | Migration files have no timestamp prefix, so `supabase db push/reset` ignores them; they are applied by hand (order in AGENTS.md). | `supabase/migrations/` |
-| R8 | `npm audit` reports 15 vulnerabilities (1 critical) in dependencies — not triaged. | `package-lock.json` |
-| R10 | Two tabs open at once → `Hydrate failed: Lock "lock:sb-…-auth-token" was released because another request stole it`; diary/tasks/gcal hydrate fail and the interest-onboarding modal can show wrongly. Matters for the new-tab extension (many tabs). Observed once in Chrome, not yet root-caused. | `src/App.tsx` (runFullInit), `src/lib/supabase.ts` |
-| R12 | Groq free tier limit for `openai/gpt-oss-120b` is 8,000 tokens/min per org (all users share one key). Observed 2026-10-04: 5 of 6 calls returned 429 after a few reloads + first-login modal. Options: lighter model for small tasks, share/cache the briefing (A3), pass 429 through instead of mapping every error to 400. | `supabase/functions/groq`, `aiService.ts` |
-| R11 | News widget shows raw scraped page text (nav menus); smart keyword "Games" top result is a Wikipedia style-guide page. Tavily result quality/filtering. | `useDataStore.ts` (fetchNews), `aiService.ts` |
+| R13 | Health widget shows all zeros although `fitness` returns 200. Hypothesis (unverified): Google Fit REST API deprecation. | `supabase/functions/fitness` |
+| R4 | Smart widget component is recreated each render → loses local state (edit mode, open menu). | `DashboardLayout.tsx` |
+| R7 | Migration files have no timestamp prefix, so `supabase db push/reset` ignores them; applied by hand (order in DOCS §10). | `supabase/migrations/` |
+| R8 | `npm audit`: 15 vulnerabilities (1 critical), not triaged. Start with non-breaking `npm audit fix`. | `package-lock.json` |
+| B3 | Five Edge Function call helpers (DOCS §9) could share one module; `pad2` defined 3×. Low value vs. risk. | `useDataStore.ts`, `aiService.ts`, `useGoogleCalendarStore.ts`, `useAuthStore.ts`, `personalizationService.ts` |
+| B4 | 4.8 MB of course PDFs/xlsx tracked under `archive/course/` — keep or untrack (history keeps them either way). | `archive/course/` |
+| — | Weather widget briefly shows "No weather data available" on reload while the cache loads. | `WeatherWidget.tsx` |
+| — | Top news and trends can show the same items (dedup only when trends derive from news). | `useDataStore.ts` (trends dedup) |
+| — | Smart widget button shows stale `data.emoji` after a category override. | `SmartWidgetContent.tsx` |
+| — | Event form still needs scrolling. | `EventPanel.tsx` |
+| — | Tavily: one call per query; each smart widget searches separately. | `supabase/functions/tavily`, `aiService.ts` |
 
-## Audit 2026-10-04 (second pass: bugs, security, bloat)
+### GitHub issues still open
 
-| # | Sev | Issue | Where |
-|---|---|---|---|
-| A3 | Med | First-login modal and BriefingWidget each generate a briefing on the first visit of the day (2 Groq calls each). Each now runs once after the first `fetchAll`; sharing one result would halve it. | `FirstLoginBriefingModal.tsx`, `BriefingWidget.tsx` |
-| A8 | Med | Diary localStorage not user-scoped and not cleared on logout. | `useDiaryStore.ts`, `useAuthStore.ts:79` |
-| A9 | Low | `grant select ... to anon` on 8 tables (RLS blocks rows today; remove for defense in depth). Production extension `externally_connectable` includes localhost. | `schema.sql`, `public/manifest.json` |
-| B3 | Dup | 5 edge-call helpers → one `src/lib/edge.ts`; `pad2` ×3; 6 `toISOString().slice(0,10)` (R9). | see DOCS §9 |
-| B4 | Repo | 4.8 MB of course PDFs/xlsx tracked under `archive/course/`. | `archive/course/` |
+https://github.com/MinsooAhn-SBU/CSE_416_3pip/issues — #2 diary feedback rewrite not applying (Major) · #4 briefing
+"latest info" shows generic definitions (Major) · #5 smart keywords "No keyword info" (Minor) · #6 Google
+integration toggle unverified (Minor) · #7 smart keywords → personalization context (Minor) · #9 Google Fit live
+sync (Major, see R13) · #10 `voiceOn` has no UI/TTS (Minor) · #12 Trends detail view (Minor) · #13 diary PIN
+setup flow (Major). Closed: #1, #3, #8, #11, #14, #15.
 
-### Fixed 2026-10-04 (batch A): R1 reload uses the 6h cache (force only right after OAuth sign-in) · R3 panel auto-closes/opens only when crossing 1200px · R5 extension banner hidden until a real EXTENSION_ID exists · R9 no UTC date slicing left · A6 fetchAll de-duplicated, news refetch only when the top-interest set changes · A7 settings sync failures shown as a toast.
+## Decisions
 
-### Fixed 2026-10-04: A1 diaries columns added on live DB + 38 rows backfilled, hydrate/personalization read `ai_generated_diary`/`edited_diary` · A2 all Edge Functions require a logged-in user + input caps (`_shared/auth.ts`) · A4 settings load once per user · A5 load errors no longer reset the user · B1 three.js lazy (main chunk 1,326→822 KB) · B2 ~1,100 LOC dead code removed, `noUnusedLocals` on · Groq key renewed, model → `openai/gpt-oss-120b` · `briefing_snapshots` table created.
-
-## Partially done (from old todo.md)
-
-| # | Item | State |
-|---|---|---|
-| 1 | Top news and trends show the same items | News URLs are de-duplicated from trends only when trends derive from news; falls back to the full (duplicated) list if < 3 remain. Briefing logic unchanged. `useDataStore.ts` (trends dedup) |
-| 2 | Smart widget category display mismatch | Menu uses `categoryOverride ?? data.category`, but the button still shows stale `data.emoji`. `SmartWidgetContent.tsx` |
-| 9 | Event form needs scrolling | Wider/taller now, still `overflow-y-auto`. `EventPanel.tsx` |
-| 13 | Is smart-widget category feature useful? | Design decision pending; feature kept. |
-| 17 | Tavily efficiency | Batch endpoint exists but still one Tavily call per query; each smart widget searches separately. `supabase/functions/tavily/index.ts`, `aiService.ts` |
-| 18 | Google reconnect | Retry-on-401/403 + `google-refresh` added; not confirmed working — see R2. |
-
-Done and verified in code: old todo #3–8, #10–12, #14–16.
-
-## Open known issues (from KNOWN_ISSUES.md / GitHub issues)
-
-| GH# | Issue | Severity |
-|---|---|---|
-| #2 | Diary feedback rewrite not applying (`DiaryPanel.tsx` pendingRewrite) | Major |
-| #4 | Briefing "Today's latest info" shows generic definitions instead of personalized search | Major |
-| #5 | Briefing "Smart keywords: No keyword info collected yet" — unclear when it populates | Minor |
-| #6 | Google integration toggle — moved to Profile tab, behavior not verified | Minor |
-| #7 | Verify smart widget keywords reach personalization context | Minor |
-| #9 | Google Fit live sync — Edge Function exists, live token path missing | Major |
-| #10 | `voiceOn` setting has no UI / TTS | Minor |
-| #12 | Trends widget has no detail view / pagination | Minor |
-| #13 | Diary PIN setup flow — modify in settings / self-verification question | Major |
-
-GitHub issue numbers refer to https://github.com/MinsooAhn-SBU/CSE_416_3pip/issues (closed: #1, #3, #8, #11 NewsDetailModal — file removed 2026-10-04, #14, #15).
+- **Google OAuth verification: not pursued.** The consent screen is Production / unverified (project
+  CalendarTaskAPI, 11 of 100 users). Every user sees the "unverified app" warning once; removing it needs an owned
+  domain, a Supabase custom auth domain and a security review. Guest mode covers portfolio visitors.
+- **Smart-widget categories:** feature kept; usefulness not re-evaluated.

@@ -275,11 +275,12 @@ Condition: `isLoggedIn=true && user.id` present
 
 ```
 runFullInit()                                         (src/App.tsx)
-  └─ localStorage.removeItem("mb_last_fetched_at")   ← stale timestamp reset (prevents "9000분 전" on re-login)
-  └─ localStorage.removeItem("mb_last_access_time")  ← forces a fresh fetch
-  └─ useDataStore.setState({ lastFetchedAt: {} })     ← in-memory reset
+  └─ only if openedFromOAuthRedirect (src/lib/supabase.ts — page opened by the Google sign-in callback):
+       localStorage.removeItem("mb_last_fetched_at" / "mb_last_access_time") + lastFetchedAt reset
+       → forces a fresh fetch right after sign-in
   └─ hydrateFromDB() → parallel load of settings/widgets/todos/diary/briefingHistory
-  └─ fetchAll({ useExistingCache: false })  ← bypasses the 6h cache (also on plain page reloads — see BACKLOG R1)
+  └─ fetchAll({ useExistingCache: false })  ← stale check: last access < 6h → reads api_cache (plain reloads)
+       concurrent fetchAll calls share one in-flight run
   └─ useMidnightTrigger → runs once: lazy diary synthesis for missed days + todo reset
 
 handleAuthChange()                                    (src/store/useAuthStore.ts)
@@ -302,6 +303,15 @@ Fallback: if `user.id` is delayed, runs `fetchAll({ useExistingCache: false })` 
 | Interest change | News only | `useSettingsStore.subscribe()` fingerprint diff |
 | Midnight | Auto-diary synthesis | `useMidnightTrigger` — runs once on login |
 | 3-hour auto | AI Briefing | `setInterval(3h)` in `BriefingWidget`; also regenerates on tone/language change and once when tomorrow's events arrive |
+
+### Guest mode (no sign-in)
+
+"Explore without signing in" on the login screen calls `enterGuestMode()` (`src/demo/demoData.ts`, lazy chunk):
+sets the `src/lib/guest.ts` flag, injects sample data into the stores with `setState` (never `save()`), and sets
+`isLoggedIn: true`. While the flag is set, the Edge Function helpers, `fetch*` actions, `fetchAll`,
+`loadSmartWidget`, `ensureProviderToken`, briefing-snapshot saving and the todo cache/daily reset all return early,
+so there is no network traffic and nothing reaches a real user's localStorage. `logout()` reloads the page, which
+clears the in-memory flag. `GuestBanner` links to Google sign-in.
 
 ### Onboarding Flow
 
@@ -628,7 +638,7 @@ sequenceDiagram
 | Trigger | Scope | Mode |
 |---------|-------|------|
 | Language change | News + Trends + Smart Widget | `force=false`, per-language cache key (reuses same-language cache within 6h) |
-| Interest change | News only | `force=true`, fingerprint-diffed subscription |
+| Interest change | News only | `force=true`, only when the *set* of top-5 interests changes (order ignored) |
 | Tab visibility return | All | `force=false`, 6-hour stale check |
 | 5-minute poll | All | `force=false` |
 | Manual refresh button | Individual widget | `force=true` |
@@ -850,7 +860,7 @@ sequenceDiagram
 | `weather` | `/functions/v1/weather` | — | `{lat, lon}` | `{temp, city, condition, humidity, precipitation, airQuality}` |
 | `stocks` | `/functions/v1/stocks` | — | `{symbols: string[]}` | `[{symbol, price, change, changePercent, type, currency}]` — `type`: `"index"\|"stock"\|"etf"\|"currency"\|"unknown"`; `currency`: ISO code (e.g. `"USD"`, `"KRW"`) or `""`. Supported internal symbols: `KOSPI`, `NASDAQ`, `SP500`, `USDKRW`, `VIX`, `CRUDE` (WTI, → `USOIL`/`CL=F`), `DXY` (Dollar Index, → `DX-Y.NYB` on Yahoo), `DJI`. Indices/commodities are fetched from Yahoo (`YAHOO_SYMBOL_MAP`, no key); `USDKRW` and other tickers go through Twelve Data / Yahoo / Stooq. |
 | `tavily` | `/functions/v1/tavily` | — | `{query, mode, max_results, location?, include_domains?}` | News: `{answer, results, location}` / Trends: `{trends, answer, results}` |
-| `groq` | `/functions/v1/groq` | — | `{system, prompt, model?, temperature?}` | `{text}` — `Content-Type: application/json; charset=utf-8` |
+| `groq` | `/functions/v1/groq` | — | `{system, prompt, model?, temperature?}` — default model `openai/gpt-oss-120b` (allowlist: + `openai/gpt-oss-20b`), prompt ≤ 60k chars, `max_completion_tokens` 4096 | `{text}` — `Content-Type: application/json; charset=utf-8` |
 | `events` 🔒 | `/functions/v1/events` | JWT | `{token, action?, ...}` | Google Calendar CRUD. `action`: `list` (default) / `create` / `update` / `delete` / `read` |
 | `tasks` 🔒 | `/functions/v1/tasks` | JWT | `{token, action?, taskListId?}` | Google Tasks CRUD. `action`: `list` / `create` / `update` / `delete` / `move` / `clearCompleted` |
 | `fitness` 🔒 | `/functions/v1/fitness` | JWT | `{token}` | `{steps, sleep, calories, heartRate}` |
@@ -909,7 +919,7 @@ pin_lock_mode              text  default 'immediate'  -- "immediate" | "off" | "
 
 | Table | File | Purpose |
 |-------|------|---------|
-| `diaries` | `add_personalization.sql` (also fully defined in `schema.sql`) | Per-user diary entries with notes, answers, memo |
+| `diaries` | `add_personalization.sql` (also fully defined in `schema.sql`) | Per-user diaries. The app reads/writes `ai_generated_diary` + `edited_diary` (+ `memo`, `answers`); `diary_text` is legacy (created by `add_personalization.sql`, backfilled into `ai_generated_diary` by the `schema.sql` upgrade block — run it on older projects) |
 | `keyword_score_log` | `add_personalization.sql` | Raw interest keyword scoring events (30-day window) |
 | `user_qa` | `add_user_qa.sql` | Daily Q&A question/answer pairs |
 | `briefing_snapshots` | `add_briefing_snapshots.sql` (added 2026-10-04) | Time-stamped briefing snapshots for diary synthesis: `date`, `captured_at`, `source`, `payload jsonb` |
@@ -1139,7 +1149,7 @@ https://www.googleapis.com/auth/fitness.heart_rate.read
 2. No hardcoded secrets in client code
 3. RLS on all tables for user data isolation
 4. Google OAuth long-lived refresh token stripped from localStorage. Enforced by `secureStorage` adapter in `src/lib/supabase.ts` which deletes `provider_refresh_token` from every `*-auth-token` write. The short-lived `provider_token` (1-hour access token) IS persisted — Supabase does not refresh OAuth provider tokens, so stripping it caused every Calendar/Tasks/Fit call to fail after page reload. The 1-hour expiry bounds the exposure window. All Google-API callers go through `useAuthStore.getState().ensureProviderToken()` (memory → `getSession()` → `refreshSession()` fallback) — `fetchCalendar`, `fetchTomorrowCalendar`, `fetchHealth` all follow this pattern
-5. Edge Functions for user data (events/tasks/fitness) require Supabase JWT validation (`google-refresh` does not — see BACKLOG R2)
+5. Every Edge Function requires Supabase JWT validation of a real user (events/tasks/fitness inline, the rest via `supabase/functions/_shared/auth.ts`)
 6. Diary PIN: SHA-256 hashed before storage — no plaintext
 7. All table `GRANT` statements explicitly written in SQL files (Supabase auto-grant ends 2026-05-30)
 

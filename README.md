@@ -233,11 +233,15 @@ For local testing, you can register with any Google account. User data is isolat
 When signing in for the first time, Google may display a warning:
 **"Google hasn't verified this app"**
 
-This is expected. The app is in GCP **Testing** mode — full OAuth verification (which requires a CASA security assessment for the Fitness scope) has not been pursued for this academic project.
+This is expected. The OAuth app is published (Production) but **not verified** — Google verification requires an owned domain and a security review for the Fitness scope, which this student project has not pursued.
 
 **To proceed:** click **Advanced** → **Continue to [app name] (unsafe)**. This bypasses the warning and grants the requested permissions normally. The warning is a Google policy gate for unverified apps, not an indicator of any security issue with this application.
 
-> Note: In Testing mode, OAuth tokens may expire after 7 days. If you are signed out unexpectedly, simply sign in again.
+> Note: Google access tokens last about an hour. If calendar, tasks or health stop updating, a banner offers **Reconnect Google**.
+
+### Try it without signing in
+
+On the login screen, **Explore without signing in** opens the dashboard with sample data (guest mode). Nothing is saved and no APIs are called; reload to return to the login screen.
 
 ---
 
@@ -245,7 +249,7 @@ This is expected. The app is in GCP **Testing** mode — full OAuth verification
 
 ### Bug tracking history
 
-Bugs were tracked via **`CHANGELOG.md`** and **`todo.md`** throughout development (Sprint 1–4, May 6–27, 2026). Each fix round in `CHANGELOG.md` records the date, affected files, root cause, fix applied, and any follow-up items — attributed by team role: UI/UX fixes (Dahyun Kwon), complex data-flow and logic fixes (Minsoo Ahn), and backend / store / API fixes (Sungmin Choo). Open items and per-feature tasks were tracked in `todo.md` (now consolidated into `docs/BACKLOG.md`).
+Bugs were tracked via **`CHANGELOG.md`** and **`todo.md`** throughout development (Sprint 1–4, May 6–27, 2026). Each fix round in the course-period change log (now [archive/course/CHANGELOG-2026-05.md](./archive/course/CHANGELOG-2026-05.md)) records the date, affected files, root cause, fix applied, and any follow-up items — attributed by team role: UI/UX fixes (Dahyun Kwon), complex data-flow and logic fixes (Minsoo Ahn), and backend / store / API fixes (Sungmin Choo). Open items and per-feature tasks were tracked in `todo.md` (now consolidated into `docs/BACKLOG.md`).
 
 Sprint schedule and task assignments were managed in **Jira** and migrated to GitHub Issues on 2026-05-23 for Milestone 4 compliance. See GitHub [issue #16](https://github.com/MinsooAhn-SBU/CSE_416_3pip/issues/16) for the sprint history and task migration notice. The Jira board remains the reference for sprint-level planning: [Jira Scrum Board](https://stonybrook-team-3pip.atlassian.net/jira/software/projects/SCRUM/boards/1).
 
@@ -278,7 +282,7 @@ For security-sensitive issues, do not open a public issue — contact the team d
 | [AGENTS.md](./AGENTS.md) | Short working guide for contributors and AI coding agents (commands, architecture map, conventions, pitfalls). `CLAUDE.md` imports it. |
 | [DOCS.md](./DOCS.md) | Architecture reference — stores, caching, widgets, Edge Functions, DB schema, personalization |
 | [docs/BACKLOG.md](./docs/BACKLOG.md) | Open bugs, partially done items, and pending manual (deploy/DB) steps |
-| [CHANGELOG.md](./CHANGELOG.md) | Dated change log — fix rounds by date, root cause, files changed, and follow-up items |
+| [CHANGELOG.md](./CHANGELOG.md) | Dated change log (current). Course-period fix rounds: [archive/course/CHANGELOG-2026-05.md](./archive/course/CHANGELOG-2026-05.md) |
 | [docs/security/localStorage-audit.md](./docs/security/localStorage-audit.md) | Audit of localStorage usage (XSS surface, `provider_token` handling) — added 2026-05-24 |
 | [archive/course/](./archive/course/) | CSE 416 course deliverables (design PDFs, milestones, API sheet, final report, old architecture notes). Historical — may be stale. |
 
