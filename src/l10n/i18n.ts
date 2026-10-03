@@ -30,10 +30,4 @@ export const changeLanguage = (lng: string): void => {
 
 export const getCurrentLanguage = (): string => i18n.language;
 
-export const toggleLanguage = (): string => {
-  const newLang = i18n.language === 'ko' ? 'en' : 'ko';
-  changeLanguage(newLang);
-  return newLang;
-};
-
 export default i18n;

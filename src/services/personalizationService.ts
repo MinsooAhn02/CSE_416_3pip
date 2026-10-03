@@ -1,5 +1,4 @@
 import { supabase } from "../lib/supabase";
-import type { Interest } from "../types/index";
 
 const VALID_CATEGORIES = ["food", "place", "content", "shopping", "lifestyle", "mood", "interest"];
 const SOURCE_WEIGHTS: Record<string, number> = { personal: 2, diary: 1 };
@@ -236,34 +235,4 @@ export async function runPersonalizationBatch(): Promise<ScoreMapEntry[] | undef
   } catch (e) {
     console.warn("[personalization] batch failed:", (e as Error)?.message);
   }
-}
-
-/**
- * 관심 키워드 상위 N개 반환 (전체 카테고리)
- */
-export function getTopKeywords(interests: Interest[], n = 10): string[] {
-  if (!Array.isArray(interests)) return [];
-  return interests.slice(0, n).map((item) => item.keyword);
-}
-
-/**
- * 특정 카테고리의 상위 키워드 반환
- */
-export function getTopKeywordsByCategory(interests: Interest[], category: string, n = 5): string[] {
-  if (!Array.isArray(interests)) return [];
-  return interests
-    .filter((item) => item.category === category)
-    .slice(0, n)
-    .map((item) => item.keyword);
-}
-
-/**
- * 수동으로 keyword_interests를 DB + store에 저장 (설정 패널용)
- */
-export async function saveKeywordInterests(userId: string, interests: Interest[]): Promise<void> {
-  if (!supabase || !userId) return;
-  await supabase.from("user_settings").upsert({
-    id: userId,
-    keyword_interests: interests,
-  });
 }

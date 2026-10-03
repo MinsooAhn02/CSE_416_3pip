@@ -11,9 +11,9 @@ interface EditorPos {
 }
 
 const QuickLinks = () => {
-	const { isDark, cardCls, inputCls, navBtnCls, secondaryBgCls, borderCls } = useTheme();
+	const { cardCls, inputCls, navBtnCls, secondaryBgCls, borderCls } = useTheme();
 	const { t } = useTranslation();
-	const { links, showEditor, setShowEditor, addLink, removeLink, updateLink } =
+	const { links, showEditor, setShowEditor, addLink, removeLink } =
 		useQuickLinksStore();
 
 	const [hovered, setHovered] = useState<boolean>(false);

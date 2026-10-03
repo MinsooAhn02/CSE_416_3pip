@@ -1,6 +1,5 @@
 import { create } from "zustand";
 import { load, save } from "../utils/storage";
-import { supabase } from "../lib/supabase";
 import { formatLocalDate } from "../utils/date";
 import { materializeTasksForDate } from "../utils/taskRecurrence";
 import {
@@ -72,18 +71,6 @@ const getCalendarStoreState = () => {
 		return null;
 	}
 	return useGoogleCalendarStore.getState();
-};
-
-const getCurrentTodos = (): NormalizedTodo[] => {
-	const calendarState = getCalendarStoreState();
-	if (!calendarState) return [];
-	return materializeTasksForDate(
-		(filterTasksByTaskList(
-			calendarState.tasks || [],
-			calendarState.selectedTaskListFilter ?? ALL_TASK_LIST_FILTER_ID,
-		) as unknown) as Parameters<typeof materializeTasksForDate>[0],
-		todayStamp(),
-	).map(normalizeTaskAsTodo);
 };
 
 export const syncTodosFromCalendarStore = (tasksArg?: unknown[]): NormalizedTodo[] => {

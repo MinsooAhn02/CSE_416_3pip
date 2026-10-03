@@ -12,6 +12,19 @@
 
 ## 2026-10-04
 
+### [Fix] Audit fixes: diaries, Edge Function auth, duplicate AI calls, bundle
+- Diaries now actually save to Supabase: the live table lacked `ai_generated_diary`/`edited_diary` (every write failed silently). Columns added, 38 legacy `diary_text` rows backfilled, hydrate and personalization read the new columns, diary writes throw on DB errors.
+- All Edge Functions require a logged-in user (`supabase/functions/_shared/auth.ts`); groq/tavily/stocks/weather got input caps. Clients send the session JWT (`invokeFunction`, google-refresh).
+- Groq: renewed key; `llama-3.3-70b-versatile` was retired → default model `openai/gpt-oss-120b`.
+- Fewer Groq calls: first-login modal generates once after data load (was once per data arrival); user settings/personalization load once per user instead of on every auth event; a settings load error no longer resets the user to onboarding.
+- Main bundle 1,326 KB → 822 KB (three.js lazy-loaded for the login background); ~1,100 lines of dead code removed; `noUnusedLocals` enabled.
+- Weather widget shows the "city not found" error (it was set but never rendered).
+- Created `briefing_snapshots` table on the live DB.
+
+### [Fix] Briefing and Stocks widget
+- AI Briefing card generated as soon as any one data source arrived and never regenerated, so weather/news/trends stayed "No data". It now waits for the first `fetchAll` to finish (`useDataStore.initialFetchDone`).
+- Stocks widget no longer lists KOSPI/S&P 500 twice (default user symbols overlapped the fixed index slots).
+
 ### [Build] Clean-clone setup fixes
 - `index.html` loads `/src/main.tsx` (pointed at the deleted `main.jsx`; only worked through Vite's extension fallback).
 - `public/manifest.json` icons point at `images/MorningBriefing.AI_logo.png` (`icons/*.png` never existed → Chrome refused to load the unpacked extension).

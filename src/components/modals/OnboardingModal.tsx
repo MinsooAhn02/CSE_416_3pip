@@ -1,6 +1,5 @@
 import { Activity, Calendar } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { useTheme } from "../../hooks/useTheme";
 import { useOnboardingStore } from "../../store/useOnboardingStore";
 import { useWidgetStore } from "../../store/useWidgetStore";
 import { CATEGORIES } from "../../constants";
@@ -8,7 +7,6 @@ import Toggle from "../common/Toggle";
 
 const OnboardingModal = () => {
 	const { t } = useTranslation();
-	const { isDark } = useTheme();
 	const {
 		showOnboarding,
 		obStep,

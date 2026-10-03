@@ -7,7 +7,6 @@ import {
 	GripVertical,
 	RefreshCw,
 	Sparkles,
-	ListOrdered,
 	Heart,
 	Plus,
 	Lock,

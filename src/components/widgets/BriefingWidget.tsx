@@ -38,7 +38,6 @@ const BriefingWidget = () => {
 
 	const {
 		tone,
-		priorityOrder,
 		fetchTodayQA,
 		buildContext,
 	} = useBriefingContext();

@@ -1,5 +1,4 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
-import { useTheme } from "../../hooks/useTheme";
 import { useSettingsStore } from "../../store/useSettingsStore";
 import { useWidgetStore } from "../../store/useWidgetStore";
 import { useDiaryStore } from "../../store/useDiaryStore";
@@ -38,7 +37,6 @@ const SmartWidget = ({ keyword }: SmartWidgetProps) => <SmartWidgetContent keywo
 const DASHBOARD_VIEWPORT_H = "calc(100vh - 6rem)";
 
 const DashboardLayout = () => {
-	const { isDark } = useTheme();
 	const smartKeywords = useWidgetStore((s) => s.smartKeywords);
 	const vis = useWidgetStore((s) => s.vis);
 	const priorityOrder =

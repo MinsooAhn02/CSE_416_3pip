@@ -54,8 +54,6 @@ const getRepeatLocale = (language = "en"): RepeatLocale => ({
 	},
 });
 
-const pad2 = (value: number): string => String(value).padStart(2, "0");
-
 const safeParseDate = (dateStr: string | null | undefined): Date | null => {
 	if (!dateStr) return null;
 	const date = new Date(`${dateStr}T00:00:00`);
@@ -302,10 +300,4 @@ export const parseEventRepeat = (
 	}
 
 	return anchorDate ? { type: "custom", frequency: "weekly", interval, daysOfWeek: [] } : null;
-};
-
-export const getRepeatSummaryDate = (dateStr = ""): string => {
-	const date = safeParseDate(dateStr);
-	if (!date) return "";
-	return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`;
 };

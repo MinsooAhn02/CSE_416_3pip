@@ -9,8 +9,6 @@ import { useAuthStore } from "./useAuthStore";
 import { useOnboardingStore } from "./useOnboardingStore";
 import i18n from "../l10n/i18n";
 import { handleApiError } from "../utils/errorHandler";
-
-const DEBUG_FLOW = import.meta.env.VITE_DEBUG_FLOW === "1";
 const EDGE_TIMEOUT_MS = 25000;
 
 /* ────────────────────────────────────────────
@@ -834,28 +832,6 @@ const numberFormatter = new Intl.NumberFormat("ko-KR", {
 	maximumFractionDigits: 2,
 });
 
-const extractJsonObject = (text: unknown): Record<string, unknown> | null => {
-	if (!text || typeof text !== "string") return null;
-	const trimmed = text.trim();
-	try {
-		const parsed: unknown = JSON.parse(trimmed);
-		return parsed && typeof parsed === "object" && !Array.isArray(parsed)
-			? (parsed as Record<string, unknown>)
-			: null;
-	} catch {
-		const match = trimmed.match(/\{[\s\S]*\}/);
-		if (!match) return null;
-		try {
-			const parsed: unknown = JSON.parse(match[0]);
-			return parsed && typeof parsed === "object" && !Array.isArray(parsed)
-				? (parsed as Record<string, unknown>)
-				: null;
-		} catch {
-			return null;
-		}
-	}
-};
-
 /* ── 날씨: Groq LLM 추정 (유일한 소스) ── */
 const normalizeGroqWeather = (payload: unknown): WeatherData | null => {
 	if (!payload || typeof payload !== "object") return null;
@@ -988,24 +964,6 @@ const getStockRowNumericValue = (row: unknown): number => {
 	if (typeof v !== "string") return 0;
 	const parsed = Number(v.replace(/[^0-9.\-]/g, ""));
 	return Number.isFinite(parsed) ? parsed : 0;
-};
-
-const mergeStocksWithPreviousValidValues = (nextRows: unknown[], prevRows: unknown[]): unknown[] => {
-	if (!Array.isArray(nextRows) || nextRows.length === 0) return [];
-	const prevByKey = new Map<string, unknown>(
-		(Array.isArray(prevRows) ? prevRows : [])
-			.map((row): [string, unknown] | null => {
-				const key = getStockSymbolKey(row);
-				return key ? [key, row] : null;
-			})
-			.filter((entry): entry is [string, unknown] => entry !== null),
-	);
-	return nextRows.map((row) => {
-		if (getStockRowNumericValue(row) > 0) return row;
-		const key = getStockSymbolKey(row);
-		const prev = prevByKey.get(key);
-		return prev && getStockRowNumericValue(prev) > 0 ? prev : row;
-	});
 };
 
 const pickBestStockRowsForSymbols = (symbols: unknown[], ...sources: unknown[][]): unknown[] => {

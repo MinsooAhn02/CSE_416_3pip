@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, lazy, Suspense } from "react";
 import { useTranslation } from "react-i18next";
 import {
 	Sparkles,
@@ -14,7 +14,8 @@ import {
 } from "lucide-react";
 import { useAuthStore } from "../../store/useAuthStore";
 import { supabase } from "../../lib/supabase";
-import FloatingLines from "../common/FloatingLines";
+// three.js(~480KB)는 로그인 배경에만 쓰임 → 메인 번들에서 분리
+const FloatingLines = lazy(() => import("../common/FloatingLines"));
 
 const FEATURES = [
 	{
@@ -95,17 +96,19 @@ const LoginScreen = () => {
 		>
 			{/* Animated FloatingLines background (subtle, brand blue/indigo) — fixed behind scrolling content */}
 			<div ref={bgRef} className="absolute inset-0 z-0 opacity-40">
-				<FloatingLines
-					linesGradient={["#1e3a8a", "#4f46e5", "#818cf8"]}
-					enabledWaves={["top", "middle", "bottom"]}
-					lineCount={[10, 15, 20]}
-					lineDistance={[8, 6, 4]}
-					animationSpeed={0.6}
-					bendRadius={5.0}
-					bendStrength={-0.5}
-					interactive={true}
-					parallax={true}
-				/>
+				<Suspense fallback={null}>
+					<FloatingLines
+						linesGradient={["#1e3a8a", "#4f46e5", "#818cf8"]}
+						enabledWaves={["top", "middle", "bottom"]}
+						lineCount={[10, 15, 20]}
+						lineDistance={[8, 6, 4]}
+						animationSpeed={0.6}
+						bendRadius={5.0}
+						bendStrength={-0.5}
+						interactive={true}
+						parallax={true}
+					/>
+				</Suspense>
 			</div>
 			<div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-blue-500/10 rounded-full blur-[120px] z-0" />
 			<div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-indigo-500/10 rounded-full blur-[120px] z-0" />

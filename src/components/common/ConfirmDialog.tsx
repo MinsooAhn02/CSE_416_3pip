@@ -36,7 +36,7 @@ const ConfirmDialog = ({
 	onCancel,
 }: ConfirmDialogProps) => {
 	const { t } = useTranslation();
-	const { isDark, hoverCls } = useTheme();
+	const { isDark } = useTheme();
 	const resolvedTitle = title ?? t("common.confirm");
 	const resolvedConfirmLabel = confirmLabel ?? t("common.confirm");
 	const resolvedCancelLabel = cancelLabel ?? t("common.cancel");

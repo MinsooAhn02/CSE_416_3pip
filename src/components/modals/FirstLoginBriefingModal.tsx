@@ -20,7 +20,7 @@ import BriefingSectionsView from "../widgets/BriefingSectionsView";
  */
 const FirstLoginBriefingModal = () => {
 	const { t } = useTranslation();
-	const { isDark, cardCls, muted } = useTheme();
+	const { isDark, muted } = useTheme();
 	const showFirstLoginModal = useSettingsStore((s) => s.showFirstLoginModal);
 	const dismissFirstLoginModal = useSettingsStore(
 		(s) => s.dismissFirstLoginModal,
