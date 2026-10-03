@@ -5,8 +5,30 @@
 
 > **Purpose:** Record of cross-verification testing per Milestones requirement.
 > Each completed feature must be verified by a team member who did **not** implement it.
-> Bugs found during verification should be filed in [GitHub Issues](https://github.com/MinsooAhn02/CSE_416_3pip/issues).
+> Bugs found during verification should be filed in [GitHub Issues](https://github.com/MinsooAhn-SBU/CSE_416_3pip/issues).
 >
+
+---
+
+## 2026-10-04
+
+### [Build] Clean-clone setup fixes
+- `index.html` loads `/src/main.tsx` (pointed at the deleted `main.jsx`; only worked through Vite's extension fallback).
+- `public/manifest.json` icons point at `images/MorningBriefing.AI_logo.png` (`icons/*.png` never existed → Chrome refused to load the unpacked extension).
+- `build:extension`: added `archiver` devDependency, ported `scripts/zip-extension.js` to the archiver v8 API, and made it fail with the real error (previously every error was reported as "archiver missing") and when `dist/manifest.json` is absent (previously produced an empty zip and exited 0).
+- `package-lock.json` is now committed; `.gitignore` no longer ignores `claude.md` (case-insensitive match would hide `CLAUDE.md` on Windows).
+- Added `.env.example` and `supabase/migrations/add_briefing_snapshots.sql` (the table was used by `useBriefingHistoryStore` but never defined).
+
+### [Chore] Repo cleanup
+- Removed unused `NewsDetailModal.tsx`, `src/l10n/index.ts`, empty `src/mock/`, the `smart-widget` Edge Function (no frontend caller) and the unused `playwright` dependency.
+- Untracked `dist/` and `supabase/.temp/` (already gitignored).
+- Moved course deliverables to `archive/course/` (`Documents/`, `Milestone/`, `final.md`, final report PDF, old notes, DOCS §16–17).
+- Merged `todo.md`, `tasks/todo.md` and open KNOWN_ISSUES into `docs/BACKLOG.md`.
+
+### [Docs] Agent-ready docs
+- Added `AGENTS.md` (commands, layout, architecture, conventions, pitfalls); `CLAUDE.md` imports it.
+- `README.md`: repo URL → `MinsooAhn-SBU`, dev port 3000, `npx supabase` deploy list (dropped smart-widget, added google-refresh), full secrets list, migration order incl. `add_briefing_snapshots.sql`, fixed documentation table.
+- `DOCS.md`: corrected init flow (`useExistingCache:false`, 6h TTL, 3h briefing interval), the five Edge Function call paths, `errorHandler` API, RLS policy table, `todos` unused, env/secrets/OAuth scopes, `provider_token` storage.
 
 ---
 
@@ -28,7 +50,7 @@
 
 ### [Docs] Cross-verification: BUG-15b entry added
 
-- `Milestone/todo_test.md`: Minsoo Ahn added BUG-15b (Tomorrow-schedule timezone bug fix) verification entry — 4-step test plan covering afternoon/morning mode and visibility-gate separation. Closes [KNOWN_ISSUES #15b](./Milestone/KNOWN_ISSUES.md).
+- `Milestone/todo_test.md`: Minsoo Ahn added BUG-15b (Tomorrow-schedule timezone bug fix) verification entry — 4-step test plan covering afternoon/morning mode and visibility-gate separation. Closes [KNOWN_ISSUES #15b](./archive/course/Milestone/KNOWN_ISSUES.md).
 
 **BUG-15b test steps (Implementer: Minsoo Ahn · Tester: TBD):**
 
@@ -44,7 +66,7 @@
 ### [Docs] Cross-verification log created + Jira → GitHub task migration
 
 - `Milestone/todo_test.md` created by Sungmin Choo — 9 features assigned for cross-verification (SCRUM-16, 17, 18, 20, 21, 22, 23, 25, 28) with implementer + tester pairs.
-- Filed 15 GitHub Issues (#1–#15) mirroring the Jira sprint backlog so the bug-tracking surface lives on GitHub for Milestone 4 grading. See GitHub [issue #16](https://github.com/MinsooAhn02/CSE_416_3pip/issues/16) for the migration notice.
+- Filed 15 GitHub Issues (#1–#15) mirroring the Jira sprint backlog so the bug-tracking surface lives on GitHub for Milestone 4 grading. See GitHub [issue #16](https://github.com/MinsooAhn-SBU/CSE_416_3pip/issues/16) for the migration notice.
 
 **Verification Assignments:**
 

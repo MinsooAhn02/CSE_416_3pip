@@ -1,8 +1,8 @@
 # MorningBriefing.AI — Developer Reference
 
-> Last updated: 2026-06-09
-> Single source of truth for architecture. Change log → [CHANGELOG.md](./CHANGELOG.md).
-> Architecture diagrams (auth flow, onboarding, store map, fetch pipeline) inlined in §4–§6. Original standalone file archived at [archive/ARCHITECTURE.md](./archive/ARCHITECTURE.md).
+> Last updated: 2026-10-04
+> Single source of truth for architecture. Quick agent/contributor guide → [AGENTS.md](./AGENTS.md). Open work → [docs/BACKLOG.md](./docs/BACKLOG.md). Change log → [CHANGELOG.md](./CHANGELOG.md).
+> Architecture diagrams (auth flow, onboarding, store map, fetch pipeline) inlined in §4–§6. Original standalone file archived at [archive/course/ARCHITECTURE.md](./archive/course/ARCHITECTURE.md).
 
 ---
 
@@ -23,9 +23,8 @@
 13. [Internationalization](#13-internationalization)
 14. [Supabase Setup](#14-supabase-setup)
 15. [Operations Checklist](#15-operations-checklist)
-16. [Known Incomplete Items](#16-known-incomplete-items)
-17. [Milestone 4 Compliance Gaps](#17-milestone-4-compliance-gaps)
-18. [Quick Reference](#18-quick-reference)
+16. [Known Issues](#16-known-issues)
+17. [Quick Reference](#17-quick-reference)
 
 ---
 
@@ -78,7 +77,7 @@ Browser
 
 | Library | Version | Purpose |
 |---------|---------|---------|
-| TypeScript | 5 | Language (`.ts` / `.tsx`); full migration 2026-05-24; `tsconfig.json strict:false`. `npm run build` runs `tsc -b && vite build`; `npm run typecheck` = `tsc --noEmit` |
+| TypeScript | 5 | Language (`.ts` / `.tsx`); full migration 2026-05-24; `tsconfig.json strict: true`. `npm run build` runs `tsc -b && vite build`; `npm run typecheck` = `tsc --noEmit` |
 | React | 18 | UI framework (entry: `src/main.tsx` → `App.tsx` in `React.StrictMode`) |
 | Vite | 6 | Build tool |
 | Tailwind CSS | 3 | Styling |
@@ -90,7 +89,7 @@ Browser
 | lucide-react | — | Icon set |
 | i18next / react-i18next | 24 / 15 | Korean / English i18n |
 | Google Maps Places JS API | weekly | Location autocomplete (`src/lib/googleMaps.ts`, `GooglePlacesLocationField.tsx`) |
-| `src/utils/errorHandler.ts` | — | Central `ApiError` class + `handleApiError()` for all Edge Function call sites |
+| `src/utils/errorHandler.ts` | — | `ErrorType`, `classifyApiError()`, `handleApiError(err, context, {userVisible, httpStatus})` — logs via `console.warn`, toasts only when `userVisible` |
 
 ### Backend / Infra
 
@@ -143,7 +142,6 @@ src/
     modals/
       DiaryListModal.tsx
       FirstLoginBriefingModal.tsx
-      NewsDetailModal.tsx         # Currently unused — replaced by direct URL navigation
       OnboardingModal.tsx
       PINModal.tsx
       SettingsModal.tsx           # 7-tab settings hub (widgets/smart/priority/briefing/interests/diary/profile)
@@ -190,7 +188,7 @@ src/
   utils/
     contentUtils.ts               # cleanContent() — strips markdown/hashtags/SNS boilerplate
     date.ts                       # formatLocalDate(), shiftDateString() — local-time date utils
-    errorHandler.ts               # ApiError class + handleApiError() — central Edge Function error surface
+    errorHandler.ts               # ErrorType + classifyApiError() + handleApiError() — central error surface
     eventRepeat.ts                # RRULE build/parse + localized repeat labels for calendar events
     interests.ts                  # Fixed + dynamic interest management utilities
     personaContext.ts             # buildPersonaContext() for Groq prompts
@@ -204,8 +202,9 @@ supabase/
     add_personalization.sql       # diaries, keyword_score_log, keyword_interests columns
     add_fixed_interests.sql       # fixed_interests, onboarding_perms columns
     add_user_qa.sql               # user_qa table
+    add_briefing_snapshots.sql    # briefing_snapshots table
   functions/
-    events/    fitness/   google-refresh/   groq/   smart-widget/
+    events/    fitness/   google-refresh/   groq/
     stocks/    tasks/     tavily/            weather/
 ```
 
@@ -233,7 +232,7 @@ flowchart TD
 
     I --> J[handleAuthChange: set isLoggedIn=true\nuser, providerToken ← session]
     J --> K[hydrateFromDB\nSettingsStore / WidgetStore / TodoStore\nDiaryStore / BriefingHistoryStore]
-    K --> L[fetchAll with useExistingCache:true]
+    K --> L[fetchAll with useExistingCache:false\nfresh fetch on every login/reload]
     L --> M{showOnboarding?}
 
     M -- Yes\nfirst login / no persona --> N[OnboardingModal\nStep 0: Select interests\nStep 1: Grant Calendar + Fit perms]
@@ -275,16 +274,20 @@ mount
 Condition: `isLoggedIn=true && user.id` present
 
 ```
-runFullInit()
+runFullInit()                                         (src/App.tsx)
   └─ localStorage.removeItem("mb_last_fetched_at")   ← stale timestamp reset (prevents "9000분 전" on re-login)
+  └─ localStorage.removeItem("mb_last_access_time")  ← forces a fresh fetch
   └─ useDataStore.setState({ lastFetchedAt: {} })     ← in-memory reset
   └─ hydrateFromDB() → parallel load of settings/widgets/todos/diary/briefingHistory
-  └─ fetchAll({ useExistingCache: true })   ← cache-first, fast first render (6-hour TTL)
-  └─ AI follow-up (generateAiTodoOnLoad, etc.)
+  └─ fetchAll({ useExistingCache: false })  ← bypasses the 6h cache (also on plain page reloads — see BACKLOG R1)
   └─ useMidnightTrigger → runs once: lazy diary synthesis for missed days + todo reset
+
+handleAuthChange()                                    (src/store/useAuthStore.ts)
+  └─ user_settings row exists → runPersonalizationBatch()   ← 30-day keyword decay (today-guarded)
+  └─ no user_settings row     → setShowOnboarding(true)     ← first login
 ```
 
-Fallback: if `user.id` is delayed, runs `fetchAll()` solo after 1200ms timeout.
+Fallback: if `user.id` is delayed, runs `fetchAll({ useExistingCache: false })` solo after 1200ms timeout.
 
 > **Note on "last updated" display:** `markFetched(key, dbCached.fetchedAt)` stamps the original DB-cache timestamp into localStorage. Resetting `mb_last_fetched_at` on login ensures the displayed "X분 전" always reflects the current session's fetch, not a previous session's stale value.
 
@@ -292,13 +295,13 @@ Fallback: if `user.id` is delayed, runs `fetchAll()` solo after 1200ms timeout.
 
 | Trigger | Target | Mechanism |
 |---------|--------|-----------|
-| Tab visibility return | All | `visibilitychange` event (1-hour stale check) |
+| Tab visibility return | All | `visibilitychange` → `fetchAll({ useExistingCache: true })` (6h TTL, `CACHE_THRESHOLD_MS`) |
 | 5-minute poll | All | `setInterval` (visible tab only) |
 | Manual refresh | Individual widget | `force=true` bypasses cache |
 | Language change | News + Trends + Smart Widget | `i18n.on("languageChanged")` module-level listener |
 | Interest change | News only | `useSettingsStore.subscribe()` fingerprint diff |
 | Midnight | Auto-diary synthesis | `useMidnightTrigger` — runs once on login |
-| 1-hour auto | AI Briefing | `setInterval(60min)` in `BriefingWidget` |
+| 3-hour auto | AI Briefing | `setInterval(3h)` in `BriefingWidget`; also regenerates on tone/language change and once when tomorrow's events arrive |
 
 ### Onboarding Flow
 
@@ -449,7 +452,7 @@ graph TD
 - Top-5 interests inserted into query: EN `"Focus topics: kw1, kw2..."`, KO `"관심 주제: kw1, kw2..."`
 - Korean mode: `include_domains: KO_NEWS_DOMAINS`, then `translateArticlesToKorean()` post-processes titles/content; translated payload backfilled to `api_cache`
 
-**Error handling:** All Edge Function call sites use `handleApiError(err, context)` from `src/utils/errorHandler.ts`. On failure, `ApiError` is thrown; catch blocks set `apiStatus="error"` and fall back to mock data.
+**Error handling:** All Edge Function call sites use `handleApiError(err, context)` from `src/utils/errorHandler.ts`. `handleApiError` classifies the error (timeout / network / http / unknown), logs it and returns the type — it never throws; callers set `apiStatus="error"` and fall back to cached or inline fallback data.
 
 **Korean article language filter:**
 - `scoreArticleForLanguage(item, "ko")`: Hangul in title → high score; Hangul in content → medium score; KO domain host → bonus; none → -1 (rejected)
@@ -831,7 +834,6 @@ sequenceDiagram
 | `WidgetSettingsModal` | News view type (text/news/grid), Smart Widget interest toggle |
 | `PINModal` | Diary access PIN input/confirmation |
 | `DiaryListModal` | Browse diary entries by date |
-| `NewsDetailModal` | **Currently unused** — replaced by direct URL navigation |
 | `NewsAllModal` (inline) | NewsWidget "More" → full news grid via `createPortal` (defined inside `NewsWidget.tsx`) |
 | `StocksViewAllModal` (inline) | StocksWidget "View More" → read-only full ticker grid (defined inside `StocksWidget.tsx`) |
 
@@ -846,31 +848,29 @@ sequenceDiagram
 | Function | Endpoint | Auth | Input | Output |
 |----------|----------|------|-------|--------|
 | `weather` | `/functions/v1/weather` | — | `{lat, lon}` | `{temp, city, condition, humidity, precipitation, airQuality}` |
-| `stocks` | `/functions/v1/stocks` | — | `{symbols: string[]}` | `[{symbol, price, change, changePercent, type, currency}]` — `type`: `"index"\|"stock"\|"etf"\|"currency"\|"unknown"`; `currency`: ISO code (e.g. `"USD"`, `"KRW"`) or `""`. Supported internal symbols: `KOSPI`, `NASDAQ`, `SP500`, `USDKRW`, `VIX`, `CRUDE` (WTI, → `USOIL`/`CL=F`), `DXY` (Dollar Index, → `DX=F` on Yahoo), `DJI`. Other tickers pass through to Twelve Data / Yahoo / Stooq as-is. |
+| `stocks` | `/functions/v1/stocks` | — | `{symbols: string[]}` | `[{symbol, price, change, changePercent, type, currency}]` — `type`: `"index"\|"stock"\|"etf"\|"currency"\|"unknown"`; `currency`: ISO code (e.g. `"USD"`, `"KRW"`) or `""`. Supported internal symbols: `KOSPI`, `NASDAQ`, `SP500`, `USDKRW`, `VIX`, `CRUDE` (WTI, → `USOIL`/`CL=F`), `DXY` (Dollar Index, → `DX-Y.NYB` on Yahoo), `DJI`. Indices/commodities are fetched from Yahoo (`YAHOO_SYMBOL_MAP`, no key); `USDKRW` and other tickers go through Twelve Data / Yahoo / Stooq. |
 | `tavily` | `/functions/v1/tavily` | — | `{query, mode, max_results, location?, include_domains?}` | News: `{answer, results, location}` / Trends: `{trends, answer, results}` |
 | `groq` | `/functions/v1/groq` | — | `{system, prompt, model?, temperature?}` | `{text}` — `Content-Type: application/json; charset=utf-8` |
 | `events` 🔒 | `/functions/v1/events` | JWT | `{token, action?, ...}` | Google Calendar CRUD. `action`: `list` (default) / `create` / `update` / `delete` / `read` |
 | `tasks` 🔒 | `/functions/v1/tasks` | JWT | `{token, action?, taskListId?}` | Google Tasks CRUD. `action`: `list` / `create` / `update` / `delete` / `move` / `clearCompleted` |
 | `fitness` 🔒 | `/functions/v1/fitness` | JWT | `{token}` | `{steps, sleep, calories, heartRate}` |
-| `smart-widget` 🔒 | `/functions/v1/smart-widget` | JWT | `{keyword, persona, token?, ...context}` | Personalized content structure |
-| `google-refresh` | `/functions/v1/google-refresh` | — | `{refresh_token}` | `{access_token, expires_in}` — exchanges a Google OAuth refresh token for a fresh access token. Requires `GOOGLE_CLIENT_ID` + `GOOGLE_CLIENT_SECRET` in Supabase Secrets. Called by `useAuthStore.ensureProviderToken()` to recover expired provider tokens. |
+| `google-refresh` | `/functions/v1/google-refresh` | — (no JWT check) | `{refresh_token}` | `{access_token, expires_in}` — exchanges a Google OAuth refresh token for a fresh access token. Requires `GOOGLE_CLIENT_ID` + `GOOGLE_CLIENT_SECRET` in Supabase Secrets. Called by `useAuthStore.ensureProviderToken()` to recover expired provider tokens. |
+
+> The `smart-widget` Edge Function was removed on 2026-10-04 — it had no frontend caller. Smart widget content is built client-side in `aiService.ts` via `groq` + `tavily`. `tavily` also accepts a batch form `{queries: [...]}`; `weather` also accepts `lang`.
 
 ### Calling convention from the browser
 
-All Edge Function calls go through `useDataStore` → `src/services/aiService.ts`:
+There is no single gateway — five call paths exist. The three helpers send `Content-Type: application/json` plus an `apikey: <anon-key>` header; the google-refresh fetch sends only `Authorization: Bearer <anon-key>`:
 
-```ts
-const res = await fetch(`${supabaseUrl}/functions/v1/<name>`, {
-  method: "POST",
-  headers: {
-    "Content-Type": "application/json",
-    "Authorization": `Bearer ${supabaseAnonKey}`,
-  },
-  body: JSON.stringify(payload),
-});
-```
+| Helper | File | Authorization | Used for |
+|--------|------|---------------|----------|
+| `invokeEdgeDetailed` / `invokeEdge` | `src/store/useDataStore.ts` | session JWT, falls back to anon key | weather, stocks, fitness, events, tavily, groq |
+| `invokeFunction` | `src/services/aiService.ts` | anon key | groq, tavily |
+| `invokeGoogleFunction` / `invokeGoogleWithAuth` | `src/store/useGoogleCalendarStore.ts` | session JWT (retries on 401/403 after `ensureProviderToken(forceRefresh)`) | events, tasks |
+| raw `fetch` | `src/store/useAuthStore.ts` | anon key | google-refresh |
+| `supabase.functions.invoke("groq")` | `src/services/personalizationService.ts` | supabase-js session | groq |
 
-The `Authorization: Bearer <anon-key>` header is required by Supabase; the anon key is public and scoped only to what RLS policies permit.
+The anon key is public and scoped only to what RLS policies permit.
 
 **JWT auth:** Client sends `supabase.auth.getSession()` → `session.access_token` in Authorization header. Server validates with `supabase.auth.getUser(jwt)` → 401 on failure.
 
@@ -892,7 +892,7 @@ The `Authorization: Bearer <anon-key>` header is required by Supabase; the anon 
 |-------|-------------|---------|
 | `user_settings` | `id` (= `auth.users.id`) | All per-user preferences and personalization data |
 | `widget_layouts` | `id` | Per-user widget grid positions (`{lg, md, sm}` breakpoints) |
-| `todos` | `id` | Daily todo items; `is_fixed`, `is_recurring` (generated column) |
+| `todos` | `id` | **Unused by the app** — todos mirror Google Tasks + localStorage (`useTodoStore`); no `.from("todos")` call exists |
 | `smart_keywords` | `id`, UNIQUE(`user_id`, `keyword`) | Smart widget keyword list |
 | `api_cache` | `id` (text, e.g. `u:{userId}:news_KR_ko_base`) | External API response cache (6-hour app-level TTL via `CACHE_THRESHOLD_MS`) |
 
@@ -909,14 +909,22 @@ pin_lock_mode              text  default 'immediate'  -- "immediate" | "off" | "
 
 | Table | File | Purpose |
 |-------|------|---------|
-| `diaries` | `add_personalization.sql` | Per-user diary entries with notes, answers, memo |
+| `diaries` | `add_personalization.sql` (also fully defined in `schema.sql`) | Per-user diary entries with notes, answers, memo |
 | `keyword_score_log` | `add_personalization.sql` | Raw interest keyword scoring events (30-day window) |
 | `user_qa` | `add_user_qa.sql` | Daily Q&A question/answer pairs |
-| `briefing_snapshots` | (optional, app-level) | Time-stamped briefing snapshots for diary synthesis |
+| `briefing_snapshots` | `add_briefing_snapshots.sql` (added 2026-10-04) | Time-stamped briefing snapshots for diary synthesis: `date`, `captured_at`, `source`, `payload jsonb` |
+
+Run order for a fresh project: `schema.sql` → `add_personalization.sql` → `add_fixed_interests.sql` → `add_user_qa.sql` → `add_briefing_snapshots.sql` (SQL editor; files have no timestamp prefix so `supabase db push` ignores them).
 
 ### RLS policies
 
-All tables: `auth.uid() = user_id` (or `= id` for `user_settings`), with SELECT/INSERT/UPDATE/DELETE policies.
+All tables restrict rows to `auth.uid() = user_id` (or `= id` for `user_settings`). Not every table has every verb:
+
+| Table | Policies |
+|-------|----------|
+| `diaries`, `todos` | select, insert, update, delete |
+| `user_settings`, `widget_layouts`, `api_cache` | select, insert, update (no delete) |
+| `smart_keywords`, `keyword_score_log`, `user_qa`, `briefing_snapshots` | select, insert, delete (no update) |
 
 ### Triggers
 
@@ -1032,7 +1040,7 @@ DiaryPanel → Dislike
 | `contentUtils.ts` | `cleanContent(text)`: strips markdown headers/bold/italic/links, hashtags, "follow us/subscribe/sign up/newsletter/click here", normalizes line breaks |
 | `storage.ts` | `load(key, fallback)`, `save(key, value)`: localStorage wrappers |
 | `date.ts` | `formatLocalDate()` (YYYY-MM-DD in local time), `shiftDateString(date, days)` |
-| `errorHandler.ts` | `ApiError` class + `handleApiError(err, context)` — central Edge Function error surface |
+| `errorHandler.ts` | `ErrorType`, `classifyApiError()`, `handleApiError(err, context, {userVisible, httpStatus})` — central error surface (returns the error type, never throws) |
 | `eventRepeat.ts` | RRULE build/parse for Google Calendar recurrence + localized repeat labels: `getRepeatOptions()`, `getRepeatLabel()`, `buildRepeatObject()`, `formDataFromRepeat()`, `buildEventRecurrence()`, `parseEventRepeat()`, `getWeekDaysShort()` |
 | `interests.ts` | `normalizeFixedInterestIds()`, `buildFixedInterests(ids)`, `mergeInterestLists(fixedIds, dynamicInterests)`, `getTopInterestKeywords()`, `getInterestFingerprint()`. 8 fixed IDs: `news·tech·fashion·finance·health·food·entertainment·sports` |
 | `taskRecurrence.ts` | `doesTaskOccurOnDate()`, `isTaskCompletedOnDate()`, `materializeTasksForDate()`, `getTaskDisplayDate()` |
@@ -1092,20 +1100,37 @@ DiaryPanel → Dislike
 
 ### Required environment variables
 
-```env
-VITE_SUPABASE_URL=https://xxxxx.supabase.co
-VITE_SUPABASE_ANON_KEY=eyJhbGci...
-VITE_GOOGLE_MAPS_API_KEY=AIza...
-```
+Template: [`.env.example`](./.env.example) — copy to `.env`. Frontend vars only (they are bundled into the browser JS):
 
-Share `.env.example` only — never commit actual keys.
+| Variable | Required | Notes |
+|----------|----------|-------|
+| `VITE_SUPABASE_URL` | yes | Without it (or the anon key) `supabase` is `null` and the app runs in Demo mode |
+| `VITE_SUPABASE_ANON_KEY` | yes | Public key, RLS-scoped |
+| `VITE_GOOGLE_MAPS_API_KEY` | no | Places autocomplete; location fields fall back to plain text |
+| `VITE_DEBUG_FLOW` | no | `"1"` enables data-flow console logs |
+
+### Edge Function secrets
+
+Set with `npx supabase secrets set KEY=value` (or Dashboard → Edge Functions). `SUPABASE_URL` / `SUPABASE_ANON_KEY` are injected automatically.
+
+| Secret | Used by |
+|--------|---------|
+| `GROQ_API_KEY` | `groq` |
+| `TAVILY_API_KEY` | `tavily` |
+| `OPENWEATHER_API_KEY` | `weather` |
+| `TWELVEDATA_API_KEY` | `stocks` |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | `google-refresh` |
 
 ### Google OAuth scopes
+
+Requested in `useAuthStore.ts` (`signInWithOAuth`, `prompt: "select_account"`):
 
 ```
 https://www.googleapis.com/auth/calendar
 https://www.googleapis.com/auth/tasks
 https://www.googleapis.com/auth/fitness.activity.read
+https://www.googleapis.com/auth/fitness.sleep.read
+https://www.googleapis.com/auth/fitness.heart_rate.read
 ```
 
 ### Security principles
@@ -1114,7 +1139,7 @@ https://www.googleapis.com/auth/fitness.activity.read
 2. No hardcoded secrets in client code
 3. RLS on all tables for user data isolation
 4. Google OAuth long-lived refresh token stripped from localStorage. Enforced by `secureStorage` adapter in `src/lib/supabase.ts` which deletes `provider_refresh_token` from every `*-auth-token` write. The short-lived `provider_token` (1-hour access token) IS persisted — Supabase does not refresh OAuth provider tokens, so stripping it caused every Calendar/Tasks/Fit call to fail after page reload. The 1-hour expiry bounds the exposure window. All Google-API callers go through `useAuthStore.getState().ensureProviderToken()` (memory → `getSession()` → `refreshSession()` fallback) — `fetchCalendar`, `fetchTomorrowCalendar`, `fetchHealth` all follow this pattern
-5. Edge Functions for user data (events/tasks/fitness/smart-widget) require Supabase JWT validation
+5. Edge Functions for user data (events/tasks/fitness) require Supabase JWT validation (`google-refresh` does not — see BACKLOG R2)
 6. Diary PIN: SHA-256 hashed before storage — no plaintext
 7. All table `GRANT` statements explicitly written in SQL files (Supabase auto-grant ends 2026-05-30)
 
@@ -1154,8 +1179,8 @@ npx wrangler deploy
 
 1. Confirm all environment variables are set
 2. Verify Auth/DB/RLS policies are in place
-3. Confirm Edge Functions are deployed (`stocks` and `groq` last deployed 2026-06-04)
-4. Confirm all migrations have been run (`add_personalization.sql`, `add_user_qa.sql`, `add_fixed_interests.sql`)
+3. Confirm Edge Functions are deployed (`groq` last deployed 2026-06-04; `stocks` Yahoo-index change is **not yet deployed** — see BACKLOG)
+4. Confirm all migrations have been run (`add_personalization.sql`, `add_fixed_interests.sql`, `add_user_qa.sql`, `add_briefing_snapshots.sql`)
 
 ### Runtime verification
 
@@ -1178,120 +1203,24 @@ npx wrangler deploy
 
 ---
 
-## 16) Known Incomplete Items
+## 16) Known Issues
 
-| Item | Status |
-|------|--------|
-| Google Fitness live API sync | Edge Function implemented; live token connection needed |
-| Voice feature (`voiceOn`) | State exists; no UI or TTS implementation |
-| `NewsDetailModal` | File exists but unused — replaced by direct URL navigation |
-| Trends detail view | News/stocks "view all" modals implemented; trends left/right pagination unimplemented |
-| Chrome extension publishing | `ExtensionInstallBanner` + `build:extension` script exist; `STORE_URL`/`EXTENSION_ID` are placeholders pending Web Store publish |
-
-**Resolved since 2026-05-22:**
-- ~~Tavily token overuse~~ → ✅ Resolved 2026-05-23 (`86a34a8`): `api_cache` TTL extended 1 h → 6 h
-- ~~Briefing "Tomorrow" section empty for non-UTC users~~ → ✅ Resolved 2026-05-24 (`5c7b7a6`): explicit `timeMin/timeMax` local-timezone ISO strings
-
-**Resolved 2026-06-02 (todo.md batch fix):**
-- ~~이슈 1: 뉴스=트렌드~~ → ✅ `fetchNews` 파생 trends에서 뉴스 URL dedupe 적용
-- ~~이슈 2/13: 카테고리 표시 불일치~~ → ✅ override 우선 표시, 드롭다운 글자만, 버튼 UI 완화
-- ~~이슈 3: 스마트 위젯 stale 데이터~~ → ✅ `isSmartWidgetStale` 3시간 기준 자동 재생성
-- ~~이슈 4: 로그인 시 새로고침 안 됨~~ → ✅ `mb_last_access_time` 초기화 + `useExistingCache: false`
-- ~~이슈 5: 사이드바 너무 좁음~~ → ✅ 20% → 29%, Col A/B flex 축소
-- ~~이슈 6: 추가 버튼 우측 벽에 붙음~~ → ✅ `bottom-8 right-10`, 팝업 `right-16`
-- ~~이슈 7: 브리핑 임의 갱신~~ → ✅ interval 1h→3h, `activeWidgetIds` cascade 제거
-- ~~이슈 8: 리마인더 기본값 default~~ → ✅ `EMPTY_FORM.reminderMode: "none"`
-- ~~이슈 9: 이벤트 폼 가로 스크롤~~ → ✅ 모달 `max-w-md→max-w-xl`, `max-h-[85vh]`
-- ~~이슈 10: 캘린더 폰트 불균형~~ → ✅ 월간 날짜 `text-sm→text-base`, 버튼 `h-9 w-9→h-10 w-10`
-- ~~이슈 11: 스마트 위젯 그룹화~~ → ✅ 키워드별 개별 subBlock 생성
-- ~~이슈 12: PIN 자동 포커스~~ → ✅ `MaskedPinField` forwardRef, 4자리 완성 시 confirm focus
-- ~~이슈 14: 날씨 영어 표시~~ → ✅ AQI 인덱스 반환, `lang` 파라미터, UI 문자열 i18n
-- ~~이슈 16: 창 축소 시 사이드바~~ → ✅ resize 리스너 1200px 미만 자동 닫힘
-- ~~이슈 17: Tavily API 효율~~ → ✅ edge function 배치 지원, `searchSmartSectionsBatched` (N호출→1-2호출)
-- ~~이슈 18: Google 연결 끊김~~ → ✅ `google-refresh` edge function, `providerRefreshToken` 저장/교환 (requires `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` in Supabase secrets)
-
-**Resolved 2026-06-04:**
-- ~~Google Calendar live API sync~~ → ✅ `invokeGoogleWithAuth` wrapper with auto-retry on 401/403 (`b4ee88a`); `ensureProviderToken(forceRefresh:true)` recovers expired sessions on next-day re-entry without re-login
-- ~~Smart Widget Korean mode (Latest Updates / Latest Coverage not loading)~~ → ✅ Korean article fetch reworked (`4ba0d4b`): `include_domains` opened for non-news sections, `exclude_domains` used to filter low-quality domains
-- ~~Stocks Edge Function deploy~~ → ✅ Manually deployed to Supabase 2026-06-04 (universal-ticker fallback, type/currency metadata, ticker validation live)
-- ~~`groq` Edge Function deploy~~ → ✅ Manually deployed to Supabase 2026-06-04 (`Content-Type: application/json; charset=utf-8` header live; Korean text no longer garbled)
-
-**Resolved 2026-06-09:**
-- ~~Diary PIN set/modify/recovery UI not exposed~~ → ✅ PIN setup/change/disable now exposed in the SettingsModal **diary** tab, alongside diary generation language and PIN lock timing (`immediate`/`off`/`timed`)
-- ~~`BriefSettingsModal` standalone~~ → ✅ Removed; AI-briefing toggles folded into the SettingsModal **briefing** tab
-- ~~Google connection toggles in widget management~~ → ✅ Moved to the SettingsModal **profile** tab (`c6762b0`)
+Open bugs, partially done items and pending manual deploy/DB steps live in [docs/BACKLOG.md](./docs/BACKLOG.md). Resolved-issue history and the Milestone 4 checklist were moved to [archive/course/DOCS_status_history.md](./archive/course/DOCS_status_history.md).
 
 ---
 
-## 17) Milestone 4 Compliance Status
-
-Updated 2026-05-29. All five Milestone 4 documentation deliverables complete; Sprint 4 closed; deployment live on Cloudflare Workers at `https://morningbriefing.dksalstn0621.workers.dev`.
-
-### ✅ README.md — Done
-
-- [x] Setup instructions for Windows / PowerShell (prerequisites, clone, install, `.env` config, DB setup, Edge Function deploy, dev run)
-- [x] Build & Deploy section (`npm run build` + `npx wrangler deploy`)
-- [x] Testing section with 14-point manual verification checklist (expanded 2026-05-29 with items #12–#14)
-- [x] OS coverage explicitly stated (Windows 10 / 11 + PowerShell)
-- [x] Bug Reporting section linking to repo issues
-- [x] Backend description corrected (was `FastAPI/Python/Gemini`; now `Supabase Edge Functions/Deno/Groq`)
-- [x] TypeScript migration noted in Tech Stack; `ARCHITECTURE.md` and `docs/security/localStorage-audit.md` added to Documentation table
-
-### ✅ Milestone/SCHEDULE.md — Done
-
-- [x] May 1st Jira baseline (12 epics × 4 sprints) imported and verified against codebase
-- [x] Executive Summary table (11 ✅ / 0 🟡 / 1 🔄) — Sprint 4 ✅ Completed 2026-05-29
-- [x] Per-task "Completion Evidence" column with code references, function names, commit hashes
-- [x] Schedule Changes section: SCRUM-28 (Vercel → Cloudflare), SCRUM-16/25 (Persona → category-based personalization), SCRUM-24 (Desktop History → Smart Widget keyword learning + Briefing snapshots) — all 3 changes formally documented with rationale
-- [x] "Additional accomplishments beyond schedule" section — TypeScript migration, error-handling standardization, performance −27.9 %, ARCHITECTURE.md, Tavily TTL fix, timezone fix
-- [x] Jira board linked at top as live source of truth
-
-### ✅ Milestone/API.md — Done
-
-- [x] All 9 Edge Functions documented (weather, stocks, tavily × 3 modes, groq, events, tasks, fitness, smart-widget)
-- [x] All Supabase REST endpoints documented (6 missing from original template added: todos, smart_keywords, diaries, user_qa, briefing_snapshots, keyword_score_log)
-- [x] All 3 Supabase Auth client API calls documented
-- [x] 7 corrections applied vs. Excel template; cache TTL corrected to 6 h (2026-05-29)
-- [x] Auth/RLS requirements clearly marked per endpoint
-- [x] Caching, error handling, RLS cross-cutting concerns documented
-
-### ✅ Bug tracking — Done
-
-- [x] README "Bug Reporting" section explains where to find issues and how to file new ones
-- [x] `.github/ISSUE_TEMPLATE/bug_report.md` — structured bug form
-- [x] `.github/ISSUE_TEMPLATE/feature_request.md` — structured feature form
-- [x] `Milestone/KNOWN_ISSUES.md` — 9 retroactive issues filed-and-closed (GH #3, #17–#23, #25); open issues remain tracked in GH Issues
-- [x] 9 retroactive GitHub issues filed-and-closed for transparency paper trail (2026-05-29)
-- [ ] **Remaining:** team completes cross-verification of completed features (verify each marked-complete feature with a team member who did not implement it; bugs found get filed)
-
-### ✅ Milestone/MILESTONE4_PROGRESS.md — Done
-
-- [x] Individual progress update sections for all 3 team members (scheduled, in-progress, actually completed, partial)
-- [x] Group progress update with self-assigned grade (A−) and rationale — Sprint 4 fully closed
-- [x] Process adjustments section for the final release sprint
-- [x] Sign-off block for each team member
-- [ ] **Remaining:** each team member signs the sign-off block
-- [ ] **Remaining:** copy to Brightspace for submission alongside GitHub commit
-
-### Remaining pre-submission items
-
-1. **Cross-verification** — Each completed feature verified by a team member who did not implement it; any bugs found should be filed in GitHub Issues.
-2. **Team sign-offs** — Each member signs `Milestone/MILESTONE4_PROGRESS.md`; file copied to Brightspace.
-
----
-
-## 18) Quick Reference
+## 17) Quick Reference
 
 | Question | Answer |
 |----------|--------|
 | Where is the Google login button? | `src/components/layout/LoginScreen.tsx` |
 | Where is the auth session loaded? | `App.tsx` → `supabase.auth.getSession()` + `onAuthStateChange` |
 | Where is the daily data fetched? | `useDataStore.fetchAll()` called from `App.tsx` |
-| Where are API secrets? | `.env` (server-side only) + Supabase Edge Function env |
+| Where are API secrets? | Supabase Edge Function secrets only (§14). `.env` holds public `VITE_*` values that ship in the bundle |
 | Where is the 6-hour cache TTL? | `useDataStore.readApiCache()` — checks `mb_cache_*_at` in localStorage |
 | Where is the midnight diary generated? | `useMidnightTrigger.ts` → `diaryGenerationService.ts` → `aiService.generateDiary` |
 | Where does onboarding save data? | `useOnboardingStore.finishOB()` → `useSettingsStore.syncSettings()` → `user_settings` |
-| Where is `provider_token` stored? | Memory only (`useAuthStore.providerToken`); stripped from localStorage by `secureStorage` adapter in `src/lib/supabase.ts` |
+| Where is `provider_token` stored? | In the persisted Supabase session (localStorage) and `useAuthStore.providerToken`. Only `provider_refresh_token` is stripped from localStorage by the `secureStorage` adapter in `src/lib/supabase.ts` |
 
 ---
 

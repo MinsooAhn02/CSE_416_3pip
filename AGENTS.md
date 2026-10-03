@@ -1,0 +1,95 @@
+# AGENTS.md
+
+Working guide for AI coding agents (Codex, Claude Code) and contributors. Keep it short and true;
+deep detail lives in [DOCS.md](./DOCS.md), open work in [docs/BACKLOG.md](./docs/BACKLOG.md).
+
+## What this is
+
+MorningBriefing.AI — a personal morning dashboard that is both a web app (Cloudflare Workers, static SPA)
+and a Chrome new-tab extension. React 18 + Vite 6 + TypeScript (`strict: true`) + Zustand 5 + Tailwind 3
++ i18next (en/ko). Backend is Supabase: Auth (Google OAuth), Postgres with RLS, and Deno Edge Functions
+that proxy Groq, Tavily, OpenWeather, Twelve Data/Yahoo and Google Calendar/Tasks/Fit.
+
+## Commands
+
+| Task | Command |
+|---|---|
+| Install | `npm install` (lockfile is committed) |
+| Dev server | `npm run dev` → http://localhost:3000 (port fixed, `strictPort`) |
+| Typecheck | `npm run typecheck` |
+| Production build | `npm run build` (`tsc -b && vite build` → `dist/`) |
+| Extension zip | `npm run build:extension` → `morningbriefing-extension-v<version>.zip` |
+| Deploy web | `npm run build && npx wrangler deploy` |
+| Deploy an Edge Function | `npx supabase functions deploy <name>` |
+
+There is no automated test suite and no linter. Before calling a change done, run `npm run typecheck`
+and `npm run build`; for UI changes also open the dev server. `scripts/test-diary-generation.mjs` is a
+manual script that calls the live `groq` function.
+
+Setup from scratch: `.env.example` → `.env`, then the SQL and secrets steps in README §4–5.
+Without `.env`, `supabase` is `null` and the app boots in Demo mode.
+
+## Layout
+
+```
+src/
+  main.tsx, App.tsx      entry; App does auth bootstrap + post-login init
+  store/                 Zustand stores (one hook per file, useXStore.ts)
+  services/              aiService (Groq prompts + Tavily search), diaryGenerationService, personalizationService
+  components/            layout/ (dashboard, panels, login), widgets/, modals/, common/, banners/
+  hooks/ utils/ constants/ types/ lib/ (supabase client, googleMaps loader)
+  l10n/                  i18n.ts + en.json + ko.json
+supabase/
+  schema.sql, migrations/*.sql   run by hand in the SQL editor (order in DOCS §10)
+  functions/<name>/index.ts      Deno Edge Functions
+public/                  manifest.json + background.js for the extension, images, privacy policy
+archive/course/          old course deliverables — historical, do not treat as current
+```
+
+## Architecture in brief
+
+- **Init** (`src/App.tsx`): `getSession()` + `onAuthStateChange` → `useAuthStore.handleAuthChange`.
+  Once `user.id` exists, `runFullInit` (guarded by `initPhaseRef`) hydrates 5 stores from Supabase,
+  then `useDataStore.fetchAll({ useExistingCache: false })`. Afterwards `visibilitychange` and a
+  5-minute poll call `fetchAll({ useExistingCache: true })` (6h TTL, `CACHE_THRESHOLD_MS`).
+- **Stores** (`src/store`, plain `create<T>()((set, get) => …)`, no persist middleware):
+  `useAuthStore` session/OAuth/`ensureProviderToken` · `useSettingsStore` user_settings, interests ·
+  `useWidgetStore` visibility, layouts, smart keywords · `useDataStore` (largest) weather/stocks/news/
+  trends/health/calendar fetch + `api_cache` · `useGoogleCalendarStore` Calendar/Tasks CRUD ·
+  `useTodoStore` todos mirrored from Google Tasks · `useDiaryStore` diaries, PIN, Q&A ·
+  `useBriefingHistoryStore` briefing snapshots · `useOnboardingStore` · `useQuickLinksStore`.
+- **Edge Functions → callers**: weather, stocks, fitness → `useDataStore`; groq, tavily → `aiService`
+  and `useDataStore` (groq also `personalizationService`); events → `useGoogleCalendarStore` and
+  `useDataStore`; tasks → `useGoogleCalendarStore`; google-refresh → `useAuthStore`.
+  There are five separate call helpers — see DOCS §9 before adding a new call.
+
+## Conventions
+
+- Errors: route through `handleApiError(err, "<area>:<detail>", { httpStatus, userVisible })`
+  (areas in use: `edge:`, `ai:`, `diary:`, `cache_read:`, `cache_write:`)
+  from `src/utils/errorHandler.ts`. Edge helpers never throw into the UI — they return `null`
+  (or `{ ok: false, … }` from `invokeEdgeDetailed`);
+  widgets track status with `setApiStatus` / `markFetched`.
+- localStorage: use `load()` / `save()` from `src/utils/storage.ts`; keys are prefixed `mb_`.
+- Dates: use `src/utils/date.ts` (`formatLocalDate`), never `toISOString().slice(0, 10)` — that is the
+  UTC date and is "yesterday" in Korea before 09:00. Some legacy spots still do it (BACKLOG R9).
+- i18n: user-facing text goes through `t("…")`; add every key to **both** `en.json` and `ko.json`.
+- `supabase` from `src/lib/supabase.ts` can be `null` — guard every use.
+- Code comments are mostly Korean; docs are English. Either is fine, match the surrounding file.
+- New tables: add a migration file with explicit `GRANT`s and RLS policies (Supabase stopped auto-grants).
+
+## Pitfalls
+
+- `VITE_*` values are baked in at build time — rebuild after changing `.env`.
+- Port 3000 is referenced by Supabase auth `site_url` and the extension's `externally_connectable`.
+- Edge Function changes are not live until deployed with `npx supabase functions deploy <name>`;
+  check docs/BACKLOG.md for pending deploys.
+- `provider_refresh_token` is stripped from localStorage on purpose (`secureStorage` in `src/lib/supabase.ts`);
+  `provider_token` is persisted. See docs/security/localStorage-audit.md.
+- Every reload currently triggers a full refetch (Tavily/Groq cost) — known, BACKLOG R1.
+- Don't commit `dist/`, `.env`, `supabase/.temp/` or extension zips (all gitignored).
+
+## Docs to keep in sync
+
+Update `DOCS.md` when architecture changes, `docs/BACKLOG.md` when an item is fixed or found,
+and `CHANGELOG.md` with a dated entry for user-visible changes.

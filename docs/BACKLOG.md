@@ -23,6 +23,7 @@ Single list of open work. Replaces the old root `todo.md`, `tasks/todo.md` (stoc
 | R6 | `todos` table is created in `schema.sql` but never queried (todos mirror Google Tasks + localStorage). Drop or use. | `supabase/schema.sql` |
 | R7 | Migration files have no timestamp prefix, so `supabase db push/reset` ignores them; they are applied by hand (order in AGENTS.md). | `supabase/migrations/` |
 | R8 | `npm audit` reports 15 vulnerabilities (1 critical) in dependencies — not triaged. | `package-lock.json` |
+| R9 | `todayStr` uses UTC (`toISOString().slice(0,10)`) → in KST before 09:00 "today" is yesterday. Affects diary dates, settings today-guard, personalization batch/cutoffs. Other modules already use `formatLocalDate`. | `src/store/useDiaryStore.ts`, `src/store/useSettingsStore.ts`, `src/services/personalizationService.ts` |
 
 ## Partially done (from old todo.md)
 

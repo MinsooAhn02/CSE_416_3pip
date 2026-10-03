@@ -1,7 +1,7 @@
 # MorningBriefing.AI
 
 > **Live demo:** https://morningbriefing.dksalstn0621.workers.dev (Cloudflare Workers)
-> **Repository:** https://github.com/MinsooAhn02/CSE_416_3pip
+> **Repository:** https://github.com/MinsooAhn-SBU/CSE_416_3pip
 
 ## 🚩 Problem Statement
 
@@ -24,7 +24,7 @@ MorningBriefing.AI eliminates the need for users to search for information throu
 ## 🛠️ Technology Stack
 
 ### Frontend
-- **Language:** TypeScript (`.ts` / `.tsx`) — full migration completed 2026-05-24 (`tsconfig.json` with `strict:false`)
+- **Language:** TypeScript (`.ts` / `.tsx`) — full migration completed 2026-05-24 (`tsconfig.json` with `strict: true`)
 - **Framework:** React 18.3
 - **Build tool:** Vite 6
 - **Styling:** Tailwind CSS 3.4
@@ -72,7 +72,7 @@ For full architecture details, see [DOCS.md](./DOCS.md) (English)
 The latest stable code lives on the `main` branch.
 
 ```powershell
-git clone https://github.com/MinsooAhn02/CSE_416_3pip
+git clone https://github.com/MinsooAhn-SBU/CSE_416_3pip
 cd CSE_416_3pip
 ```
 
@@ -90,12 +90,16 @@ npm install
 
 ### 3. Configure environment variables
 
-Create a `.env` file in the project root with the following keys (do **not** commit `.env` — it's gitignored):
+Copy `.env.example` to `.env` and fill it in (do **not** commit `.env` — it's gitignored):
+
+```powershell
+Copy-Item .env.example .env
+```
 
 ```env
 VITE_SUPABASE_URL=https://<your-project-ref>.supabase.co
 VITE_SUPABASE_ANON_KEY=<your-anon-key>
-VITE_GOOGLE_MAPS_API_KEY=<your-google-maps-key>
+VITE_GOOGLE_MAPS_API_KEY=<optional — location fields fall back to plain text without it>
 ```
 
 **Where to get each value:**
@@ -114,33 +118,37 @@ If `.env` is missing or empty, the app boots in **Demo mode** (the login screen 
 The required tables are defined in `supabase/schema.sql` and migrations in `supabase/migrations/`.
 
 In the Supabase Dashboard → SQL Editor, run the following files in order:
-1. `supabase/schema.sql` — base tables (`user_settings`, `widget_layouts`, `todos`, `smart_keywords`, `api_cache`)
+1. `supabase/schema.sql` — base tables (`user_settings`, `widget_layouts`, `todos` (unused), `smart_keywords`, `api_cache`, `diaries`)
 2. `supabase/migrations/add_personalization.sql` — `diaries`, `keyword_score_log`, personalization columns
 3. `supabase/migrations/add_fixed_interests.sql` — `fixed_interests`, `onboarding_perms` columns
 4. `supabase/migrations/add_user_qa.sql` — `user_qa` table
+5. `supabase/migrations/add_briefing_snapshots.sql` — `briefing_snapshots` table
 
-> **Note:** From 2026-05-30, Supabase will stop auto-granting permissions on new tables. The SQL files already include explicit `GRANT` blocks.
+> **Note:** The migration files have no timestamp prefix, so `supabase db push` ignores them — run them by hand. Since 2026-05-30 Supabase no longer auto-grants permissions on new tables; the SQL files include explicit `GRANT` blocks.
 
 ### 5. Edge Functions deployment
 
-Deploy the serverless functions via the Supabase CLI or the Dashboard. The functions live in `supabase/functions/`:
+The Supabase CLI is a devDependency, so use it through `npx`. The functions live in `supabase/functions/`:
 
 ```powershell
-supabase functions deploy weather
-supabase functions deploy stocks
-supabase functions deploy tavily
-supabase functions deploy groq
-supabase functions deploy events
-supabase functions deploy tasks
-supabase functions deploy fitness
-supabase functions deploy smart-widget
+npx supabase login
+npx supabase link --project-ref <your-project-ref>
+npx supabase functions deploy weather
+npx supabase functions deploy stocks
+npx supabase functions deploy tavily
+npx supabase functions deploy groq
+npx supabase functions deploy events
+npx supabase functions deploy tasks
+npx supabase functions deploy fitness
+npx supabase functions deploy google-refresh
 ```
 
-Set the required secrets in Supabase Dashboard → Project Settings → Edge Functions:
-- `OPENWEATHER_API_KEY`
-- `GROQ_API_KEY`
-- `TAVILY_API_KEY`
-- `TWELVEDATA_API_KEY`
+Set the required secrets (Dashboard → Project Settings → Edge Functions, or `npx supabase secrets set KEY=value`):
+- `OPENWEATHER_API_KEY` — weather
+- `GROQ_API_KEY` — groq
+- `TAVILY_API_KEY` — tavily
+- `TWELVEDATA_API_KEY` — stocks (USD/KRW and single tickers; indices use Yahoo, no key)
+- `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` — google-refresh
 
 ### 6. Run the dev server
 
@@ -148,7 +156,7 @@ Set the required secrets in Supabase Dashboard → Project Settings → Edge Fun
 npm run dev
 ```
 
-Open `http://localhost:5173` (Vite default port). The dashboard should load with the login screen.
+Open `http://localhost:3000`. The port is fixed (`strictPort`) because the Supabase auth `site_url` and the extension's `externally_connectable` both point at it — free port 3000 if the server refuses to start.
 
 ---
 
@@ -179,7 +187,7 @@ The deployment uses `wrangler.jsonc` at the repo root. The `not_found_handling: 
 npm run build:extension
 ```
 
-Generates `dist/` plus a zipped extension archive for the Chrome Web Store.
+Generates `dist/` plus `morningbriefing-extension-v<version>.zip` (gitignored) for the Chrome Web Store. For local testing, load `dist/` via `chrome://extensions` → Developer mode → **Load unpacked**.
 
 ### Type checking (TypeScript)
 
@@ -214,7 +222,7 @@ After completing setup (above), verify the dev environment with this checklist:
 13. **Login timestamp reset:** Log out → wait a few minutes → log back in → confirm widget "last-updated" labels read "방금" / "just now", not a stale "9000분 전"
 14. **SmartWidget category override:** On any Smart Widget header, click the `[≡ + emoji + ▾]` button → dropdown opens → manual category override applies
 
-If any check fails, check the [GitHub Issues](https://github.com/MinsooAhn02/CSE_416_3pip/issues) for known issues or file a bug (see below).
+If any check fails, check the [GitHub Issues](https://github.com/MinsooAhn-SBU/CSE_416_3pip/issues) for known issues or file a bug (see below).
 
 ### Test data and accounts
 
@@ -237,19 +245,19 @@ This is expected. The app is in GCP **Testing** mode — full OAuth verification
 
 ### Bug tracking history
 
-Bugs were tracked via **`CHANGELOG.md`** and **`todo.md`** throughout development (Sprint 1–4, May 6–27, 2026). Each fix round in `CHANGELOG.md` records the date, affected files, root cause, fix applied, and any follow-up items — attributed by team role: UI/UX fixes (Dahyun Kwon), complex data-flow and logic fixes (Minsoo Ahn), and backend / store / API fixes (Sungmin Choo). Open items and per-feature tasks were tracked in `todo.md`.
+Bugs were tracked via **`CHANGELOG.md`** and **`todo.md`** throughout development (Sprint 1–4, May 6–27, 2026). Each fix round in `CHANGELOG.md` records the date, affected files, root cause, fix applied, and any follow-up items — attributed by team role: UI/UX fixes (Dahyun Kwon), complex data-flow and logic fixes (Minsoo Ahn), and backend / store / API fixes (Sungmin Choo). Open items and per-feature tasks were tracked in `todo.md` (now consolidated into `docs/BACKLOG.md`).
 
-Sprint schedule and task assignments were managed in **Jira** and migrated to GitHub Issues on 2026-05-23 for Milestone 4 compliance. See GitHub [issue #16](https://github.com/MinsooAhn02/CSE_416_3pip/issues/16) for the sprint history and task migration notice. The Jira board remains the reference for sprint-level planning: [Jira Scrum Board](https://stonybrook-team-3pip.atlassian.net/jira/software/projects/SCRUM/boards/1).
+Sprint schedule and task assignments were managed in **Jira** and migrated to GitHub Issues on 2026-05-23 for Milestone 4 compliance. See GitHub [issue #16](https://github.com/MinsooAhn-SBU/CSE_416_3pip/issues/16) for the sprint history and task migration notice. The Jira board remains the reference for sprint-level planning: [Jira Scrum Board](https://stonybrook-team-3pip.atlassian.net/jira/software/projects/SCRUM/boards/1).
 
 ### Where to find open bugs
 
-Open issues are tracked in the **GitHub Issues** tab of this repository: `https://github.com/MinsooAhn02/CSE_416_3pip/issues`
+Open issues are tracked in the **GitHub Issues** tab of this repository: `https://github.com/MinsooAhn-SBU/CSE_416_3pip/issues`, with a consolidated status list in [docs/BACKLOG.md](./docs/BACKLOG.md).
 
 Browse all open bugs there to see what's known. If your issue matches an existing one, please add a comment with reproduction details rather than filing a duplicate.
 
 ### How to report a new bug
 
-1. Go to `https://github.com/MinsooAhn02/CSE_416_3pip/issues/new`
+1. Go to `https://github.com/MinsooAhn-SBU/CSE_416_3pip/issues/new`
 2. Use the title format: `[BUG] <short description>`
 3. Include:
    - **Steps to reproduce** (numbered list)
@@ -267,12 +275,12 @@ For security-sensitive issues, do not open a public issue — contact the team d
 
 | File | Purpose |
 |------|---------|
-| [ARCHITECTURE.md](./ARCHITECTURE.md) | 30-minute end-to-end onboarding overview (auth flow, store map, fetch pipeline) — added 2026-05-24 |
+| [AGENTS.md](./AGENTS.md) | Short working guide for contributors and AI coding agents (commands, architecture map, conventions, pitfalls). `CLAUDE.md` imports it. |
 | [DOCS.md](./DOCS.md) | Architecture reference — stores, caching, widgets, Edge Functions, DB schema, personalization |
+| [docs/BACKLOG.md](./docs/BACKLOG.md) | Open bugs, partially done items, and pending manual (deploy/DB) steps |
 | [CHANGELOG.md](./CHANGELOG.md) | Dated change log — fix rounds by date, root cause, files changed, and follow-up items |
-| [Milestone/](./Milestone/) | CSE 416 milestone documents: `ProjectMilestones.md` (course spec), `SCHEDULE.md` (sprints + schedule changes), `API.md` (25 endpoints), `KNOWN_ISSUES.md` (bug staging), `MILESTONE4_PROGRESS.md` (team progress + self-grade) |
 | [docs/security/localStorage-audit.md](./docs/security/localStorage-audit.md) | Audit of localStorage usage (XSS surface, `provider_token` handling) — added 2026-05-24 |
-| `todo.md` | Working notes, open tasks, and manual test checklist |
+| [archive/course/](./archive/course/) | CSE 416 course deliverables (design PDFs, milestones, API sheet, final report, old architecture notes). Historical — may be stale. |
 
 ---
 
