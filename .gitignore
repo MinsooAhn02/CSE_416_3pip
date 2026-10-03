@@ -5,13 +5,8 @@ dist/
 !.env.example
 .vscode/
 .DS_Store
-
-# npm 의존성 파일
-package-lock.json
-.package-lock.json
 .vite/
-# CHANGELOG.md
-claude.md
+morningbriefing-extension-*.zip
 .claude/
 .claude-ignore
 # script.md

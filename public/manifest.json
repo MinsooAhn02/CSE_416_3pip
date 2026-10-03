@@ -14,8 +14,8 @@
 		"matches": ["https://morningbriefing.dksalstn0621.workers.dev/*", "http://localhost:3000/*"]
 	},
 	"icons": {
-		"16": "icons/icon16.png",
-		"48": "icons/icon48.png",
-		"128": "icons/icon128.png"
+		"16": "images/MorningBriefing.AI_logo.png",
+		"48": "images/MorningBriefing.AI_logo.png",
+		"128": "images/MorningBriefing.AI_logo.png"
 	}
 }

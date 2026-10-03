@@ -1,5 +1,5 @@
-import { createWriteStream, readdirSync, statSync, readFileSync } from "fs";
-import { join, relative } from "path";
+import { createWriteStream, existsSync, readFileSync } from "fs";
+import { join } from "path";
 import { fileURLToPath } from "url";
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
@@ -13,30 +13,28 @@ try {
   version = pkg.version ?? "1.0.0";
 } catch {}
 
-// Simple ZIP creation using Node.js built-ins (no extra deps)
-// For a proper ZIP we use the archiver package if available, otherwise remind user
+// archiver(devDependency)로 dist/를 zip — Chrome Web Store 업로드용
 async function zipDir() {
-  try {
-    const { default: archiver } = await import("archiver");
-    const output = createWriteStream(outFile.replace("1.0.0", version));
-    const archive = archiver("zip", { zlib: { level: 9 } });
-
-    output.on("close", () => {
-      console.log(`✅  Extension packaged: morningbriefing-extension-v${version}.zip (${archive.pointer()} bytes)`);
-    });
-
-    archive.on("error", (err) => { throw err; });
-    archive.pipe(output);
-    archive.directory(distDir, false);
-    await archive.finalize();
-  } catch {
-    console.log(
-      "\n📦  archiver 패키지가 없습니다. 아래 명령어로 설치 후 다시 실행하세요:\n" +
-      "    npm install --save-dev archiver\n" +
-      "\n또는 dist 폴더를 수동으로 ZIP으로 압축해 Chrome Web Store에 업로드하세요.\n"
-    );
-    process.exit(1);
+  if (!existsSync(join(distDir, "manifest.json"))) {
+    throw new Error(`${distDir}/manifest.json not found — run "vite build" first`);
   }
+  const { ZipArchive } = await import("archiver"); // archiver v8 API
+  const output = createWriteStream(outFile.replace("1.0.0", version));
+  const archive = new ZipArchive({ zlib: { level: 9 } });
+
+  const closed = new Promise((resolve, reject) => {
+    output.on("close", resolve);
+    output.on("error", reject);
+    archive.on("error", reject);
+  });
+  archive.pipe(output);
+  archive.directory(distDir, false);
+  await archive.finalize();
+  await closed;
+  console.log(`✅  Extension packaged: morningbriefing-extension-v${version}.zip (${archive.pointer()} bytes)`);
 }
 
-zipDir();
+zipDir().catch((err) => {
+  console.error("❌  Extension packaging failed:", err);
+  process.exit(1);
+});
