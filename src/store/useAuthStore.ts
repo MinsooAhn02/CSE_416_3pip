@@ -7,6 +7,9 @@ import type { Session } from "@supabase/supabase-js";
 import { useSettingsStore } from "./useSettingsStore";
 import { useOnboardingStore } from "./useOnboardingStore";
 import type { AppUser, Perms, Interest } from "../types";
+import { handleApiError } from "../utils/errorHandler";
+
+let settingsLoadedFor: string | null = null;
 
 interface AuthState {
 	isLoggedIn: boolean;
@@ -114,10 +117,16 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
 				providerRefreshToken: nextRefreshToken,
 			});
 			save("mb_login", true);
-			await get().loadUserSettings();
+			// getSession + onAuthStateChange(INITIAL_SESSION/TOKEN_REFRESHED/SIGNED_IN)가 같은 유저로
+			// 여러 번 들어옴 → 유저당 1회만 로드 (개인화 배치 Groq 중복 호출·점수 이중 기록 방지)
+			if (settingsLoadedFor !== u.id) {
+				settingsLoadedFor = u.id;
+				await get().loadUserSettings();
+			}
 			return;
 		}
 
+		settingsLoadedFor = null;
 		set({ isLoggedIn: false, user: null, providerToken: null, providerRefreshToken: null });
 		useOnboardingStore.getState().reset();
 		useSettingsStore.getState().resetInterests();
@@ -175,7 +184,8 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
 							method: "POST",
 							headers: {
 								"Content-Type": "application/json",
-								Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+								apikey: SUPABASE_ANON_KEY,
+								Authorization: `Bearer ${refreshedSession?.access_token ?? session?.access_token ?? SUPABASE_ANON_KEY}`,
 							},
 							body: JSON.stringify({ refresh_token: refreshToken }),
 						});
@@ -208,13 +218,23 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
 		const {
 			data: { user },
 		} = await supabase.auth.getUser();
-		if (!user) return;
+		if (!user) {
+			settingsLoadedFor = null;
+			return;
+		}
 
-		const { data } = await supabase
+		const { data, error } = await supabase
 			.from("user_settings")
 			.select("*")
 			.eq("id", user.id)
-			.single();
+			.maybeSingle();
+
+		// 네트워크/락/RLS 오류를 "신규 유저"로 오인하면 설정 초기화 + 온보딩 재노출 → 기존 데이터 덮어씀
+		if (error) {
+			handleApiError(error, "auth:load_user_settings");
+			settingsLoadedFor = null; // 다음 auth 이벤트에서 재시도
+			return;
+		}
 
 		if (data) {
 			const dbData = data as Record<string, unknown>;

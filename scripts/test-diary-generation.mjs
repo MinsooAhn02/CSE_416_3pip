@@ -140,10 +140,12 @@ async function callGroq(prompt, system) {
 		headers: {
 			"Content-Type": "application/json",
 			apikey: SUPABASE_ANON_KEY,
-			Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+			// groq 함수는 로그인 사용자만 허용 — 브라우저 세션의 access_token을 SUPABASE_USER_JWT로 전달
+			Authorization: `Bearer ${process.env.SUPABASE_USER_JWT ?? SUPABASE_ANON_KEY}`,
 		},
 		body: JSON.stringify({ prompt, system, temperature: 0.4 }),
 	});
+	if (res.status === 401) throw new Error("401: set SUPABASE_USER_JWT to a logged-in user's access_token");
 	if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
 	return res.json();
 }

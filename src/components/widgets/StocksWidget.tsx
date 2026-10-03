@@ -331,8 +331,11 @@ const StocksWidget = () => {
 	};
 
 	const visibleFixed = orderedFixedIndices.slice(0, WIDGET_FIXED_VISIBLE);
-	const visibleUser = orderedUserStocks.slice(0, WIDGET_USER_VISIBLE);
-	const hasMoreUser = orderedUserStocks.length > WIDGET_USER_VISIBLE;
+	// 기본 stockSymbols에 지수(KOSPI/SP500)가 포함돼 상단 고정 슬롯과 중복 표시되는 것 방지
+	const shownFixedKeys = new Set(visibleFixed.map(getStockKey));
+	const widgetUserStocks = orderedUserStocks.filter((s) => !shownFixedKeys.has(getStockKey(s)));
+	const visibleUser = widgetUserStocks.slice(0, WIDGET_USER_VISIBLE);
+	const hasMoreUser = widgetUserStocks.length > WIDGET_USER_VISIBLE;
 
 	return (
 		<>
@@ -397,7 +400,7 @@ const StocksWidget = () => {
 								className={`mt-2 w-full text-xs py-1.5 rounded-lg ${hoverCls} opacity-70`}
 							>
 								{t("common.view_more", {
-									count: orderedUserStocks.length - WIDGET_USER_VISIBLE,
+									count: widgetUserStocks.length - WIDGET_USER_VISIBLE,
 								})}
 							</button>
 						)}

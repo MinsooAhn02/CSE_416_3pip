@@ -5,7 +5,7 @@ import { Sparkles, RefreshCw, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useTheme } from "../../hooks/useTheme";
 import { useFontSize } from "../../hooks/useFontSize";
-import { useSettingsStore } from "../../store/useSettingsStore";
+import { useDataStore } from "../../store/useDataStore";
 import { useBriefingHistoryStore } from "../../store/useBriefingHistoryStore";
 import { useBriefingContext } from "../../hooks/useBriefingContext";
 import { generateDetailedBriefing, getTimeGreeting } from "../../services/aiService";
@@ -41,13 +41,8 @@ const BriefingWidget = () => {
 		priorityOrder,
 		fetchTodayQA,
 		buildContext,
-		weather,
-		calEvents,
-		tomorrowEvents,
-		stocks,
-		trends,
-		activeWidgetIds,
 	} = useBriefingContext();
+	const initialFetchDone = useDataStore((s) => s.initialFetchDone);
 
 	const addSnapshot = useBriefingHistoryStore((s) => s.addSnapshot);
 	const shouldSave = useBriefingHistoryStore((s) => s.shouldSave);
@@ -123,32 +118,14 @@ const BriefingWidget = () => {
 	useEffect(() => {
 		if (initialGenDone) return;
 		if (isLoading) return;
-		const dataReady =
-			!!weather ||
-			(Array.isArray(calEvents) && calEvents.length > 0) ||
-			(Array.isArray(stocks) && stocks.length > 0) ||
-			(Array.isArray(trends) && trends.length > 0);
-		if (!dataReady) return;
+		// 첫 fetchAll이 끝날 때까지 대기 — 일부 데이터만 도착한 시점에 생성하면
+		// 날씨/뉴스/트렌드가 "데이터 없음"으로 고정됨 (initialGenDone 가드 때문에 재생성 안 됨)
+		if (!initialFetchDone) return;
 		setInitialGenDone(true);
 		generateBriefingVersion(BRIEFING_LENGTH, true);
 		// activeWidgetIds는 의존성에서 제외 — 스마트위젯 추가 시 cascade 재생성 방지
 		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [weather, calEvents, stocks, trends, initialGenDone]);
-
-	// Post-init regen: tomorrowEvents typically arrives after initial gen
-	// (fetchTomorrowCalendar runs in parallel with other fetches). The initialGenDone
-	// guard above would otherwise block the briefing from ever picking them up
-	// until the 1-hour interval, tone change, or manual refresh.
-	const tomorrowRegenDoneRef = useRef<boolean>(false);
-	useEffect(() => {
-		if (!initialGenDone) return;
-		if (isLoading) return;
-		if (tomorrowRegenDoneRef.current) return;
-		if (!Array.isArray(tomorrowEvents) || tomorrowEvents.length === 0) return;
-		tomorrowRegenDoneRef.current = true;
-		generateBriefingVersion(BRIEFING_LENGTH, true);
-		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [tomorrowEvents, initialGenDone]);
+	}, [initialFetchDone, initialGenDone]);
 
 	useEffect(() => {
 		if (!initialGenDone) return;

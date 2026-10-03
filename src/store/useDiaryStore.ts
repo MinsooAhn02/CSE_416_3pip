@@ -400,7 +400,7 @@ export const useDiaryStore = create<DiaryState>()((set, get) => ({
 					updated_at: new Date().toISOString(),
 				},
 				{ onConflict: "user_id,date" },
-			);
+			).throwOnError(); // 실패 시 catch로 — 조용한 실패 방지
 		} catch (error) {
 			console.warn("Generated diary save to DB failed:", (error as Error)?.message);
 		}
@@ -442,7 +442,7 @@ export const useDiaryStore = create<DiaryState>()((set, get) => ({
 					updated_at: new Date().toISOString(),
 				},
 				{ onConflict: "user_id,date" },
-			);
+			).throwOnError(); // 실패 시 catch로 — 조용한 실패 방지
 		} catch (error) {
 			console.warn("Diary edit save to DB failed:", (error as Error)?.message);
 		}
@@ -481,7 +481,7 @@ export const useDiaryStore = create<DiaryState>()((set, get) => ({
 					updated_at: new Date().toISOString(),
 				},
 				{ onConflict: "user_id,date" },
-			);
+			).throwOnError(); // 실패 시 catch로 — 조용한 실패 방지
 		} catch (error) {
 			console.warn("Diary revert failed:", (error as Error)?.message);
 		}
@@ -517,7 +517,7 @@ export const useDiaryStore = create<DiaryState>()((set, get) => ({
 					updated_at: new Date().toISOString(),
 				},
 				{ onConflict: "user_id,date" },
-			);
+			).throwOnError(); // 실패 시 catch로 — 조용한 실패 방지
 		} catch (error) {
 			console.warn("Memo save to DB failed:", (error as Error)?.message);
 		}
@@ -607,7 +607,7 @@ export const useDiaryStore = create<DiaryState>()((set, get) => ({
 			await supabase.from("diaries").upsert(
 				{ user_id: user.id, date: dateStr, edited_diary: pending, updated_at: new Date().toISOString() },
 				{ onConflict: "user_id,date" },
-			);
+			).throwOnError(); // 실패 시 catch로 — 조용한 실패 방지
 		} catch (e) {
 			console.warn("Confirm rewrite DB sync failed:", (e as Error)?.message);
 		}
@@ -690,23 +690,33 @@ export const useDiaryStore = create<DiaryState>()((set, get) => ({
 			} = await supabase.auth.getUser();
 			if (!user) return;
 
-			const { data } = await supabase
+			// 쓰기 경로(saveGeneratedDiary/saveDiary)와 같은 컬럼을 읽음. diary_text는 레거시 (백필 완료)
+			const { data, error } = await supabase
 				.from("diaries")
-				.select("date, diary_text, memo, answers")
+				.select("date, ai_generated_diary, edited_diary, memo, answers")
 				.eq("user_id", user.id);
+			if (error) throw error;
 
 			if (data && data.length > 0) {
 				const entries = { ...get().entries };
 				const diaryAnswers: Record<string, string[]> = {};
 				for (const row of data as {
 					date: string;
-					diary_text: string | null;
+					ai_generated_diary: string | null;
+					edited_diary: string | null;
 					memo: string | null;
 					answers: string[] | null;
 				}[]) {
+					const prev = normalizeEntry(entries[row.date]);
+					const aiGeneratedDiary = row.ai_generated_diary || prev.aiGeneratedDiary;
+					const editedDiary = row.edited_diary || prev.editedDiary;
+					// prev를 펼쳐 로컬 전용 필드(feedback 등)를 유지
 					entries[row.date] = normalizeEntry({
-						diary: row.diary_text || entries[row.date]?.diary || "",
-						memo: row.memo || entries[row.date]?.memo || "",
+						...prev,
+						diary: editedDiary || aiGeneratedDiary || prev.diary,
+						aiGeneratedDiary,
+						editedDiary,
+						memo: row.memo || prev.memo || "",
 					});
 					if (Array.isArray(row.answers) && row.answers.length > 0) {
 						diaryAnswers[row.date] = row.answers;

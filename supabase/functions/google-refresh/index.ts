@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { rejectIfNoUser } from "../_shared/auth.ts";
 
 const corsHeaders = {
 	"Access-Control-Allow-Origin": "*",
@@ -9,6 +10,10 @@ const corsHeaders = {
 serve(async (req) => {
 	if (req.method === "OPTIONS")
 		return new Response("ok", { headers: corsHeaders });
+
+	// 미인증 시 탈취된 refresh token을 앱 client secret으로 교환해주는 오라클이 됨
+	const unauthorized = await rejectIfNoUser(req, corsHeaders);
+	if (unauthorized) return unauthorized;
 
 	try {
 		const { refresh_token } = await req.json();

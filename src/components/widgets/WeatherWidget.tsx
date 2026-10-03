@@ -259,6 +259,9 @@ const WeatherWidget = () => {
 										</button>
 									</form>
 								)}
+								{showCityInput && cityError && (
+									<p className="mt-1 text-[11px] text-red-500" role="alert">{cityError}</p>
+								)}
 							</div>
 						</div>
 						<div className="flex items-center gap-1">

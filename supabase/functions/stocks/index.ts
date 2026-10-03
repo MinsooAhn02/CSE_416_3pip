@@ -1,4 +1,8 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { rejectIfNoUser } from "../_shared/auth.ts";
+
+const MAX_SYMBOLS = 30;
+const SYMBOL_RE = /^[A-Za-z0-9^.\/=-]{1,15}$/;
 
 const corsHeaders = {
 	"Access-Control-Allow-Origin": "*",
@@ -104,8 +108,16 @@ serve(async (req) => {
 	if (req.method === "OPTIONS")
 		return new Response("ok", { headers: corsHeaders });
 
+	const unauthorized = await rejectIfNoUser(req, corsHeaders);
+	if (unauthorized) return unauthorized;
+
 	try {
 		const { symbols = ["KOSPI", "NASDAQ", "SP500", "USDKRW"] } = await req.json();
+		// 심볼 하나당 유료 API 호출 1회 → 개수·형식 제한
+		if (!Array.isArray(symbols) || symbols.length > MAX_SYMBOLS ||
+			!symbols.every((s) => typeof s === "string" && SYMBOL_RE.test(s))) {
+			throw new Error("invalid symbols");
+		}
 		const apiKey = Deno.env.get("TWELVEDATA_API_KEY")?.trim() ?? "";
 
 		if (!apiKey) {

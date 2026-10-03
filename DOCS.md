@@ -164,7 +164,7 @@ src/
     useTheme.ts                   # Theme CSS class utilities
   l10n/
     i18n.ts                       # i18next config, language-change event emission
-    index.ts                      # Re-exports default i18n + changeLanguage/getCurrentLanguage/toggleLanguage
+    index.ts                      # Re-exports default i18n + changeLanguage/getCurrentLanguage
     ko.json
     en.json
   lib/
@@ -860,17 +860,17 @@ sequenceDiagram
 
 ### Calling convention from the browser
 
-There is no single gateway — five call paths exist. The three helpers send `Content-Type: application/json` plus an `apikey: <anon-key>` header; the google-refresh fetch sends only `Authorization: Bearer <anon-key>`:
+There is no single gateway — five call paths exist. The three helpers send `Content-Type: application/json` plus an `apikey: <anon-key>` header; the google-refresh fetch sends the same headers:
 
 | Helper | File | Authorization | Used for |
 |--------|------|---------------|----------|
 | `invokeEdgeDetailed` / `invokeEdge` | `src/store/useDataStore.ts` | session JWT, falls back to anon key | weather, stocks, fitness, events, tavily, groq |
-| `invokeFunction` | `src/services/aiService.ts` | anon key | groq, tavily |
+| `invokeFunction` | `src/services/aiService.ts` | session JWT, falls back to anon key | groq, tavily |
 | `invokeGoogleFunction` / `invokeGoogleWithAuth` | `src/store/useGoogleCalendarStore.ts` | session JWT (retries on 401/403 after `ensureProviderToken(forceRefresh)`) | events, tasks |
-| raw `fetch` | `src/store/useAuthStore.ts` | anon key | google-refresh |
+| raw `fetch` | `src/store/useAuthStore.ts` | session JWT, falls back to anon key | google-refresh |
 | `supabase.functions.invoke("groq")` | `src/services/personalizationService.ts` | supabase-js session | groq |
 
-The anon key is public and scoped only to what RLS policies permit.
+The anon key is public and scoped only to what RLS policies permit. **Every** Edge Function rejects callers without a logged-in user (401): events/tasks/fitness check inline, the rest via `supabase/functions/_shared/auth.ts` (`rejectIfNoUser`). The anon key is itself a valid JWT, so the gateway's `verify_jwt` alone does not stop anonymous use. Paid-API functions also cap input: groq (model allowlist, prompt length, `max_completion_tokens`), tavily (≤10 batch queries, ≤20 results), stocks (≤30 symbols), weather (numeric lat/lon).
 
 **JWT auth:** Client sends `supabase.auth.getSession()` → `session.access_token` in Authorization header. Server validates with `supabase.auth.getUser(jwt)` → 401 on failure.
 
@@ -982,7 +982,7 @@ Trends: no interest injection — global/domestic real-time trends only.
 | Touchpoint | Mechanism | File |
 |------------|-----------|------|
 | News query | Top-5 keywords inserted into Tavily query | `useDataStore.ts` |
-| Simple AI briefing | `keywordInterests` → `Interest guidance:` line in Groq prompt | `aiService.generateBriefing()` |
+| AI briefing | `keywordInterests` → interest guidance in Groq prompt | `aiService.generateDetailedBriefing()` |
 | Diary Q&A question | `fixedInterestIds` → `INTEREST_TOPIC_MAP` → 1 interest + 1 general topic | `aiService.generatePersonalizedQuestion()` |
 | Auto diary generation | `interests` + `briefingSnapshots` + `previousDayDiary/Feedback` → `promptContext`; `user_qa` Q&A pairs (question+answer, context-only) now also fed as `qaPairs` | `aiService.generateDiary()` |
 | Persona context | `fixedInterestIds` + `keywordInterests` merged → `interests[]` | `personaContext.buildPersonaContext()` |
@@ -1050,9 +1050,9 @@ DiaryPanel → Dislike
 
 | File | Exports |
 |------|---------|
-| `aiService.ts` | Groq LLM calls: `generateBriefing()`, `generateDetailedBriefing()`, `generateDiary()`, `rewriteDiaryWithFeedback()`, `generatePersonalizedQuestion()`, smart-widget category classification / section planning / Tavily search & filtering |
+| `aiService.ts` | Groq LLM calls: `generateDetailedBriefing()`, `generateDiary()`, `rewriteDiaryWithFeedback()`, `generatePersonalizedQuestion()`, smart-widget category classification / section planning / Tavily search & filtering |
 | `diaryGenerationService.ts` | `buildDiaryGenerationContext()`, `generateAndSaveDiaryForDate()`, `resolveDiaryGenerationLanguage()` |
-| `personalizationService.ts` | `runPersonalizationBatch()` (login-time keyword extraction + 30-day decayed scoring → `keyword_score_log` → `user_settings.keyword_interests`), `getTopKeywords()`, `getTopKeywordsByCategory()`, `saveKeywordInterests()` |
+| `personalizationService.ts` | `runPersonalizationBatch()` (login-time keyword extraction + 30-day decayed scoring → `keyword_score_log` → `user_settings.keyword_interests`) |
 
 ### src/lib/
 

@@ -1179,6 +1179,7 @@ interface DataState {
 	apiStatus: Record<string, "ok" | "error" | null>;
 	fetchedLanguage: Record<string, string>;
 	lastFetchedAt: Record<string, number>;
+	initialFetchDone: boolean;
 
 	setActiveWidgetIds: (ids: string[]) => void;
 	setApiStatus: (key: string, status: "ok" | "error" | null) => void;
@@ -1239,6 +1240,7 @@ export const useDataStore = create<DataState>()((set, get) => ({
 	apiStatus: {},
 	fetchedLanguage: {},   // { news: "ko", trends: "ko" } — 마지막 fetch 시 언어
 	lastFetchedAt: load("mb_last_fetched_at", {}),
+	initialFetchDone: false, // 첫 fetchAll 완료 여부 — 브리핑이 일부 데이터만으로 생성되는 것 방지
 	setActiveWidgetIds: (ids) => set({ activeWidgetIds: ids }),
 	setApiStatus: (key, status) =>
 		set((s) => ({ apiStatus: { ...s.apiStatus, [key]: status } })),
@@ -2378,6 +2380,7 @@ export const useDataStore = create<DataState>()((set, get) => ({
 			);
 
 		await Promise.all(jobs);
+		set({ initialFetchDone: true });
 
 		// fetchAll 완료 후 접속 시간 갱신
 		setLastAccessTime();

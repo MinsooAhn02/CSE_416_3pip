@@ -161,10 +161,12 @@ export async function runPersonalizationBatch(): Promise<ScoreMapEntry[] | undef
     // 어제 일기 텍스트 (diaries 테이블)
     const { data: diary } = await supabase
       .from("diaries")
-      .select("diary_text")
+      .select("ai_generated_diary, edited_diary")
       .eq("user_id", user.id)
       .eq("date", yesterday)
-      .single();
+      .maybeSingle();
+    const diaryRow = diary as { ai_generated_diary?: string | null; edited_diary?: string | null } | null;
+    const yesterdayDiaryText = diaryRow?.edited_diary || diaryRow?.ai_generated_diary || "";
 
     const newLogRows: {
       user_id: string;
@@ -194,8 +196,8 @@ export async function runPersonalizationBatch(): Promise<ScoreMapEntry[] | undef
     }
 
     // 일기 텍스트 처리 (source=diary, weight=1)
-    if ((diary as { diary_text?: string } | null)?.diary_text?.trim()) {
-      const keywords = await extractKeywords((diary as { diary_text: string }).diary_text, "diary");
+    if (yesterdayDiaryText.trim()) {
+      const keywords = await extractKeywords(yesterdayDiaryText, "diary");
       for (const { keyword, category } of keywords) {
         newLogRows.push({
           user_id: user.id,

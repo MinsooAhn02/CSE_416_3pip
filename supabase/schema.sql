@@ -191,6 +191,9 @@ alter table public.diaries
   add column if not exists memo text;
 
 alter table public.diaries
+  add column if not exists answers jsonb default '[]';
+
+alter table public.diaries
   add column if not exists created_at timestamptz default now();
 
 alter table public.diaries

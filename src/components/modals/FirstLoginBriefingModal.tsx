@@ -4,6 +4,7 @@ import { Sparkles, X, RefreshCw } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useTheme } from "../../hooks/useTheme";
 import { useSettingsStore } from "../../store/useSettingsStore";
+import { useDataStore } from "../../store/useDataStore";
 import { useBriefingContext } from "../../hooks/useBriefingContext";
 import { generateDetailedBriefing, getTimeGreeting } from "../../services/aiService";
 import { BriefingResult } from "../../types";
@@ -26,21 +27,13 @@ const FirstLoginBriefingModal = () => {
 	);
 	const BRIEFING_LENGTH = "medium";
 
-	const {
-		tone,
-		fetchTodayQA,
-		buildContext,
-		weather,
-		calEvents,
-		tomorrowEvents,
-		stocks,
-		trends,
-		activeWidgetIds,
-	} = useBriefingContext();
+	const { tone, fetchTodayQA, buildContext } = useBriefingContext();
+	const initialFetchDone = useDataStore((s) => s.initialFetchDone);
 
 	// State
 	const [briefing, setBriefing] = useState<BriefingResult | null>(null);
 	const lastGeneratedRef = useRef<Date | null>(null);
+	const briefingRequestedRef = useRef(false);
 	const [isLoading, setIsLoading] = useState(false);
 	const [dismissCountdown, setDismissCountdown] = useState(10); // 10-second block (REQ-AJ-004)
 	// Time-based greeting
@@ -52,8 +45,10 @@ const FirstLoginBriefingModal = () => {
 	}, []); // eslint-disable-line react-hooks/exhaustive-deps
 
 	// Generate briefing when modal opens
+	// 데이터가 도착할 때마다 재생성하면 회당 Groq 2회 × 도착 횟수 → 첫 fetchAll 완료 후 1회만 생성
 	useEffect(() => {
-		if (!showFirstLoginModal) return;
+		if (!showFirstLoginModal || !initialFetchDone || briefingRequestedRef.current) return;
+		briefingRequestedRef.current = true;
 
 		const generateBriefing = async () => {
 			setIsLoading(true);
@@ -75,7 +70,7 @@ const FirstLoginBriefingModal = () => {
 		};
 
 		generateBriefing();
-	}, [showFirstLoginModal, weather, calEvents, tomorrowEvents, stocks, trends, activeWidgetIds, tone]); // eslint-disable-line react-hooks/exhaustive-deps
+	}, [showFirstLoginModal, initialFetchDone]); // eslint-disable-line react-hooks/exhaustive-deps
 
 	// Countdown timer for dismiss button (REQ-AJ-004: block dismissal for 10 seconds)
 	useEffect(() => {

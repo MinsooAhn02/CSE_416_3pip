@@ -2,6 +2,7 @@ import i18n, { getCurrentLanguage } from "../l10n/i18n";
 
 const bs = (key: string, lng: string) => i18n.t(`briefing_sections.${key}`, { lng }) as string;
 import { handleApiError } from "../utils/errorHandler";
+import { supabase } from "../lib/supabase";
 import type {
 	WeatherData,
 	StockItem,
@@ -434,13 +435,15 @@ const invokeFunction = async (name: string, body: Record<string, unknown>): Prom
 	const startedAt = Date.now();
 	const controller = new AbortController();
 	const timer = setTimeout(() => controller.abort(), AI_TIMEOUT_MS);
+	// Edge Function이 로그인 사용자만 허용 → 세션 토큰 전송 (없으면 anon → 401)
+	const session = supabase ? (await supabase.auth.getSession()).data.session : null;
 	try {
 		const res = await fetch(`${SUPABASE_URL}/functions/v1/${name}`, {
 			method: "POST",
 			headers: {
 				"Content-Type": "application/json",
 				apikey: SUPABASE_ANON_KEY,
-				Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+				Authorization: `Bearer ${session?.access_token ?? SUPABASE_ANON_KEY}`,
 			},
 			body: JSON.stringify(body),
 			signal: controller.signal,

@@ -1,10 +1,16 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { rejectIfNoUser } from "../_shared/auth.ts";
 
 const corsHeaders = {
 	"Access-Control-Allow-Origin": "*",
 	"Access-Control-Allow-Headers":
 		"authorization, x-client-info, apikey, content-type",
 };
+
+// 쿼터 보호 상한 (search_depth: advanced라 쿼리당 비용이 큼)
+const MAX_BATCH_QUERIES = 10;
+const MAX_RESULTS = 20; // Tavily 자체 최대치
+const MAX_QUERY_CHARS = 400;
 
 /** Remove common article-title noise: "- Site Name", "| Category", brackets, markdown */
 const cleanTitle = (raw: string): string =>
@@ -38,9 +44,12 @@ const runTavilySearch = async (params: TavilyQuery, apiKey: string): Promise<unk
 		time_range = null,
 	} = params;
 
+	if (typeof query !== "string" || !query.trim() || query.length > MAX_QUERY_CHARS) {
+		throw new Error("invalid query");
+	}
 	const isNews = mode === "news";
 	const isSearch = mode === "search";
-	const resultCount = maxResults ?? (isNews || isSearch ? 10 : 8);
+	const resultCount = Math.min(MAX_RESULTS, Math.max(1, Number(maxResults) || (isNews || isSearch ? 10 : 8)));
 
 	const tavilyBody: Record<string, unknown> = {
 		api_key: apiKey,
@@ -128,6 +137,9 @@ serve(async (req) => {
 	if (req.method === "OPTIONS")
 		return new Response("ok", { headers: corsHeaders });
 
+	const unauthorized = await rejectIfNoUser(req, corsHeaders);
+	if (unauthorized) return unauthorized;
+
 	try {
 		const apiKey = Deno.env.get("TAVILY_API_KEY");
 		if (!apiKey) throw new Error("TAVILY_API_KEY not set");
@@ -136,6 +148,7 @@ serve(async (req) => {
 
 		// 배치 모드: { queries: TavilyQuery[] }
 		if (Array.isArray(body.queries)) {
+			if (body.queries.length > MAX_BATCH_QUERIES) throw new Error("too many queries");
 			const queries = body.queries as TavilyQuery[];
 			const results = await Promise.all(
 				queries.map((q) =>

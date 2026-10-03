@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { rejectIfNoUser } from "../_shared/auth.ts";
 
 const corsHeaders = {
 	"Access-Control-Allow-Origin": "*",
@@ -10,8 +11,18 @@ serve(async (req) => {
 	if (req.method === "OPTIONS")
 		return new Response("ok", { headers: corsHeaders });
 
+	const unauthorized = await rejectIfNoUser(req, corsHeaders);
+	if (unauthorized) return unauthorized;
+
 	try {
-		const { lat = 37.5665, lon = 126.978, city, lang = "en" } = await req.json();
+		const body = await req.json();
+		const { city, lang = "en" } = body;
+		// URL에 그대로 들어가므로 숫자로 강제 (파라미터 주입 방지)
+		const lat = Number(body.lat ?? 37.5665);
+		const lon = Number(body.lon ?? 126.978);
+		if (!Number.isFinite(lat) || !Number.isFinite(lon) || Math.abs(lat) > 90 || Math.abs(lon) > 180) {
+			throw new Error("invalid coordinates");
+		}
 		const apiKey = Deno.env.get("OPENWEATHER_API_KEY");
 		if (!apiKey) throw new Error("OPENWEATHER_API_KEY not set");
 
