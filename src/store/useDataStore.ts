@@ -2373,13 +2373,25 @@ i18n.on("languageChanged", () => {
 	}
 });
 
-// 관심사 변경 시 뉴스/트렌드 자동 재호출
+// fetchAll 동시 실행 방지: 초기화·5분 폴링·탭 복귀가 겹치면 진행 중인 작업을 재사용
+// (캐시가 비었을 때 같은 Tavily/Groq 요청이 중복으로 나가던 문제)
+const runFetchAll = useDataStore.getState().fetchAll;
+let fetchAllInFlight: Promise<void> | null = null;
+useDataStore.setState({
+	fetchAll: (options) =>
+		(fetchAllInFlight ??= runFetchAll(options).finally(() => {
+			fetchAllInFlight = null;
+		})),
+});
+
+// 관심사 변경 시 뉴스 자동 재호출 — 상위 키워드 "구성"이 바뀔 때만.
+// 순서만 바뀌는 경우(개인화 배치 점수 갱신 등)는 결과가 같으므로 정렬해서 비교
 const getInterestFingerprintFromState = (settingsState: ReturnType<typeof useSettingsStore.getState>): string =>
 	getInterestFingerprint(
 		settingsState?.fixedInterestIds,
 		settingsState?.keywordInterests,
 		5,
-	);
+	).split("+").sort().join("+");
 
 let _prevInterestFingerprint = getInterestFingerprintFromState(
 	useSettingsStore.getState(),

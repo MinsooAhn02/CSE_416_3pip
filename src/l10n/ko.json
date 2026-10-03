@@ -282,6 +282,7 @@
   },
   "toast": {
     "settings_saved": "설정이 저장되었습니다",
+    "settings_sync_failed": "이 기기에는 저장됐지만 계정 동기화에 실패했습니다",
     "widget_added": "위젯이 추가되었습니다",
     "widget_exists": "이미 추가된 키워드입니다",
     "widget_invalid": "키워드를 입력해주세요",

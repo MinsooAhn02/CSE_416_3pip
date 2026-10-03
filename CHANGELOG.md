@@ -12,6 +12,14 @@
 
 ## 2026-10-04
 
+### [Fix] Fewer API calls on reload, small UX fixes
+- Reloading no longer bypasses the 6h cache: a forced refetch happens only right after Google sign-in. A reload now makes ~4 Groq calls instead of ~20 Edge Function calls (Tavily, weather, stocks, calendar, fitness).
+- `fetchAll` calls that overlap (init, 5-minute poll, tab focus) share one run; news is refetched only when the set of top interests changes, not their order.
+- Settings that fail to sync to the account show an error toast instead of failing silently.
+- Dates use local time everywhere (UTC made "today" yesterday before 09:00 KST in diary/settings/personalization).
+- Side panel auto-closes/opens only when the window crosses 1200px, so a panel opened on a narrow screen stays open.
+- "Install Chrome Extension" banner is hidden until the extension is published (it linked to a placeholder URL).
+
 ### [Feature] Guest mode ("Explore without signing in")
 - Login screen button opens the dashboard with sample data (weather, stocks, news, trends, calendar, tasks, health, diary, a Formula 1 smart widget) and a banner linking to Google sign-in. For portfolio/recruiter visits.
 - Zero network: `src/lib/guest.ts` flag short-circuits the three Edge Function helpers and the data fetchers; sample data (`src/demo/demoData.ts`, lazy chunk) is injected with `setState` only, and briefing snapshots / todo cache / daily-reset stamp are not written, so nothing leaks into a real user's localStorage. Reload returns to the login screen.

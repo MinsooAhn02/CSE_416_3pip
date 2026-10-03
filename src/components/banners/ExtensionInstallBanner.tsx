@@ -5,11 +5,10 @@ import { useTheme } from "../../hooks/useTheme";
 
 declare const chrome: { runtime?: { sendMessage?: (...args: unknown[]) => void } } | undefined;
 
-// Chrome Web Store URL — 출판 후 실제 Extension ID로 교체하세요
-const STORE_URL = "https://chrome.google.com/webstore/detail/morningbriefingai/EXTENSION_ID_HERE";
-
-// 배포 후 Extension ID로 교체하면 설치 여부 자동 감지 가능
+// 웹스토어 출판 후 Extension ID를 넣으면 배너가 켜지고 설치 여부도 자동 감지됨.
+// null인 동안은 배너를 숨김 (가짜 스토어 링크 노출 방지)
 const EXTENSION_ID: string | null = null;
+const STORE_URL = `https://chromewebstore.google.com/detail/${EXTENSION_ID}`;
 
 const DISMISS_KEY = "mb_ext_banner_dismissed";
 
@@ -36,16 +35,12 @@ const ExtensionInstallBanner = () => {
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
-    if (isInsideExtension()) return;
+    if (!EXTENSION_ID || isInsideExtension()) return;
     if (localStorage.getItem(DISMISS_KEY)) return;
 
-    if (EXTENSION_ID) {
-      pingExtension(EXTENSION_ID).then((installed) => {
-        if (!installed) setVisible(true);
-      });
-    } else {
-      setVisible(true);
-    }
+    pingExtension(EXTENSION_ID).then((installed) => {
+      if (!installed) setVisible(true);
+    });
   }, []);
 
   const handleDismiss = (): void => {

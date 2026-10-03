@@ -15,29 +15,25 @@ Single list of open work. Replaces the old root `todo.md`, `tasks/todo.md` (stoc
 
 | # | Issue | Where |
 |---|---|---|
-| R1 | Every page reload clears `mb_last_access_time` and calls `fetchAll({useExistingCache:false})`, bypassing the 6h cache → Tavily/Groq calls on every reload. | `src/App.tsx` (runFullInit) |
-| R2 | Google reconnect is fragile: `providerRefreshToken` lives in memory only (lost on reload); login uses `prompt:"select_account"` so Google may not return a refresh token; `google-refresh` needs `GOOGLE_CLIENT_ID/SECRET` secrets and has no JWT check. | `src/store/useAuthStore.ts`, `supabase/functions/google-refresh` |
-| R3 | Resize handler closes over stale `panelOpen` (`[]` deps): below 1200px every resize closes the panel; widening never reopens. | `src/components/layout/DashboardLayout.tsx` (resize effect) |
+| R2 | Google reconnect is fragile: Google access token lasts 1h and `provider_refresh_token` is not available (memory-only, and `prompt:"select_account"` may not return one). Confirmed 2026-10-04: ~80 min after login, calendar/tasks silently fall back to the localStorage cache (no network call, no error shown). | `src/store/useAuthStore.ts`, `useGoogleCalendarStore.ts` (`skipLoading` path) |
 | R4 | Smart widget component is recreated each render → loses local state (edit mode, open menu). | `DashboardLayout.tsx` (smart widget render) |
-| R5 | `ExtensionInstallBanner` has `EXTENSION_ID = null` and a placeholder store URL, so extension detection never runs. | `src/components/banners/ExtensionInstallBanner.tsx` |
 | R6 | `todos` table is created in `schema.sql` but never queried (todos mirror Google Tasks + localStorage). Drop or use. | `supabase/schema.sql` |
 | R7 | Migration files have no timestamp prefix, so `supabase db push/reset` ignores them; they are applied by hand (order in AGENTS.md). | `supabase/migrations/` |
 | R8 | `npm audit` reports 15 vulnerabilities (1 critical) in dependencies — not triaged. | `package-lock.json` |
 | R10 | Two tabs open at once → `Hydrate failed: Lock "lock:sb-…-auth-token" was released because another request stole it`; diary/tasks/gcal hydrate fail and the interest-onboarding modal can show wrongly. Matters for the new-tab extension (many tabs). Observed once in Chrome, not yet root-caused. | `src/App.tsx` (runFullInit), `src/lib/supabase.ts` |
 | R11 | News widget shows raw scraped page text (nav menus); smart keyword "Games" top result is a Wikipedia style-guide page. Tavily result quality/filtering. | `useDataStore.ts` (fetchNews), `aiService.ts` |
-| R9 | `todayStr` uses UTC (`toISOString().slice(0,10)`) → in KST before 09:00 "today" is yesterday. Affects diary dates, settings today-guard, personalization batch/cutoffs. Other modules already use `formatLocalDate`. | `src/store/useDiaryStore.ts`, `src/store/useSettingsStore.ts`, `src/services/personalizationService.ts` |
 
 ## Audit 2026-10-04 (second pass: bugs, security, bloat)
 
 | # | Sev | Issue | Where |
 |---|---|---|---|
 | A3 | Med | First-login modal and BriefingWidget each generate a briefing on the first visit of the day (2 Groq calls each). Each now runs once after the first `fetchAll`; sharing one result would halve it. | `FirstLoginBriefingModal.tsx`, `BriefingWidget.tsx` |
-| A6 | Med | Interest fingerprint change forces Tavily refetch; `fetchAll` has no in-flight guard; Korean translation can re-run on cached reads. | `useDataStore.ts:2421, 2236, 1827` |
-| A7 | Med | Settings writes (`syncSettings`) never check `{ error }`; "saved" toast before sync. Diary upserts now `.throwOnError()`. | `useSettingsStore.ts:79` |
 | A8 | Med | Diary localStorage not user-scoped and not cleared on logout. | `useDiaryStore.ts`, `useAuthStore.ts:79` |
 | A9 | Low | `grant select ... to anon` on 8 tables (RLS blocks rows today; remove for defense in depth). Production extension `externally_connectable` includes localhost. | `schema.sql`, `public/manifest.json` |
 | B3 | Dup | 5 edge-call helpers → one `src/lib/edge.ts`; `pad2` ×3; 6 `toISOString().slice(0,10)` (R9). | see DOCS §9 |
 | B4 | Repo | 4.8 MB of course PDFs/xlsx tracked under `archive/course/`. | `archive/course/` |
+
+### Fixed 2026-10-04 (batch A): R1 reload uses the 6h cache (force only right after OAuth sign-in) · R3 panel auto-closes/opens only when crossing 1200px · R5 extension banner hidden until a real EXTENSION_ID exists · R9 no UTC date slicing left · A6 fetchAll de-duplicated, news refetch only when the top-interest set changes · A7 settings sync failures shown as a toast.
 
 ### Fixed 2026-10-04: A1 diaries columns added on live DB + 38 rows backfilled, hydrate/personalization read `ai_generated_diary`/`edited_diary` · A2 all Edge Functions require a logged-in user + input caps (`_shared/auth.ts`) · A4 settings load once per user · A5 load errors no longer reset the user · B1 three.js lazy (main chunk 1,326→822 KB) · B2 ~1,100 LOC dead code removed, `noUnusedLocals` on · Groq key renewed, model → `openai/gpt-oss-120b` · `briefing_snapshots` table created.
 

@@ -47,6 +47,12 @@ const secureStorage = {
 	removeItem: (key: string): void => localStorage.removeItem(key),
 };
 
+// Google 로그인 직후(OAuth 콜백)로 열린 페이지인지 — createClient가 URL을 정리하기 전에 판별.
+// App이 "새 로그인 → 강제 새로고침" / "그냥 새로고침 → 캐시 사용"을 구분하는 데 씀.
+export const openedFromOAuthRedirect: boolean =
+	typeof window !== "undefined" &&
+	(window.location.hash.includes("access_token=") || /[?&]code=/.test(window.location.search));
+
 export const supabase: SupabaseClient | null =
 	supabaseUrl && supabaseAnonKey
 		? createClient(supabaseUrl, supabaseAnonKey, {

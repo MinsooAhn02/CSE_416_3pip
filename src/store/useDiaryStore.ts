@@ -15,7 +15,7 @@ const PIN_KEY = "mb_diary_pin";
 const PIN_AUTH_SESSION_KEY = "mb_diary_pin_auth";
 const PIN_AUTH_EXPIRES_AT_KEY = "mb_diary_pin_auth_expires_at";
 
-const todayStr = (): string => new Date().toISOString().slice(0, 10);
+const todayStr = (): string => formatLocalDate();
 
 const hashPin = async (pin: string): Promise<string> => {
 	const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(pin));

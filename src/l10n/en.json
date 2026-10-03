@@ -282,6 +282,7 @@
   },
   "toast": {
     "settings_saved": "Settings saved",
+    "settings_sync_failed": "Saved on this device, but syncing to your account failed",
     "widget_added": "Widget added",
     "widget_exists": "Keyword already added",
     "widget_invalid": "Please enter a keyword",

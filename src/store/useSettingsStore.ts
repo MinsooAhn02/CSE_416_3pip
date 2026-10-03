@@ -5,6 +5,8 @@ import { supabase } from "../lib/supabase";
 import { DEFAULT_PRIORITY_ORDER } from "../constants";
 import i18n from "../l10n/i18n";
 import { normalizeFixedInterestIds } from "../utils/interests";
+import { handleApiError } from "../utils/errorHandler";
+import { formatLocalDate } from "../utils/date";
 import type { Interest } from "../types";
 
 export const DEFAULT_PIN_LOCK_MODE = "immediate";
@@ -75,22 +77,25 @@ const notifySaved = (): void => {
 	});
 };
 
-/* Supabase DB에 설정 동기화 (백그라운드, 비차단) */
+/* Supabase DB에 설정 동기화 (백그라운드, 비차단).
+ * 로컬 저장은 이미 끝났으므로 "저장됨" 토스트는 즉시 뜨고, DB 동기화가 실패하면
+ * 같은 토스트 id로 교체해 사용자에게 알림 (예전엔 실패해도 조용히 넘어갔음) */
 const syncSettings = async (fields: Record<string, unknown>): Promise<void> => {
 	if (!supabase) return;
 	try {
 		const {
 			data: { user },
 		} = await supabase.auth.getUser();
-		if (user) {
-			await supabase.from("user_settings").upsert({ id: user.id, ...fields });
-		}
+		if (!user) return;
+		const { error } = await supabase.from("user_settings").upsert({ id: user.id, ...fields });
+		if (error) throw error;
 	} catch (e) {
-		console.warn("Settings sync failed:", (e as Error).message);
+		handleApiError(e, "settings:sync");
+		toast.error(i18n.t("toast.settings_sync_failed"), { id: "settings-saved", duration: 4000 });
 	}
 };
 
-const todayStr = (): string => new Date().toISOString().slice(0, 10);
+const todayStr = (): string => formatLocalDate(); // UTC면 KST 09시 전엔 "어제"가 됨
 
 export interface SettingsState {
 	// State fields

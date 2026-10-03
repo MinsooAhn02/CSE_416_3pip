@@ -59,21 +59,22 @@ const DashboardLayout = () => {
 		return () => window.removeEventListener("toggle-widget-panel", handler as EventListener);
 	}, [panelOpen]);
 
-	// 창 폭이 1200px 미만이면 사이드바 자동 닫힘
+	// 1200px 경계를 넘을 때만 자동으로 닫고/열기. 매 resize마다 닫으면 좁은 화면에서
+	// 사용자가 직접 연 패널이 조금만 창을 움직여도 닫혀버림 (예전 버그: stale panelOpen)
 	useEffect(() => {
+		let wasNarrow: boolean | null = null;
 		const handleResize = () => {
-			if (window.innerWidth < 1200 && panelOpen) {
-				setPanelOpen(false);
-				window.dispatchEvent(
-					new CustomEvent("widget-panel-state", { detail: { open: false } }),
-				);
-			}
+			const narrow = window.innerWidth < 1200;
+			if (narrow === wasNarrow) return;
+			wasNarrow = narrow;
+			setPanelOpen(!narrow);
+			window.dispatchEvent(
+				new CustomEvent("widget-panel-state", { detail: { open: !narrow } }),
+			);
 		};
 		window.addEventListener("resize", handleResize);
 		handleResize(); // 초기 체크
 		return () => window.removeEventListener("resize", handleResize);
-	// panelOpen을 의존성에서 제외 — 자동 닫힘만 담당, 무한루프 방지
-	// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, []);
 
 	/* Build ordered list of widget IDs (respects priorityOrder + vis) */

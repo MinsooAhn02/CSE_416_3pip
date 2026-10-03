@@ -11,7 +11,7 @@ import { useDiaryStore } from "./store/useDiaryStore";
 import { useBriefingHistoryStore } from "./store/useBriefingHistoryStore";
 import { useTheme } from "./hooks/useTheme";
 import { useMidnightTrigger } from "./hooks/useMidnightTrigger";
-import { supabase } from "./lib/supabase";
+import { supabase, openedFromOAuthRedirect } from "./lib/supabase";
 
 import LoginScreen from "./components/layout/LoginScreen";
 import TopNav from "./components/layout/TopNav";
@@ -112,10 +112,14 @@ const App = () => {
 		}
 
 		const runFullInit = async () => {
-			// 이전 세션의 stale 타임스탬프 제거 (로그인 시 "9000분 전" 방지)
-			localStorage.removeItem("mb_last_fetched_at");
-			localStorage.removeItem("mb_last_access_time"); // 로그인 시 항상 fresh fetch
-			useDataStore.setState({ lastFetchedAt: {} });
+			// 실제 로그인 직후에만 강제 새로고침. 예전엔 매 새로고침마다 지워서
+			// 6시간 캐시를 무시하고 Tavily/Groq를 다시 호출했음 (BACKLOG R1)
+			if (openedFromOAuthRedirect) {
+				// 이전 세션의 stale 타임스탬프 제거 (로그인 시 "9000분 전" 방지)
+				localStorage.removeItem("mb_last_fetched_at");
+				localStorage.removeItem("mb_last_access_time");
+				useDataStore.setState({ lastFetchedAt: {} });
+			}
 			try {
 				await Promise.all([
 					useSettingsStore.getState().hydrateFromDB?.(),
@@ -131,7 +135,8 @@ const App = () => {
 				);
 			}
 			setHydrateComplete(true);
-			// 로그인 시 access time 초기화 → isCacheStale()=true → 강제 새로고침
+			// 새 로그인이면 access time이 지워져 isCacheStale()=true → 강제 새로고침,
+			// 그냥 새로고침이면 마지막 접속 6시간 이내는 api_cache 사용
 			await fetchAll({ useExistingCache: false });
 		};
 

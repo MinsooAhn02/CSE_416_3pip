@@ -1,13 +1,14 @@
 import { supabase } from "../lib/supabase";
+import { formatLocalDate } from "../utils/date";
 
 const VALID_CATEGORIES = ["food", "place", "content", "shopping", "lifestyle", "mood", "interest"];
 const SOURCE_WEIGHTS: Record<string, number> = { personal: 2, diary: 1 };
 
-const todayStr = (): string => new Date().toISOString().slice(0, 10);
+const todayStr = (): string => formatLocalDate();
 const yesterdayStr = (): string => {
   const d = new Date();
   d.setDate(d.getDate() - 1);
-  return d.toISOString().slice(0, 10);
+  return formatLocalDate(d);
 };
 
 interface ExtractedKeyword {
@@ -100,7 +101,7 @@ async function aggregateScores(userId: string): Promise<ScoreMapEntry[]> {
   if (!supabase) return [];
   const cutoff = new Date();
   cutoff.setDate(cutoff.getDate() - 30);
-  const cutoffStr = cutoff.toISOString().slice(0, 10);
+  const cutoffStr = formatLocalDate(cutoff);
 
   const { data, error } = await supabase
     .from("keyword_score_log")
@@ -221,7 +222,7 @@ export async function runPersonalizationBatch(): Promise<ScoreMapEntry[] | undef
       .from("keyword_score_log")
       .delete()
       .eq("user_id", user.id)
-      .lt("logged_date", cutoff.toISOString().slice(0, 10));
+      .lt("logged_date", formatLocalDate(cutoff));
 
     // 전체 30일 점수 집계 → user_settings 업데이트
     const interests = await aggregateScores(user.id);
