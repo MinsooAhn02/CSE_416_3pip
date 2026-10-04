@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { supabase } from "../lib/supabase";
+import { supabase, getSessionUser } from "../lib/supabase";
 import { normalizeFixedInterestIds } from "../utils/interests";
 import { useSettingsStore } from "./useSettingsStore";
 import type { Perms } from "../types";
@@ -71,7 +71,7 @@ export const useOnboardingStore = create<OnboardingState>()((set, get) => ({
 		const newPerms: Perms = { ...get().perms, [key]: value };
 		set({ perms: newPerms });
 		if (supabase) {
-			const { data: { user } } = await supabase.auth.getUser();
+			const user = await getSessionUser();
 			if (user) {
 				await supabase
 					.from("user_settings")
@@ -96,9 +96,7 @@ export const useOnboardingStore = create<OnboardingState>()((set, get) => ({
 		useSettingsStore.getState().setFixedInterestIds(normalizedSelCats);
 
 		if (supabase) {
-			const {
-				data: { user },
-			} = await supabase.auth.getUser();
+			const user = await getSessionUser();
 			if (user) {
 				const { error } = await supabase.from("user_settings").upsert({
 					id: user.id,

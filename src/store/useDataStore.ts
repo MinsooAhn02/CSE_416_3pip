@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { supabase } from "../lib/supabase";
 import { isGuest } from "../lib/guest";
+import { isLowQualityResult, cleanSnippet } from "../utils/articleQuality";
 import { load, save } from "../utils/storage";
 import { DEFAULT_VIS } from "../constants";
 import { formatLocalDate, shiftDateString } from "../utils/date";
@@ -752,6 +753,9 @@ const filterLocalizedArticles = (
 			.map((item) => {
 				const normalized = normalizeArticleItem(item);
 				if (!normalized.title && !normalized.url) return null;
+				// 섹션 목록·위키 메타 페이지 제외, 메뉴 텍스트 요약 제거 (BACKLOG R11)
+				if (isLowQualityResult(normalized)) return null;
+				normalized.content = cleanSnippet(normalized.content);
 				const score = scoreArticleForLanguage(normalized, language);
 				return { ...normalized, __score: score };
 			})
@@ -2148,7 +2152,10 @@ export const useDataStore = create<DataState>()((set, get) => ({
 				return;
 			}
 
-			const edge = await invokeEdgeDetailed("fitness", { token });
+			// 오늘 0시는 사용자 로컬 기준 — 서버(UTC)에서 계산하면 KST 09시 이전 기록이 빠짐 (BACKLOG R13)
+			const startOfLocalDay = new Date();
+			startOfLocalDay.setHours(0, 0, 0, 0);
+			const edge = await invokeEdgeDetailed("fitness", { token, startTimeMillis: startOfLocalDay.getTime() });
 			if (edge?.ok && edge.data) {
 				const normalized = normalizeHealthData(edge.data);
 				set({ healthData: normalized });

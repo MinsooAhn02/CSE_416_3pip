@@ -1,4 +1,4 @@
-import { supabase } from "../lib/supabase";
+import { supabase, getSessionUser } from "../lib/supabase";
 import { formatLocalDate } from "../utils/date";
 
 const VALID_CATEGORIES = ["food", "place", "content", "shopping", "lifestyle", "mood", "interest"];
@@ -137,7 +137,7 @@ export async function runPersonalizationBatch(): Promise<ScoreMapEntry[] | undef
   if (!supabase) return;
 
   try {
-    const { data: { user } } = await supabase.auth.getUser();
+    const user = await getSessionUser();
     if (!user) return;
 
     // 오늘 이미 실행됐는지 확인

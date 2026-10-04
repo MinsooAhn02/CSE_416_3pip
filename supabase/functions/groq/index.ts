@@ -14,7 +14,7 @@ const ALLOWED_MODELS = new Set([DEFAULT_MODEL, "openai/gpt-oss-20b"]);
 const MAX_PROMPT_CHARS = 60_000; // 스마트위젯 합성 프롬프트(검색 결과 포함)가 길어서 여유 있게
 const MAX_SYSTEM_CHARS = 10_000;
 // gpt-oss는 reasoning 토큰도 이 한도에 포함 → 너무 낮으면 응답이 잘림
-const MAX_COMPLETION_TOKENS = 4096;
+const MAX_COMPLETION_TOKENS = 8192; // 스마트위젯 섹션 JSON(최대 5섹션)이 잘리지 않게 여유
 
 serve(async (req) => {
 	if (req.method === "OPTIONS")

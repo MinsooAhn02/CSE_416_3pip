@@ -1,6 +1,6 @@
 import { create } from "zustand";
-import { load, save } from "../utils/storage";
-import { supabase } from "../lib/supabase";
+import { load, save, clearUserData, LAST_USER_KEY } from "../utils/storage";
+import { supabase, getSessionUser } from "../lib/supabase";
 import { runPersonalizationBatch } from "../services/personalizationService";
 import { normalizeFixedInterestIds } from "../utils/interests";
 import type { Session } from "@supabase/supabase-js";
@@ -14,7 +14,9 @@ let settingsLoadedFor: string | null = null;
 let settingsLoadPromise: Promise<void> = Promise.resolve();
 /** 관심사(user_settings) 로드 완료 대기 — App이 fetchAll 전에 기다려야 뉴스가 처음부터
  *  실제 관심사 기준 캐시를 읽음 (안 그러면 기본 관심사로 먼저 읽고 바뀌면서 Tavily/Groq 재호출) */
-export const waitForUserSettings = (): Promise<void> => settingsLoadPromise;
+// 8초 상한: 네트워크·auth 잠금으로 멈춰도 초기 로딩 전체가 영원히 막히지 않게
+export const waitForUserSettings = (): Promise<void> =>
+	Promise.race([settingsLoadPromise, new Promise<void>((resolve) => setTimeout(resolve, 8000))]);
 
 interface AuthState {
 	isLoggedIn: boolean;
@@ -23,9 +25,9 @@ interface AuthState {
 	dismissGoogleReconnect: () => void;
 	user: AppUser | null;
 	providerToken: string | null;
-	providerRefreshToken: string | null;
 
-	login: () => Promise<boolean>;
+	/** consent=true: 동의 화면을 다시 띄워 Google이 refresh token을 새로 발급하게 함 (재연결용) */
+	login: (opts?: { consent?: boolean }) => Promise<boolean>;
 	reconnectGoogle: () => Promise<boolean>;
 	logout: () => Promise<void>;
 	handleAuthChange: (session: Session | null) => Promise<void>;
@@ -33,10 +35,32 @@ interface AuthState {
 	loadUserSettings: () => Promise<void>;
 }
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string | undefined;
-const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
-
 let _pendingProviderTokenRefresh: Promise<string | null> | null = null;
+let lastStoredRefreshToken: string | null = null;
+// Google access token 만료 시각 (발급 후 1시간). 세션에 저장된 provider_token은 발급 시각을 모르므로
+// 로그인 시각(last_sign_in_at) 기준으로 추정 — 만료된 토큰을 계속 써서 Google 호출이 401로 실패하던 문제
+let providerTokenExpiresAt = 0;
+const TOKEN_SAFETY_MS = 5 * 60 * 1000;
+const sessionTokenExpiry = (session: Session | null): number => {
+	const signedInAt = Date.parse(session?.user?.last_sign_in_at ?? "");
+	return Number.isFinite(signedInAt) ? signedInAt + 60 * 60 * 1000 - TOKEN_SAFETY_MS : 0;
+};
+
+type GoogleRefreshResult = { access_token?: string; expires_in?: number; error?: string; status: number };
+
+/**
+ * google-refresh Edge Function 호출 (BACKLOG R2). Google refresh token은 서버 DB에 암호화 보관되고
+ * 브라우저는 보관하지 않음: OAuth 직후 { action: "store" } 1회, 이후 { action: "refresh" }로 갱신.
+ * 409 reconnect_required = 서버에 토큰이 없거나 Google이 거부 → 동의 화면 포함 재연결 필요.
+ */
+const callGoogleRefresh = async (body: Record<string, unknown>): Promise<GoogleRefreshResult> => {
+	if (!supabase) return { status: 0 };
+	const { data, error } = await supabase.functions.invoke("google-refresh", { body });
+	if (!error) return { ...(data as object), status: 200 };
+	const res = (error as { context?: Response }).context;
+	const payload = res ? await res.json().catch(() => ({})) : {};
+	return { ...(payload as object), status: res?.status ?? 0 };
+};
 
 export const useAuthStore = create<AuthState>()((set, get) => ({
 	isLoggedIn: load<boolean>("mb_login", false),
@@ -44,9 +68,8 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
 	dismissGoogleReconnect: () => set({ googleReconnectNeeded: false }),
 	user: null,
 	providerToken: null,
-	providerRefreshToken: null,
 
-	login: async () => {
+	login: async ({ consent = false } = {}) => {
 		if (!supabase) {
 			set({ isLoggedIn: true });
 			save("mb_login", true);
@@ -65,7 +88,8 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
 				].join(" "),
 				queryParams: {
 					access_type: "offline",
-					prompt: "select_account",
+					// Google은 처음 동의할 때만 refresh token을 줌 → 재연결은 consent로 강제 재발급
+					prompt: consent ? "consent select_account" : "select_account",
 					include_granted_scopes: "true",
 				},
 				redirectTo: window.location.origin,
@@ -82,7 +106,7 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
 
 	reconnectGoogle: async () => {
 		set({ providerToken: null });
-		const didStart = await get().login();
+		const didStart = await get().login({ consent: true });
 		if (didStart === false) {
 			throw new Error("Failed to reconnect Google");
 		}
@@ -95,7 +119,7 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
 			window.location.reload();
 			return;
 		}
-		set({ isLoggedIn: false, user: null, providerToken: null, providerRefreshToken: null });
+		set({ isLoggedIn: false, user: null, providerToken: null });
 		useOnboardingStore.getState().reset();
 		useSettingsStore.getState().resetInterests();
 		save("mb_login", false);
@@ -110,15 +134,41 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
 				console.error("Logout failed:", e);
 			}
 		}
+		// 이 계정의 로컬 데이터(일기·브리핑·일정 캐시 등) 삭제 후 새로고침 —
+		// 메모리에 남은 스토어 상태까지 비워야 다음 사람(또는 둘러보기)에게 안 보임
+		clearUserData();
+		localStorage.removeItem(LAST_USER_KEY);
+		window.location.reload();
 	},
 
 	handleAuthChange: async (session) => {
 		if (session) {
 			const u = session.user;
+			// 이 브라우저에 다른 계정 데이터가 남아 있으면 지우고 새로고침 (스토어는 로드 시점에 localStorage를 읽음)
+			const lastUserId = load<string | null>(LAST_USER_KEY, null);
+			if (lastUserId !== u.id) {
+				save(LAST_USER_KEY, u.id);
+				if (lastUserId) {
+					clearUserData();
+					window.location.reload();
+					return;
+				}
+			}
 			const uMeta = (u?.user_metadata ?? {}) as Record<string, unknown>;
 			const nextProviderToken = session.provider_token ?? get().providerToken;
-			// provider_refresh_token은 최초 OAuth 콜백 시에만 제공됨 — 있을 때만 갱신
-			const nextRefreshToken = session.provider_refresh_token ?? get().providerRefreshToken;
+			if (session.provider_token) providerTokenExpiresAt = sessionTokenExpiry(session);
+			// provider_refresh_token은 OAuth 콜백 직후 세션에만 있음(localStorage엔 저장 안 됨) →
+			// 서버에 암호화 보관해 두고 이후 갱신은 서버가 처리 (R2). 실패해도 로그인 흐름은 계속
+			const refreshToken = session.provider_refresh_token;
+			if (refreshToken && refreshToken !== lastStoredRefreshToken) {
+				lastStoredRefreshToken = refreshToken;
+				callGoogleRefresh({ action: "store", refresh_token: refreshToken }).then((r) => {
+					if (r.status !== 200) {
+						lastStoredRefreshToken = null;
+						handleApiError(new Error(`store refresh token: HTTP ${r.status} ${r.error ?? ""}`), "auth:google_token_store");
+					}
+				});
+			}
 			const user: AppUser = {
 				id: u.id,
 				email: u.email ?? "",
@@ -129,7 +179,6 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
 				isLoggedIn: true,
 				user,
 				providerToken: nextProviderToken,
-				providerRefreshToken: nextRefreshToken,
 			});
 			save("mb_login", true);
 			// getSession + onAuthStateChange(INITIAL_SESSION/TOKEN_REFRESHED/SIGNED_IN)가 같은 유저로
@@ -144,7 +193,7 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
 
 		if (isGuest()) return; // 세션 없음 이벤트가 둘러보기 화면을 로그인 화면으로 튕기지 않게
 		settingsLoadedFor = null;
-		set({ isLoggedIn: false, user: null, providerToken: null, providerRefreshToken: null });
+		set({ isLoggedIn: false, user: null, providerToken: null });
 		useOnboardingStore.getState().reset();
 		useSettingsStore.getState().resetInterests();
 		save("mb_login", false);
@@ -154,7 +203,7 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
 		// forceRefresh: 만료(401)로 강제 갱신 — 캐시/persisted provider_token을 신뢰하지 않음
 		if (!forceRefresh) {
 			const existing = get().providerToken;
-			if (existing) return existing;
+			if (existing && Date.now() < providerTokenExpiresAt) return existing;
 		} else {
 			set({ providerToken: null });
 		}
@@ -170,55 +219,33 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
 				const {
 					data: { session },
 				} = await supabase.auth.getSession();
-				// session에서 받은 refresh_token을 저장 (있을 때만)
-				if (session?.provider_refresh_token) {
-					set({ providerRefreshToken: session.provider_refresh_token });
-				}
+
 				// forceRefresh일 땐 persisted provider_token이 만료됐을 수 있으므로 신뢰하지 않음
 				if (!forceRefresh) {
 					const token = session?.provider_token ?? null;
-					if (token) {
+					const expiresAt = sessionTokenExpiry(session);
+					if (token && Date.now() < expiresAt) {
+						providerTokenExpiresAt = expiresAt;
 						set({ providerToken: token, googleReconnectNeeded: false });
 						return token;
 					}
 				}
 
-				// 2) Supabase 세션 refresh (provider_token은 보통 null로 옴)
-				const {
-					data: { session: refreshedSession },
-				} = await supabase.auth.refreshSession();
-				const refreshedToken = refreshedSession?.provider_token ?? null;
-				if (refreshedToken) {
-					set({ providerToken: refreshedToken, googleReconnectNeeded: false });
-					return refreshedToken;
+				// 2) 서버에 보관된 refresh token으로 갱신 (R2).
+				// (예전의 supabase.auth.refreshSession() 단계는 provider_token을 돌려주지 않아 뺐음 —
+				//  auth 잠금만 잡고 다중 탭 경합(R10)을 키웠음)
+				const r = await callGoogleRefresh({ action: "refresh" });
+				if (r.access_token) {
+					providerTokenExpiresAt = Date.now() + ((r.expires_in ?? 3600) * 1000) - TOKEN_SAFETY_MS;
+					set({ providerToken: r.access_token, googleReconnectNeeded: false });
+					return r.access_token;
 				}
+				if (r.error !== "reconnect_required") console.warn("[gcal] google-refresh failed:", r.status, r.error);
 
-				// 3) provider_refresh_token으로 Google 토큰 직접 갱신
-				const refreshToken = session?.provider_refresh_token ?? get().providerRefreshToken;
-				if (refreshToken && SUPABASE_URL && SUPABASE_ANON_KEY) {
-					try {
-						const res = await fetch(`${SUPABASE_URL}/functions/v1/google-refresh`, {
-							method: "POST",
-							headers: {
-								"Content-Type": "application/json",
-								apikey: SUPABASE_ANON_KEY,
-								Authorization: `Bearer ${refreshedSession?.access_token ?? session?.access_token ?? SUPABASE_ANON_KEY}`,
-							},
-							body: JSON.stringify({ refresh_token: refreshToken }),
-						});
-						const data = await res.json() as { access_token?: string; error?: string };
-						if (data.access_token) {
-							set({ providerToken: data.access_token, googleReconnectNeeded: false });
-							return data.access_token;
-						}
-						console.warn("[gcal] google-refresh failed:", data.error);
-					} catch (refreshErr) {
-						console.warn("[gcal] google-refresh request failed:", refreshErr);
-					}
-				}
-
-				// 세션·refresh token 모두 실패 → 재로그인 외엔 방법 없음
-				set({ googleReconnectNeeded: true });
+				// 세션·refresh token 모두 실패 → 재로그인 외엔 방법 없음.
+				// Google 데이터를 쓰는 사용자(캘린더·건강 권한)에게만 배너 — 안 쓰는 사람에겐 의미 없음
+				const perms = useOnboardingStore.getState().perms;
+				if (perms.cal || perms.fit) set({ googleReconnectNeeded: true });
 				return null;
 			} catch (err) {
 				console.warn("[gcal] ensureProviderToken failed:", err);
@@ -234,9 +261,7 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
 	loadUserSettings: async () => {
 		if (!supabase) return;
 
-		const {
-			data: { user },
-		} = await supabase.auth.getUser();
+		const user = await getSessionUser();
 		if (!user) {
 			settingsLoadedFor = null;
 			return;

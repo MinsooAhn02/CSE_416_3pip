@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { load, save } from "../utils/storage";
-import { supabase } from "../lib/supabase";
+import { supabase, getSessionUser } from "../lib/supabase";
 import { rewriteDiaryWithFeedback } from "../services/aiService";
 import { formatLocalDate, parseDateString } from "../utils/date";
 import {
@@ -386,9 +386,7 @@ export const useDiaryStore = create<DiaryState>()((set, get) => ({
 		if (!supabase) return;
 
 		try {
-			const {
-				data: { user },
-			} = await supabase.auth.getUser();
+			const user = await getSessionUser();
 			if (!user) return;
 
 			await supabase.from("diaries").upsert(
@@ -429,9 +427,7 @@ export const useDiaryStore = create<DiaryState>()((set, get) => ({
 		if (!supabase) return;
 
 		try {
-			const {
-				data: { user },
-			} = await supabase.auth.getUser();
+			const user = await getSessionUser();
 			if (!user) return;
 
 			await supabase.from("diaries").upsert(
@@ -468,9 +464,7 @@ export const useDiaryStore = create<DiaryState>()((set, get) => ({
 		if (!supabase) return;
 
 		try {
-			const {
-				data: { user },
-			} = await supabase.auth.getUser();
+			const user = await getSessionUser();
 			if (!user) return;
 
 			await supabase.from("diaries").upsert(
@@ -504,9 +498,7 @@ export const useDiaryStore = create<DiaryState>()((set, get) => ({
 		if (!supabase) return;
 
 		try {
-			const {
-				data: { user },
-			} = await supabase.auth.getUser();
+			const user = await getSessionUser();
 			if (!user) return;
 
 			await supabase.from("diaries").upsert(
@@ -602,7 +594,7 @@ export const useDiaryStore = create<DiaryState>()((set, get) => ({
 
 		if (!supabase) return;
 		try {
-			const { data: { user } } = await supabase.auth.getUser();
+			const user = await getSessionUser();
 			if (!user) return;
 			await supabase.from("diaries").upsert(
 				{ user_id: user.id, date: dateStr, edited_diary: pending, updated_at: new Date().toISOString() },
@@ -631,7 +623,7 @@ export const useDiaryStore = create<DiaryState>()((set, get) => ({
 	/** 질문+답변을 user_qa 테이블에 저장. 실패 시 에러 throw (UI에서 처리) */
 	addAnswer: async (dateStr, question, answer) => {
 		if (!supabase) throw new Error("Supabase not available");
-		const { data: { user } } = await supabase.auth.getUser();
+		const user = await getSessionUser();
 		if (!user) throw new Error("Not authenticated");
 
 		const { error } = await supabase.from("user_qa").insert({
@@ -650,7 +642,7 @@ export const useDiaryStore = create<DiaryState>()((set, get) => ({
 	/** 오늘의 Q&A 답변을 user_qa 테이블에서 로드 */
 	fetchTodayQA: async () => {
 		if (!supabase) return;
-		const { data: { user } } = await supabase.auth.getUser();
+		const user = await getSessionUser();
 		if (!user) return;
 		const { data } = await supabase
 			.from("user_qa")
@@ -664,7 +656,7 @@ export const useDiaryStore = create<DiaryState>()((set, get) => ({
 	/** 특정 날짜의 Q&A 쌍을 user_qa 테이블에서 읽기 전용으로 조회 */
 	fetchQAForDate: async (dateStr) => {
 		if (!supabase) return [];
-		const { data: { user } } = await supabase.auth.getUser();
+		const user = await getSessionUser();
 		if (!user) return [];
 		const { data } = await supabase
 			.from("user_qa")
@@ -685,9 +677,7 @@ export const useDiaryStore = create<DiaryState>()((set, get) => ({
 		if (!supabase) return;
 
 		try {
-			const {
-				data: { user },
-			} = await supabase.auth.getUser();
+			const user = await getSessionUser();
 			if (!user) return;
 
 			// 쓰기 경로(saveGeneratedDiary/saveDiary)와 같은 컬럼을 읽음. diary_text는 레거시 (백필 완료)

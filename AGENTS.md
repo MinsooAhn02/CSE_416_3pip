@@ -87,12 +87,18 @@ archive/course/          old course deliverables — historical, do not treat as
 - Port 3000 is referenced by Supabase auth `site_url` and the extension's `externally_connectable`.
 - Edge Function changes are not live until deployed with `npx supabase functions deploy <name>`;
   check docs/BACKLOG.md for pending deploys.
-- `provider_refresh_token` is stripped from localStorage on purpose (`secureStorage` in `src/lib/supabase.ts`);
-  `provider_token` is persisted. See docs/security/localStorage-audit.md.
+- `provider_refresh_token` is stripped from localStorage on purpose (`secureStorage` in `src/lib/supabase.ts`); right
+  after sign-in it is sent to `google-refresh {action:"store"}` and kept encrypted in `google_tokens` (server only).
+  `provider_token` (1h) is persisted. See docs/security/localStorage-audit.md.
 - Reloads read the 6h `api_cache`; only the page opened by the Google OAuth callback forces a refetch
   (`openedFromOAuthRedirect`). Don't reintroduce unconditional cache clearing in `runFullInit`.
-- Google access tokens last 1h and no refresh token is kept, so Google data stops syncing after ~1h until
-  the user reconnects (banner via `googleReconnectNeeded`; BACKLOG R2).
+- Google access tokens last 1h; `ensureProviderToken` refreshes them through `google-refresh` (needs the
+  `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`/`GOOGLE_TOKEN_ENC_KEY` secrets). Without a stored refresh token the user
+  sees the reconnect banner (`googleReconnectNeeded`), which re-runs OAuth with `prompt=consent`.
+- Identify the user with `getSessionUser()` (`src/lib/supabase.ts`), not `supabase.auth.getUser()` — the latter is a
+  network call that takes the cross-tab auth lock.
+- Per-user localStorage keys must be listed in `USER_DATA_KEYS` (`src/utils/storage.ts`); they are cleared on
+  logout and when a different account signs in on the same browser.
 - Groq free tier: `openai/gpt-oss-120b` allows 8,000 tokens/min for the whole project — avoid adding
   Groq calls on page load. The briefing (`generateDetailedBriefing`, 60-min cache in `mb_briefing_cache`) and the
   daily question (`mb_daily_question`) are cached for that reason.

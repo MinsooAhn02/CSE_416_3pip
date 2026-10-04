@@ -148,7 +148,9 @@ Set the required secrets (Dashboard → Project Settings → Edge Functions, or 
 - `GROQ_API_KEY` — groq
 - `TAVILY_API_KEY` — tavily
 - `TWELVEDATA_API_KEY` — stocks (USD/KRW and single tickers; indices use Yahoo, no key)
-- `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` — google-refresh
+- `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` — google-refresh (the same OAuth client configured in Supabase Auth → Providers → Google)
+- `GOOGLE_TOKEN_ENC_KEY` — google-refresh; random 32 bytes, base64 (encrypts stored Google refresh tokens). Generate and set in one step:
+  `npx supabase secrets set "GOOGLE_TOKEN_ENC_KEY=$(node -e "process.stdout.write(require(
 
 ### 6. Run the dev server
 

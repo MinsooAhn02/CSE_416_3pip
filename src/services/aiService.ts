@@ -6,6 +6,7 @@ import { supabase } from "../lib/supabase";
 import { isGuest } from "../lib/guest";
 import { load, save } from "../utils/storage";
 import { formatLocalDate } from "../utils/date";
+import { isLowQualityResult, cleanSnippet } from "../utils/articleQuality";
 import type {
 	WeatherData,
 	StockItem,
@@ -709,7 +710,10 @@ export async function generateDetailedBriefing(
 			}
 			return result;
 		})
-		.finally(() => briefingInFlight.delete(fp));
+		.finally(() => {
+			// 강제 재생성이 같은 fp로 새 run을 등록했을 수 있음 — 내 것일 때만 삭제
+			if (briefingInFlight.get(fp) === run) briefingInFlight.delete(fp);
+		});
 	briefingInFlight.set(fp, run);
 	return run;
 }
@@ -1292,7 +1296,11 @@ const isTrustedSmartSource = (result: SmartResult, isKo: boolean) => {
 		: false;
 };
 
-const filterSmartResults = (items: SmartResult[], isKo: boolean) => {
+const filterSmartResults = (items0: SmartResult[], isKo: boolean) => {
+	// 섹션 목록·위키 메타 페이지 제외 + 메뉴 텍스트 요약 제거 (BACKLOG R11)
+	const items = items0
+		.filter((r) => !isLowQualityResult(r))
+		.map((r) => ({ ...r, content: cleanSnippet(r.content) }));
 	const langFiltered = items.filter((r) => {
 		return hasSmartResultLanguage(r, isKo);
 	});

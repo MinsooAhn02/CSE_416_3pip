@@ -153,6 +153,9 @@ const App = () => {
 			return;
 		}
 
+		// 폴백은 Supabase 없는 Demo 모드 전용. Supabase가 있으면 user가 곧 오므로 기다림 —
+		// user 없이 먼저 돌면 권한·관심사 없는 불완전 로딩에 runFullInit이 합류해 버림
+		if (supabase) return;
 		if (initPhaseRef.current !== "none") return;
 		initPhaseRef.current = "fallback";
 

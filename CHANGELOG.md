@@ -7,6 +7,17 @@
 
 ## 2026-10-05
 
+### [Fix] Google sync after 1 hour, per-account data, guest leaks, news quality (BACKLOG R2, A8, R10, R11, R13)
+- Google refresh tokens are now kept server-side (new `google_tokens` table, AES-GCM encrypted, Edge Functions only) and `google-refresh` renews the 1-hour access token from them. Needs the secrets `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_TOKEN_ENC_KEY`; existing users reconnect once. "Reconnect Google" now asks for consent so Google issues a refresh token. Expired session tokens (>~55 min after sign-in) are no longer reused.
+- The reconnect banner only appears for users with calendar/health permission.
+- Logging out, or a different account signing in on the same browser, clears that account's local data (diary, PIN, briefing cache/history, daily question, task/calendar caches, API caches) and reloads.
+- Guest mode no longer writes anything to localStorage (sample data used to leak through diary/widget/task saves).
+- News, trends and smart widgets drop section/listing pages ("Opinion - Economy - The New York Times") and Wikipedia meta pages, and blank summaries that are site menu text.
+- Health: "today" starts at the user's local midnight (the server used UTC midnight, missing records before 09:00 KST).
+- Fewer auth round-trips: the app reads the user from the local session instead of calling `/auth/v1/user` (21 call sites), and no longer calls `refreshSession()` while looking for a Google token — both took the cross-tab auth lock (multi-tab "lock stolen" errors).
+- Init: the no-user fallback load runs only without Supabase; waiting for user settings is capped at 8 s.
+- Stocks: an invalid symbol is skipped instead of failing the whole request. Groq completion cap raised to 8192.
+
 ### [Fix] Stay under the Groq rate limit (BACKLOG R12, A3)
 - Briefings are cached for 60 minutes per input (date, time of day, language, tone, weather, events, news/trend titles, yesterday's diary) and concurrent requests share one run, so reloads and the first-login modal + widget no longer regenerate it. The briefing refresh button bypasses the cache. Briefings where the Groq summary failed are not cached.
 - The daily question is kept per date and language, so a reload doesn't ask Groq again; answering still moves to the next question. A failed Groq call no longer triggers a second attempt.

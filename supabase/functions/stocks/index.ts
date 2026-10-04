@@ -112,12 +112,13 @@ serve(async (req) => {
 	if (unauthorized) return unauthorized;
 
 	try {
-		const { symbols = ["KOSPI", "NASDAQ", "SP500", "USDKRW"] } = await req.json();
-		// 심볼 하나당 유료 API 호출 1회 → 개수·형식 제한
-		if (!Array.isArray(symbols) || symbols.length > MAX_SYMBOLS ||
-			!symbols.every((s) => typeof s === "string" && SYMBOL_RE.test(s))) {
-			throw new Error("invalid symbols");
-		}
+		let { symbols = ["KOSPI", "NASDAQ", "SP500", "USDKRW"] } = await req.json();
+		// 심볼 하나당 유료 API 호출 1회 → 개수·형식 제한. 잘못된 심볼 하나 때문에 전체가
+		// 실패하지 않도록 형식이 틀린 것만 제외
+		if (!Array.isArray(symbols)) throw new Error("invalid symbols");
+		symbols = symbols
+			.filter((s): s is string => typeof s === "string" && SYMBOL_RE.test(s))
+			.slice(0, MAX_SYMBOLS);
 		const apiKey = Deno.env.get("TWELVEDATA_API_KEY")?.trim() ?? "";
 
 		if (!apiKey) {

@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import toast from "react-hot-toast";
 import { load, save } from "../utils/storage";
-import { supabase } from "../lib/supabase";
+import { supabase, getSessionUser } from "../lib/supabase";
 import { isGuest } from "../lib/guest";
 import {
 	generateSmartWidgetData,
@@ -49,9 +49,7 @@ const initLayouts = (): Layouts => {
 const syncWidgetDB = async (fields: { vis?: VisMap; layouts?: Layouts }): Promise<void> => {
 	if (!supabase) return;
 	try {
-		const {
-			data: { user },
-		} = await supabase.auth.getUser();
+		const user = await getSessionUser();
 		if (!user) return;
 		if (fields.layouts || fields.vis) {
 			if (fields.vis) {
@@ -73,9 +71,7 @@ const syncWidgetDB = async (fields: { vis?: VisMap; layouts?: Layouts }): Promis
 const syncKeywords = async (keywords: string[]): Promise<void> => {
 	if (!supabase) return;
 	try {
-		const {
-			data: { user },
-		} = await supabase.auth.getUser();
+		const user = await getSessionUser();
 		if (!user) return;
 		// 기존 키워드 전체 삭제 후 삽입
 		await supabase.from("smart_keywords").delete().eq("user_id", user.id);
@@ -168,9 +164,7 @@ export const useWidgetStore = create<WidgetState>()((set, get) => ({
 	/* DB에서 위젯 상태 불러오기 */
 	hydrateFromDB: async () => {
 		if (!supabase) return;
-		const {
-			data: { user },
-		} = await supabase.auth.getUser();
+		const user = await getSessionUser();
 		if (!user) return;
 
 		// 위젯 가시성

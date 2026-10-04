@@ -1,4 +1,4 @@
-import { createClient, SupabaseClient } from "@supabase/supabase-js";
+import { createClient, SupabaseClient, type User } from "@supabase/supabase-js";
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
@@ -52,6 +52,15 @@ const secureStorage = {
 export const openedFromOAuthRedirect: boolean =
 	typeof window !== "undefined" &&
 	(window.location.hash.includes("access_token=") || /[?&]code=/.test(window.location.search));
+
+/**
+ * 현재 로그인 사용자 — 로컬 세션에서 읽음 (네트워크 호출 없음).
+ * auth.getUser()는 매번 /auth/v1/user를 호출하고 탭 간 auth 잠금을 잡아, 탭 여러 개에서
+ * "Lock ... was released because another request stole it"로 hydrate가 실패했음 (BACKLOG R10).
+ * DB 접근은 어차피 서버(RLS)가 JWT로 다시 검증하므로 클라이언트 쪽 식별은 세션으로 충분.
+ */
+export const getSessionUser = async (): Promise<User | null> =>
+	supabase ? (await supabase.auth.getSession()).data.session?.user ?? null : null;
 
 export const supabase: SupabaseClient | null =
 	supabaseUrl && supabaseAnonKey

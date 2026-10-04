@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { load, save } from "../utils/storage";
-import { supabase } from "../lib/supabase";
+import { supabase, getSessionUser } from "../lib/supabase";
 import { isGuest } from "../lib/guest";
 import { formatLocalDate } from "../utils/date";
 
@@ -54,7 +54,7 @@ export const useBriefingHistoryStore = create<BriefingHistoryState>()((set, get)
 		// supabase 동기화 (테이블이 없어도 graceful 처리)
 		try {
 			if (!supabase) return;
-			const { data: { user } } = await supabase.auth.getUser();
+			const user = await getSessionUser();
 			if (!user) return;
 			await supabase.from("briefing_snapshots").insert({
 				user_id: user.id,
@@ -95,7 +95,7 @@ export const useBriefingHistoryStore = create<BriefingHistoryState>()((set, get)
 
 		try {
 			if (!supabase) return;
-			const { data: { user } } = await supabase.auth.getUser();
+			const user = await getSessionUser();
 			if (!user) return;
 			await supabase.from("briefing_snapshots").delete().eq("user_id", user.id).eq("date", date);
 		} catch {
@@ -106,7 +106,7 @@ export const useBriefingHistoryStore = create<BriefingHistoryState>()((set, get)
 	hydrateFromDB: async () => {
 		try {
 			if (!supabase) return;
-			const { data: { user } } = await supabase.auth.getUser();
+			const user = await getSessionUser();
 			if (!user) return;
 			const { data, error } = await supabase
 				.from("briefing_snapshots")

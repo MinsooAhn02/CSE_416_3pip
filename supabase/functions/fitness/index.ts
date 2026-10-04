@@ -29,12 +29,17 @@ serve(async (req) => {
 	}
 
 	try {
-		const { token } = await req.json();
+		const { token, startTimeMillis } = await req.json();
 		if (!token) throw new Error("Google OAuth token required");
 
 		const now = new Date();
-		const startOfDay = new Date(now);
-		startOfDay.setHours(0, 0, 0, 0);
+		// 클라이언트가 보낸 로컬 자정 사용 (서버 TZ는 UTC라 KST 09시 이전 기록이 빠졌음).
+		// 없거나 이상한 값이면 지난 24시간 이내의 서버 자정으로 대체
+		const clientStart = Number(startTimeMillis);
+		const startOfDay =
+			Number.isFinite(clientStart) && clientStart <= now.getTime() && now.getTime() - clientStart <= 86_400_000
+				? new Date(clientStart)
+				: new Date(new Date(now).setHours(0, 0, 0, 0));
 
 		// Google Fit REST — aggregate steps, calories, heart rate, sleep
 		const body = {

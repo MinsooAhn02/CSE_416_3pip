@@ -8,10 +8,7 @@ IDs (R*, A*, B*) come from the 2026-10-04 reviews and are referenced from commit
 
 | # | Issue | Approach | Where |
 |---|---|---|---|
-| R2 | Google data stops syncing ~1h after sign-in: the access token lasts 1h and no refresh token is kept (`secureStorage` strips it; `prompt:"select_account"` may not return one). Minimal fix shipped: reconnect banner (`googleReconnectNeeded`). | Root fix: keep the Google refresh token server-side (encrypted, per user) and refresh in an Edge Function. Needs a security design. | `src/store/useAuthStore.ts`, `supabase/functions/google-refresh` |
-| A8 | Diary localStorage (`mb_diary_entries`) is not user-scoped and not cleared on logout → a second account on the same browser sees the first user's diaries. | Key by user id, clear on logout, migrate the old key once. | `src/store/useDiaryStore.ts`, `useAuthStore.ts` (logout) |
-| R10 | Two tabs at once → `Lock "lock:sb-…-auth-token" was released because another request stole it`; diary/tasks/gcal hydrate fail. Matters for the new-tab extension. | Pass the session user id into each `hydrateFromDB` instead of each calling `auth.getUser()`; `Promise.allSettled` in `runFullInit`. | `src/App.tsx`, stores' `hydrateFromDB` |
-| R11 | News widget shows raw scraped page text (nav menus); smart keyword top results can be Wikipedia meta pages. | Filter boilerplate content, exclude wiki domains for news-type sections; tune against real results. | `useDataStore.ts` (fetchNews), `aiService.ts` |
+| R2 | Google token refresh is implemented server-side (`google-refresh` + encrypted `google_tokens`), but **inactive until the secrets `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_TOKEN_ENC_KEY` are set**. After that, each existing user must click "Reconnect Google" once (consent) so Google issues a refresh token to store. | Set secrets (README §5), then verify: wait >1h after sign-in, calendar still syncs. | `supabase/functions/google-refresh`, `useAuthStore.ts` |
 
 ## Needs a manual (infra) step
 
@@ -26,12 +23,12 @@ IDs (R*, A*, B*) come from the 2026-10-04 reviews and are referenced from commit
 
 | # | Issue | Where |
 |---|---|---|
-| R13 | Health widget shows all zeros although `fitness` returns 200. Hypothesis (unverified): Google Fit REST API deprecation. | `supabase/functions/fitness` |
 | R4 | Smart widget component is recreated each render → loses local state (edit mode, open menu). | `DashboardLayout.tsx` |
 | R7 | Migration files have no timestamp prefix, so `supabase db push/reset` ignores them; applied by hand (order in DOCS §10). | `supabase/migrations/` |
 | R8 | `npm audit`: 15 vulnerabilities (1 critical), not triaged. Start with non-breaking `npm audit fix`. | `package-lock.json` |
 | B3 | Five Edge Function call helpers (DOCS §9) could share one module; `pad2` defined 3×. Low value vs. risk. | `useDataStore.ts`, `aiService.ts`, `useGoogleCalendarStore.ts`, `useAuthStore.ts`, `personalizationService.ts` |
 | B4 | 4.8 MB of course PDFs/xlsx tracked under `archive/course/` — keep or untrack (history keeps them either way). | `archive/course/` |
+| R13 | Health widget shows zeros for this account: Google Fit returns 200 with no data points (likely no Fit data on the account / Fit being phased out). The UTC "today" bug is fixed. | `supabase/functions/fitness` |
 | — | Weather widget briefly shows "No weather data available" on reload while the cache loads. | `WeatherWidget.tsx` |
 | — | Top news and trends can show the same items (dedup only when trends derive from news). | `useDataStore.ts` (trends dedup) |
 | — | Smart widget button shows stale `data.emoji` after a category override. | `SmartWidgetContent.tsx` |

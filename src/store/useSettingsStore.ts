@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import toast from "react-hot-toast";
 import { load, save } from "../utils/storage";
-import { supabase } from "../lib/supabase";
+import { supabase, getSessionUser } from "../lib/supabase";
 import { DEFAULT_PRIORITY_ORDER } from "../constants";
 import i18n from "../l10n/i18n";
 import { normalizeFixedInterestIds } from "../utils/interests";
@@ -83,9 +83,7 @@ const notifySaved = (): void => {
 const syncSettings = async (fields: Record<string, unknown>): Promise<void> => {
 	if (!supabase) return;
 	try {
-		const {
-			data: { user },
-		} = await supabase.auth.getUser();
+		const user = await getSessionUser();
 		if (!user) return;
 		const { error } = await supabase.from("user_settings").upsert({ id: user.id, ...fields });
 		if (error) throw error;
@@ -197,9 +195,7 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
 	hydrateFromDB: async (data?: Record<string, unknown> | null) => {
 		let resolved = data;
 		if (!resolved && supabase) {
-			const {
-				data: { user },
-			} = await supabase.auth.getUser();
+			const user = await getSessionUser();
 			if (user) {
 				const { data: dbData } = await supabase
 					.from("user_settings")

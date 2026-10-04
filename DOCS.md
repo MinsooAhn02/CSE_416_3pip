@@ -404,7 +404,7 @@ graph TD
 
 **Key actions:** `login()` (Google OAuth, `prompt:"select_account"`, `access_type:"offline"`), `logout()`, `handleAuthChange(session)`, `ensureProviderToken(forceRefresh?)`, `loadUserSettings()`, `finishOB()`.
 
-> **`ensureProviderToken(forceRefresh?)`** — 기본 동작: memory cache → `getSession()` → `refreshSession()` → `google-refresh` edge 함수. `forceRefresh: true`이면 캐시된 토큰과 `getSession()`이 돌려주는 persisted `provider_token`을 **신뢰하지 않고**(둘 다 만료됐을 수 있음) 곧장 `refreshSession()` / `google-refresh`로 새 Google access token을 발급한다. 세션 복원 후 만료된 토큰으로 인한 401을 복구하는 데 쓰인다 (§5.8 `useGoogleCalendarStore`의 `invokeGoogleWithAuth` 참고).
+> **`ensureProviderToken(forceRefresh?)`** — memory token (if not past its tracked expiry) → session `provider_token` (only within ~55 min of `last_sign_in_at`) → `google-refresh {action:"refresh"}` (server-stored refresh token). `forceRefresh: true` skips the first two. If all fail and the user has calendar/fit perms, sets `googleReconnectNeeded` (banner → `reconnectGoogle()` = OAuth with `prompt=consent` so Google issues a new refresh token). On sign-in, `handleAuthChange` sends `session.provider_refresh_token` to `google-refresh {action:"store"}` once (§9).
 
 ---
 
@@ -865,7 +865,7 @@ sequenceDiagram
 | `events` 🔒 | `/functions/v1/events` | JWT | `{token, action?, ...}` | Google Calendar CRUD. `action`: `list` (default) / `create` / `update` / `delete` / `read` |
 | `tasks` 🔒 | `/functions/v1/tasks` | JWT | `{token, action?, taskListId?}` | Google Tasks CRUD. `action`: `list` / `create` / `update` / `delete` / `move` / `clearCompleted` |
 | `fitness` 🔒 | `/functions/v1/fitness` | JWT | `{token}` | `{steps, sleep, calories, heartRate}` |
-| `google-refresh` | `/functions/v1/google-refresh` | — (no JWT check) | `{refresh_token}` | `{access_token, expires_in}` — exchanges a Google OAuth refresh token for a fresh access token. Requires `GOOGLE_CLIENT_ID` + `GOOGLE_CLIENT_SECRET` in Supabase Secrets. Called by `useAuthStore.ensureProviderToken()` to recover expired provider tokens. |
+| `google-refresh` | `/functions/v1/google-refresh` | user JWT | `{action:"store", refresh_token}` / `{action:"refresh"}` | store → AES-GCM-encrypts the Google refresh token into `google_tokens` (service role only); refresh → `{access_token, expires_in}`; no stored token or `invalid_grant` → `409 {error:"reconnect_required"}` (row deleted on `invalid_grant`). The browser never keeps the refresh token. |
 
 > The `smart-widget` Edge Function was removed on 2026-10-04 — it had no frontend caller. Smart widget content is built client-side in `aiService.ts` via `groq` + `tavily`. `tavily` also accepts a batch form `{queries: [...]}`; `weather` also accepts `lang`.
 
@@ -878,7 +878,7 @@ There is no single gateway — five call paths exist. The three helpers send `Co
 | `invokeEdgeDetailed` / `invokeEdge` | `src/store/useDataStore.ts` | session JWT, falls back to anon key | weather, stocks, fitness, events, tavily, groq |
 | `invokeFunction` | `src/services/aiService.ts` | session JWT, falls back to anon key | groq, tavily |
 | `invokeGoogleFunction` / `invokeGoogleWithAuth` | `src/store/useGoogleCalendarStore.ts` | session JWT (retries on 401/403 after `ensureProviderToken(forceRefresh)`) | events, tasks |
-| raw `fetch` | `src/store/useAuthStore.ts` | session JWT, falls back to anon key | google-refresh |
+| `supabase.functions.invoke("google-refresh")` | `src/store/useAuthStore.ts` (`callGoogleRefresh`) | supabase-js session | google-refresh |
 | `supabase.functions.invoke("groq")` | `src/services/personalizationService.ts` | supabase-js session | groq |
 
 The anon key is public and scoped only to what RLS policies permit. **Every** Edge Function rejects callers without a logged-in user (401): events/tasks/fitness check inline, the rest via `supabase/functions/_shared/auth.ts` (`rejectIfNoUser`). The anon key is itself a valid JWT, so the gateway's `verify_jwt` alone does not stop anonymous use. Paid-API functions also cap input: groq (model allowlist, prompt length, `max_completion_tokens`), tavily (≤10 batch queries, ≤20 results), stocks (≤30 symbols), weather (numeric lat/lon).
@@ -923,9 +923,10 @@ pin_lock_mode              text  default 'immediate'  -- "immediate" | "off" | "
 | `diaries` | `add_personalization.sql` (also fully defined in `schema.sql`) | Per-user diaries. The app reads/writes `ai_generated_diary` + `edited_diary` (+ `memo`, `answers`); `diary_text` is legacy (created by `add_personalization.sql`, backfilled into `ai_generated_diary` by the `schema.sql` upgrade block — run it on older projects) |
 | `keyword_score_log` | `add_personalization.sql` | Raw interest keyword scoring events (30-day window) |
 | `user_qa` | `add_user_qa.sql` | Daily Q&A question/answer pairs |
+| `google_tokens` | `add_google_tokens.sql` (added 2026-10-05) | Encrypted Google refresh token per user. RLS on, no policies, no anon/authenticated grants — only Edge Functions (service role) can access. |
 | `briefing_snapshots` | `add_briefing_snapshots.sql` (added 2026-10-04) | Time-stamped briefing snapshots for diary synthesis: `date`, `captured_at`, `source`, `payload jsonb` |
 
-Run order for a fresh project: `schema.sql` → `add_personalization.sql` → `add_fixed_interests.sql` → `add_user_qa.sql` → `add_briefing_snapshots.sql` (SQL editor; files have no timestamp prefix so `supabase db push` ignores them).
+Run order for a fresh project: `schema.sql` → `add_personalization.sql` → `add_fixed_interests.sql` → `add_user_qa.sql` → `add_briefing_snapshots.sql` → `add_google_tokens.sql` (SQL editor; files have no timestamp prefix so `supabase db push` ignores them).
 
 ### RLS policies
 
@@ -1130,7 +1131,7 @@ Set with `npx supabase secrets set KEY=value` (or Dashboard → Edge Functions).
 | `TAVILY_API_KEY` | `tavily` |
 | `OPENWEATHER_API_KEY` | `weather` |
 | `TWELVEDATA_API_KEY` | `stocks` |
-| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | `google-refresh` |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_TOKEN_ENC_KEY` (base64, 32 bytes) | `google-refresh` |
 
 ### Google OAuth scopes
 
