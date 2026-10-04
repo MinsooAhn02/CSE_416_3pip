@@ -5,6 +5,16 @@
 
 ---
 
+## 2026-10-05
+
+### [Fix] Stay under the Groq rate limit (BACKLOG R12, A3)
+- Briefings are cached for 60 minutes per input (date, time of day, language, tone, weather, events, news/trend titles, yesterday's diary) and concurrent requests share one run, so reloads and the first-login modal + widget no longer regenerate it. The briefing refresh button bypasses the cache. Briefings where the Groq summary failed are not cached.
+- The daily question is kept per date and language, so a reload doesn't ask Groq again; answering still moves to the next question. A failed Groq call no longer triggers a second attempt.
+- Fixed a load race that made news and today's events change on every reload: the "tab became visible" handler fired on page load and started `fetchAll` before interests and calendar permissions were loaded, and the initial load joined that run. Visibility/poll refreshes now wait for the initial load, and the initial load waits for user settings.
+- Interest changes reuse the 6h news cache for the new interests instead of forcing Tavily.
+- Measured: after one warm-up reload, reloads make 0 Groq and 0 Tavily calls; an article-summary call used 321 tokens (20 reasoning).
+- `groq` Edge Function: `reasoning_effort: "low"` (gpt-oss reasoning tokens count toward the per-minute limit), returns `429` + `Retry-After` instead of `400` when rate-limited, and includes `usage` in the response.
+
 ## 2026-10-04
 
 ### [Fix] Tell the user when Google needs reconnecting

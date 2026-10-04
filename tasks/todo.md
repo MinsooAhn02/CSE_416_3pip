@@ -9,10 +9,9 @@
 
 ## 다음 후보 (BACKLOG "Next up" 순서)
 
-1. R12 Groq 분당 토큰 한도 대응
-2. R2 근본 해결 (Google refresh token 서버 보관) — 보안 설계 필요
-3. A8 일기 로컬 저장 계정별 분리 · R10 다중 탭 auth lock
-4. A3 브리핑 1회 생성 공유 · R11 뉴스 품질
+1. R2 근본 해결 (Google refresh token 서버 보관) — 보안 설계 필요
+2. A8 일기 로컬 저장 계정별 분리 · R10 다중 탭 auth lock
+3. R11 뉴스 품질
 
 ## 2026-10-04 세션 요약
 

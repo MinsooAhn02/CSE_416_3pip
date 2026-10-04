@@ -2,7 +2,7 @@ import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react"
 import { Toaster } from "react-hot-toast";
 import { useTranslation } from "react-i18next";
 import type { Session } from "@supabase/supabase-js";
-import { useAuthStore } from "./store/useAuthStore";
+import { useAuthStore, waitForUserSettings } from "./store/useAuthStore";
 import { useSettingsStore } from "./store/useSettingsStore";
 import { useWidgetStore } from "./store/useWidgetStore";
 import { useDataStore } from "./store/useDataStore";
@@ -128,6 +128,7 @@ const App = () => {
 					useTodoStore.getState().hydrateFromDB?.(),
 					useDiaryStore.getState().hydrateFromDB?.(),
 					useBriefingHistoryStore.getState().hydrateFromDB?.(),
+					waitForUserSettings(),
 				]);
 			} catch (e: unknown) {
 				console.warn(
@@ -172,6 +173,9 @@ const App = () => {
 		const handleVisibility = (): void => {
 			if (document.visibilityState !== "visible") return;
 			if (!useAuthStore.getState().user?.id) return;
+			// 초기 로딩 전엔 무시 — 페이지 열림 직후에도 이 이벤트가 오는데, 그때는 관심사·캘린더 권한이
+			// 아직 없어서 빈 일정·기본 뉴스로 로딩되고 runFullInit이 그 실행에 합류해 버림
+			if (!useDataStore.getState().initialFetchDone) return;
 			// useExistingCache: true → readApiCache가 1시간 TTL로 판단
 			// 만료됐으면 자동으로 API 재호출, 아니면 캐시 사용
 			fetchAll({ useExistingCache: true });
@@ -192,6 +196,7 @@ const App = () => {
 		const timerId = setInterval(() => {
 			if (document.visibilityState !== "visible") return;
 			if (!useAuthStore.getState().user?.id) return;
+			if (!useDataStore.getState().initialFetchDone) return; // 초기 로딩이 먼저
 			fetchAll({ useExistingCache: true });
 		}, POLL_MS);
 		return () => clearInterval(timerId);

@@ -8,11 +8,9 @@ IDs (R*, A*, B*) come from the 2026-10-04 reviews and are referenced from commit
 
 | # | Issue | Approach | Where |
 |---|---|---|---|
-| R12 | Groq free tier: `openai/gpt-oss-120b` allows 8,000 tokens/min for the whole project (all users share one key). After a few reloads + the first-login modal, 5 of 6 calls returned 429. | Lighter model (`gpt-oss-20b`) for small tasks; cache/share the briefing (A3); pass 429 through instead of mapping every error to 400. Check per-model limits at console.groq.com/settings/limits. | `supabase/functions/groq`, `src/services/aiService.ts` |
 | R2 | Google data stops syncing ~1h after sign-in: the access token lasts 1h and no refresh token is kept (`secureStorage` strips it; `prompt:"select_account"` may not return one). Minimal fix shipped: reconnect banner (`googleReconnectNeeded`). | Root fix: keep the Google refresh token server-side (encrypted, per user) and refresh in an Edge Function. Needs a security design. | `src/store/useAuthStore.ts`, `supabase/functions/google-refresh` |
 | A8 | Diary localStorage (`mb_diary_entries`) is not user-scoped and not cleared on logout → a second account on the same browser sees the first user's diaries. | Key by user id, clear on logout, migrate the old key once. | `src/store/useDiaryStore.ts`, `useAuthStore.ts` (logout) |
 | R10 | Two tabs at once → `Lock "lock:sb-…-auth-token" was released because another request stole it`; diary/tasks/gcal hydrate fail. Matters for the new-tab extension. | Pass the session user id into each `hydrateFromDB` instead of each calling `auth.getUser()`; `Promise.allSettled` in `runFullInit`. | `src/App.tsx`, stores' `hydrateFromDB` |
-| A3 | First visit of the day: first-login modal and BriefingWidget each generate a briefing (2 Groq calls each). | Generate once, share the result (store or snapshot). | `FirstLoginBriefingModal.tsx`, `BriefingWidget.tsx` |
 | R11 | News widget shows raw scraped page text (nav menus); smart keyword top results can be Wikipedia meta pages. | Filter boilerplate content, exclude wiki domains for news-type sections; tune against real results. | `useDataStore.ts` (fetchNews), `aiService.ts` |
 
 ## Needs a manual (infra) step

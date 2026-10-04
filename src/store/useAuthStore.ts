@@ -11,6 +11,10 @@ import { handleApiError } from "../utils/errorHandler";
 import { isGuest } from "../lib/guest";
 
 let settingsLoadedFor: string | null = null;
+let settingsLoadPromise: Promise<void> = Promise.resolve();
+/** 관심사(user_settings) 로드 완료 대기 — App이 fetchAll 전에 기다려야 뉴스가 처음부터
+ *  실제 관심사 기준 캐시를 읽음 (안 그러면 기본 관심사로 먼저 읽고 바뀌면서 Tavily/Groq 재호출) */
+export const waitForUserSettings = (): Promise<void> => settingsLoadPromise;
 
 interface AuthState {
 	isLoggedIn: boolean;
@@ -132,7 +136,8 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
 			// 여러 번 들어옴 → 유저당 1회만 로드 (개인화 배치 Groq 중복 호출·점수 이중 기록 방지)
 			if (settingsLoadedFor !== u.id) {
 				settingsLoadedFor = u.id;
-				await get().loadUserSettings();
+				settingsLoadPromise = get().loadUserSettings().catch(() => {});
+				await settingsLoadPromise;
 			}
 			return;
 		}

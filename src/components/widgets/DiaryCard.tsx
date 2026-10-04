@@ -9,6 +9,8 @@ import { useSettingsStore } from "../../store/useSettingsStore";
 import { useFontSize } from "../../hooks/useFontSize";
 import { generatePersonalizedQuestion } from "../../services/aiService";
 import { formatLocalDate } from "../../utils/date";
+import { load, save } from "../../utils/storage";
+import { isGuest } from "../../lib/guest";
 
 const STOP_WORDS = new Set(["이","그","저","것","수","을","를","이","가","은","는","에","의","도","로","와","과","만","에서","으로","한","있","없","하","이다","아","어","야"]);
 
@@ -19,6 +21,14 @@ const extractKeywords = (text: string): string[] =>
 		.slice(0, 5);
 
 const todayStr = (): string => formatLocalDate();
+
+// 오늘의 질문을 날짜+언어별로 보관 → 새로고침마다 Groq를 다시 부르지 않음 (BACKLOG R12)
+const QUESTION_STORAGE_KEY = "mb_daily_question";
+type StoredQuestion = { date: string; lang: string; question: string };
+const readStoredQuestion = (lang: string): string | null => {
+	const stored = load<StoredQuestion | null>(QUESTION_STORAGE_KEY, null);
+	return stored && stored.date === todayStr() && stored.lang === lang ? stored.question : null;
+};
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
@@ -53,7 +63,7 @@ const DiaryCard = () => {
 		setSaved(false);
 		setSaveError(false);
 		try {
-			const q = await generatePersonalizedQuestion({
+			const { question: q, fromAi } = await generatePersonalizedQuestion({
 				persona: typeof persona === "string" ? persona : "",
 				city: weather?.city ?? "",
 				weatherCondition: weather?.condition ?? "",
@@ -65,6 +75,10 @@ const DiaryCard = () => {
 				askedRef.current = [...askedRef.current, q];
 				questionCacheRef.current[questionLanguage] = q;
 				setQuestion(q);
+				// AI가 만든 질문만 보관 (fallback이면 다음 새로고침 때 다시 시도). 게스트는 저장 안 함
+				if (fromAi && !isGuest()) {
+					save(QUESTION_STORAGE_KEY, { date: todayStr(), lang: questionLanguage, question: q });
+				}
 			}
 		} catch {
 			setQuestion(t("diary.daily_question_fallback"));
@@ -74,7 +88,7 @@ const DiaryCard = () => {
 	};
 
 	useEffect(() => {
-		const cached = questionCacheRef.current[questionLanguage];
+		const cached = questionCacheRef.current[questionLanguage] ?? readStoredQuestion(questionLanguage);
 		if (cached) {
 			setQuestion(cached);
 			setIsLoadingQ(false);

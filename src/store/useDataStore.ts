@@ -2406,6 +2406,7 @@ useSettingsStore.subscribe((state) => {
 	const store = useDataStore.getState();
 	const userId = useAuthStore.getState().user?.id;
 	if (store.apiStatus?.news === "ok" || store.apiStatus?.news === "error") {
-		store.fetchNews(userId, true);
+		// force=false: 새 관심사 기준 캐시(6h)가 있으면 재사용 — 없을 때만 Tavily 호출
+		store.fetchNews(userId, false);
 	}
 });

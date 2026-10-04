@@ -279,6 +279,7 @@ runFullInit()                                         (src/App.tsx)
        localStorage.removeItem("mb_last_fetched_at" / "mb_last_access_time") + lastFetchedAt reset
        → forces a fresh fetch right after sign-in
   └─ hydrateFromDB() → parallel load of settings/widgets/todos/diary/briefingHistory
+       + waitForUserSettings() (interests + calendar/fit perms from useAuthStore.loadUserSettings)
   └─ fetchAll({ useExistingCache: false })  ← stale check: last access < 6h → reads api_cache (plain reloads)
        concurrent fetchAll calls share one in-flight run
   └─ useMidnightTrigger → runs once: lazy diary synthesis for missed days + todo reset
@@ -638,9 +639,9 @@ sequenceDiagram
 | Trigger | Scope | Mode |
 |---------|-------|------|
 | Language change | News + Trends + Smart Widget | `force=false`, per-language cache key (reuses same-language cache within 6h) |
-| Interest change | News only | `force=true`, only when the *set* of top-5 interests changes (order ignored) |
-| Tab visibility return | All | `force=false`, 6-hour stale check |
-| 5-minute poll | All | `force=false` |
+| Interest change | News only | `force=false` (reuses the 6h cache for the new interests), only when the *set* of top-5 interests changes |
+| Tab visibility return | All | `force=false`, 6-hour stale check; ignored until the initial load finished (`initialFetchDone`) |
+| 5-minute poll | All | `force=false`; ignored until the initial load finished |
 | Manual refresh button | Individual widget | `force=true` |
 
 ---
@@ -860,7 +861,7 @@ sequenceDiagram
 | `weather` | `/functions/v1/weather` | — | `{lat, lon}` | `{temp, city, condition, humidity, precipitation, airQuality}` |
 | `stocks` | `/functions/v1/stocks` | — | `{symbols: string[]}` | `[{symbol, price, change, changePercent, type, currency}]` — `type`: `"index"\|"stock"\|"etf"\|"currency"\|"unknown"`; `currency`: ISO code (e.g. `"USD"`, `"KRW"`) or `""`. Supported internal symbols: `KOSPI`, `NASDAQ`, `SP500`, `USDKRW`, `VIX`, `CRUDE` (WTI, → `USOIL`/`CL=F`), `DXY` (Dollar Index, → `DX-Y.NYB` on Yahoo), `DJI`. Indices/commodities are fetched from Yahoo (`YAHOO_SYMBOL_MAP`, no key); `USDKRW` and other tickers go through Twelve Data / Yahoo / Stooq. |
 | `tavily` | `/functions/v1/tavily` | — | `{query, mode, max_results, location?, include_domains?}` | News: `{answer, results, location}` / Trends: `{trends, answer, results}` |
-| `groq` | `/functions/v1/groq` | — | `{system, prompt, model?, temperature?}` — default model `openai/gpt-oss-120b` (allowlist: + `openai/gpt-oss-20b`), prompt ≤ 60k chars, `max_completion_tokens` 4096 | `{text}` — `Content-Type: application/json; charset=utf-8` |
+| `groq` | `/functions/v1/groq` | — | `{system, prompt, model?, temperature?}` — default model `openai/gpt-oss-120b` (allowlist: + `openai/gpt-oss-20b`), `reasoning_effort: "low"`, prompt ≤ 60k chars, `max_completion_tokens` 4096 | `{text, usage}`; rate limit → `429` + `Retry-After` |
 | `events` 🔒 | `/functions/v1/events` | JWT | `{token, action?, ...}` | Google Calendar CRUD. `action`: `list` (default) / `create` / `update` / `delete` / `read` |
 | `tasks` 🔒 | `/functions/v1/tasks` | JWT | `{token, action?, taskListId?}` | Google Tasks CRUD. `action`: `list` / `create` / `update` / `delete` / `move` / `clearCompleted` |
 | `fitness` 🔒 | `/functions/v1/fitness` | JWT | `{token}` | `{steps, sleep, calories, heartRate}` |

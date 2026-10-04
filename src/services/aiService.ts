@@ -4,6 +4,8 @@ const bs = (key: string, lng: string) => i18n.t(`briefing_sections.${key}`, { ln
 import { handleApiError } from "../utils/errorHandler";
 import { supabase } from "../lib/supabase";
 import { isGuest } from "../lib/guest";
+import { load, save } from "../utils/storage";
+import { formatLocalDate } from "../utils/date";
 import type {
 	WeatherData,
 	StockItem,
@@ -334,7 +336,7 @@ export async function generatePersonalizedQuestion({
 	previousQuestions?: string[];
 	language?: string;
 	fixedInterestIds?: string[];
-} = {}): Promise<string> {
+} = {}): Promise<{ question: string; fromAi: boolean }> {
 	const resolvedLanguage = normalizeQuestionLanguage(language);
 	const copy = QUESTION_COPY[resolvedLanguage];
 	const dayOfWeek = DAY_NAMES[resolvedLanguage][new Date().getDay()];
@@ -343,7 +345,7 @@ export async function generatePersonalizedQuestion({
 		: ["Saturday", "Sunday"].includes(dayOfWeek);
 
 	if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-		return pickFallbackQuestion(previousQuestions, resolvedLanguage);
+		return { question: pickFallbackQuestion(previousQuestions, resolvedLanguage), fromAi: false };
 	}
 
 	const topics = pickTopics(previousQuestions, 2, resolvedLanguage, fixedInterestIds);
@@ -387,16 +389,18 @@ export async function generatePersonalizedQuestion({
 				...prompt,
 				temperature: attempt.temperature,
 			});
+			// 호출 자체가 실패(한도 초과·네트워크)면 재시도해도 같은 결과 → 토큰 낭비 없이 바로 fallback
+			if (!data) break;
 			const question = normalizeQuestionCandidate(data?.text);
 			if (isValidDiaryQuestion(question, resolvedLanguage)) {
-				return question;
+				return { question, fromAi: true };
 			}
 		} catch {
 			// fall through to next attempt or fallback
 		}
 	}
 
-	return pickFallbackQuestion(previousQuestions, resolvedLanguage);
+	return { question: pickFallbackQuestion(previousQuestions, resolvedLanguage), fromAi: false };
 }
 
 const DEBUG_FLOW = import.meta.env.VITE_DEBUG_FLOW === "1";
@@ -649,7 +653,68 @@ const hostFromUrl = (url: unknown): string => {
  * 섹션 순서:
  *   1) 날짜+날씨  2) 일정  3) 어제  4) 오늘 최신 정보 (스마트키워드 / 뉴스Top3 / 트렌드Top3)
  */
-export async function generateDetailedBriefing({ tone, length, context }: { tone: string; length: string; context: BriefingContext }): Promise<BriefingResult> {
+// ── 브리핑 캐시 (BACKLOG R12/A3) ──────────────────────────────
+// 같은 입력이면 60분간 재사용 + 동시 요청 합치기 → 새로고침·첫 로그인 모달/위젯 중복 Groq 호출 제거.
+// Groq 요약이 실패한(로컬 문구로 대체된) 결과는 캐시하지 않음.
+const BRIEFING_CACHE_KEY = "mb_briefing_cache";
+const BRIEFING_CACHE_TTL_MS = 60 * 60 * 1000;
+type BriefingCacheEntry = { fp: string; at: number; result: BriefingResult };
+let briefingMemCache: BriefingCacheEntry | null = null;
+const briefingInFlight = new Map<string, Promise<BriefingResult>>();
+
+const briefingFingerprint = (tone: string, length: string, context: BriefingContext, lang: string): string => {
+	const titles = (items?: { title?: string; summary?: string; start?: string }[]) =>
+		(items ?? []).map((e) => `${e?.title ?? e?.summary ?? ""}@${e?.start ?? ""}`);
+	return JSON.stringify([
+		formatLocalDate(),
+		getBriefingTimeMode(),
+		lang,
+		tone,
+		length,
+		[context?.weather?.city, context?.weather?.temp, context?.weather?.condition],
+		titles(context?.calEvents as { title?: string; start?: string }[]),
+		titles(context?.tomorrowEvents as { title?: string; start?: string }[]),
+		titles(context?.newsResults),
+		titles(context?.trendsResults),
+		(context?.smartSummaries ?? []).map((s) => `${s.keyword}:${s.latestArticle?.title ?? ""}`),
+		[context?.yesterdayDiary ?? "", context?.yesterdayMemo ?? ""].map((s) => `${s.length}:${s.slice(0, 40)}`),
+	]);
+};
+
+const readBriefingCache = (fp: string): BriefingResult | null => {
+	const entry = briefingMemCache ?? load<BriefingCacheEntry | null>(BRIEFING_CACHE_KEY, null);
+	if (!entry || entry.fp !== fp || Date.now() - entry.at > BRIEFING_CACHE_TTL_MS) return null;
+	briefingMemCache = entry;
+	return entry.result;
+};
+
+/** force=true: 새로고침 버튼 — 캐시 무시하고 새로 생성 */
+export async function generateDetailedBriefing(
+	{ tone, length, context }: { tone: string; length: string; context: BriefingContext },
+	{ force = false }: { force?: boolean } = {},
+): Promise<BriefingResult> {
+	const fp = briefingFingerprint(tone, length, context, getLangConfig().lang);
+	if (!force) {
+		const cached = readBriefingCache(fp);
+		if (cached) return cached;
+		const pending = briefingInFlight.get(fp);
+		if (pending) return pending;
+	}
+	const run = buildDetailedBriefing({ tone, length, context })
+		.then(({ result, aiOk }) => {
+			if (aiOk) {
+				briefingMemCache = { fp, at: Date.now(), result };
+				// 게스트(샘플 데이터) 결과는 실제 사용자 localStorage에 남기지 않음
+				if (!isGuest()) save(BRIEFING_CACHE_KEY, briefingMemCache);
+			}
+			return result;
+		})
+		.finally(() => briefingInFlight.delete(fp));
+	briefingInFlight.set(fp, run);
+	return run;
+}
+
+async function buildDetailedBriefing({ tone, length, context }: { tone: string; length: string; context: BriefingContext }): Promise<{ result: BriefingResult; aiOk: boolean }> {
 	const { lang, langInstruction } = getLangConfig();
 	const isKo = lang === "ko";
 	const locale = isKo ? "ko-KR" : "en-US";
@@ -748,6 +813,11 @@ export async function generateDetailedBriefing({ tone, length, context }: { tone
 		}),
 		summarizeArticlesBatch({ articles: allArticles, lang, langInstruction }),
 	]);
+	// 두 Groq 호출 중 하나라도 실패(빈 결과)면 캐시 금지 — 실패 시 둘 다 빈 값을 반환함
+	const hasYesterdaySource = Boolean((context?.yesterdayDiary || context?.yesterdayMemo || "").trim());
+	const aiOk =
+		(allArticles.length === 0 || articleSummaries.length > 0) &&
+		(!hasYesterdaySource || diaryRewrite !== "");
 
 	// index 0..newsArticles.length-1 → news summaries; rest → trends summaries
 	const newsSummaryMap: Record<number, string> = {};
@@ -878,7 +948,7 @@ export async function generateDetailedBriefing({ tone, length, context }: { tone
 		})
 		.join("\n\n");
 
-	return { summary, detail, sections, timeMode };
+	return { result: { summary, detail, sections, timeMode }, aiOk };
 }
 
 /**

@@ -93,8 +93,9 @@ archive/course/          old course deliverables — historical, do not treat as
   (`openedFromOAuthRedirect`). Don't reintroduce unconditional cache clearing in `runFullInit`.
 - Google access tokens last 1h and no refresh token is kept, so Google data stops syncing after ~1h until
   the user reconnects (banner via `googleReconnectNeeded`; BACKLOG R2).
-- Groq free tier: `openai/gpt-oss-120b` allows 8,000 tokens/min for the whole project (BACKLOG R12) —
-  avoid adding Groq calls on page load.
+- Groq free tier: `openai/gpt-oss-120b` allows 8,000 tokens/min for the whole project — avoid adding
+  Groq calls on page load. The briefing (`generateDetailedBriefing`, 60-min cache in `mb_briefing_cache`) and the
+  daily question (`mb_daily_question`) are cached for that reason.
 - Every Edge Function requires a logged-in user (`supabase/functions/_shared/auth.ts`); call them with the
   session JWT, never just the anon key.
 - Don't commit `dist/`, `.env`, `supabase/.temp/` or extension zips (all gitignored).

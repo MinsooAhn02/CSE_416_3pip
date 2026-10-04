@@ -87,7 +87,7 @@ const BriefingWidget = () => {
 				context: context as Parameters<typeof generateDetailedBriefing>[0]["context"],
 				tone,
 				length: targetLength,
-			});
+			}, { force: snapshotSource === "refresh" }); // 수동 새로고침만 60분 캐시 무시
 			setBriefingVersions((prev) => ({
 				...prev,
 				[targetLength]: result,

@@ -116,7 +116,7 @@ const FirstLoginBriefingModal = () => {
 				context: buildContext(),
 				tone,
 				length: BRIEFING_LENGTH,
-			});
+			}, { force: true }); // 새로고침 버튼 — 캐시 무시
 			if (result) {
 				setBriefing(result);
 				lastGeneratedRef.current = new Date();
