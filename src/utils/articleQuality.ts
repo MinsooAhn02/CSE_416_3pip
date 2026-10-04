@@ -55,6 +55,8 @@ export const cleanSnippet = (content: unknown): string => {
 	const text = String(content ?? "").replace(/\s+/g, " ").trim();
 	if (!text) return "";
 	if (NAV_SNIPPET_RE.test(text)) return "";
+	// CNN 메뉴: "World + Africa + Americas + Asia ..."
+	if ((text.match(/ \+ /g) ?? []).length >= 3) return "";
 	// 대문자 단어 비율이 높으면 메뉴/네비게이션 나열일 가능성이 큼
 	const words = text.split(" ").filter((w) => /[A-Za-z]/.test(w));
 	const capsWords = words.filter((w) => w.length > 2 && w === w.toUpperCase());

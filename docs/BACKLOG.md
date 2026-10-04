@@ -14,7 +14,7 @@ IDs (R*, A*, B*) come from the 2026-10-04 reviews and are referenced from commit
 
 | Item | What's left |
 |---|---|
-| A9 anon grants | anon holds all privileges on 9 public tables (RLS blocks rows today). Run `supabase/migrations/revoke_anon_grants.sql`, then drop the `grant select ... to anon` lines from `schema.sql`, `add_user_qa.sql`, `add_personalization.sql`. (The extension zip already drops localhost.) |
+| A9 leftover | anon privileges revoked on the live DB (2026-10-05, `revoke_anon_grants.sql`, verified 0 grants). The `grant select ... to anon` lines are still in `schema.sql`, `add_user_qa.sql`, `add_personalization.sql` (harmless on a fresh setup because `revoke_anon_grants.sql` runs last); delete them when convenient. |
 | R6 `todos` table | Created in `schema.sql`, never queried (todos mirror Google Tasks + localStorage), but holds 14 old rows (2026-10-05). Decide whether to export, then drop. |
 | `smart-widget` Edge Function | Source removed from the repo (no caller). If still deployed: `npx supabase functions delete smart-widget`. |
 | Deploy after changes | Web: `npm run build && npx wrangler deploy`. Extension: `npm run build:extension` and redistribute the zip (not on the Web Store, no auto-update). |
@@ -28,16 +28,11 @@ IDs (R*, A*, B*) come from the 2026-10-04 reviews and are referenced from commit
 | B3 | Five Edge Function call helpers (DOCS §9) could share one module; `pad2` defined 3×. Low value vs. risk. | `useDataStore.ts`, `aiService.ts`, `useGoogleCalendarStore.ts`, `useAuthStore.ts`, `personalizationService.ts` |
 | B4 | 4.8 MB of course PDFs/xlsx tracked under `archive/course/` — keep or untrack (history keeps them either way). | `archive/course/` |
 | R13 | Health widget shows zeros for this account: Google Fit returns 200 with no data points (likely no Fit data on the account / Fit being phased out). The UTC "today" bug is fixed. | `supabase/functions/fitness` |
-| — | Event form still needs scrolling. | `EventPanel.tsx` |
-| — | Tavily: one call per query; each smart widget searches separately. | `supabase/functions/tavily`, `aiService.ts` |
+| — | Page load calls the `tasks` Edge Function 6× and `events` 2× (observed 2026-10-05 in dev); likely overlapping task-list/range fetches. Not investigated. | `useGoogleCalendarStore.ts`, `useTodoStore.ts` |
 
-### GitHub issues still open
+### GitHub issues
 
-https://github.com/MinsooAhn-SBU/CSE_416_3pip/issues — #2 diary feedback rewrite not applying (Major) · #4 briefing
-"latest info" shows generic definitions (Major) · #5 smart keywords "No keyword info" (Minor) · #6 Google
-integration toggle unverified (Minor) · #7 smart keywords → personalization context (Minor) · #9 Google Fit live
-sync (Major, see R13) · #10 `voiceOn` has no UI/TTS (Minor) · #12 Trends detail view (Minor) · #13 diary PIN
-setup flow (Major). Closed: #1, #3, #8, #11, #14, #15.
+https://github.com/MinsooAhn02/CSE_416_3pip/issues — all bug/feature issues (#1–#15, #17–#32) are closed; only #16 (Jira migration notice) is open.
 
 ## Decisions
 

@@ -1799,22 +1799,26 @@ export const useDataStore = create<DataState>()((set, get) => ({
 				? "Top world breaking news today: international politics, business, technology, science."
 				: "오늘의 세계 주요 뉴스 속보: 국제 정치, 경제, 기술, 과학.";
 
-			const [localEdge, globalEdge] = await Promise.all([
-				invokeEdgeDetailed("tavily", {
-					query: localQuery,
-					mode: "news",
-					max_results: 12,
-					...(includeDomains.length > 0 ? { include_domains: includeDomains } : {}),
-				}),
-				invokeEdgeDetailed("tavily", {
-					query: globalNewsQuery,
-					mode: "news",
-					max_results: 5,
-				}),
-			]);
-
-			const localEdgeData = localEdge?.data as Record<string, unknown> | null;
-			const globalEdgeData = globalEdge?.data as Record<string, unknown> | null;
+			// 국내 + 세계 뉴스를 Edge Function 배치 1회로 (서버에서 병렬 검색, 쿼리별 실패는 { error }로 옴)
+			const edge = await invokeEdgeDetailed("tavily", {
+				queries: [
+					{
+						query: localQuery,
+						mode: "news",
+						max_results: 12,
+						...(includeDomains.length > 0 ? { include_domains: includeDomains } : {}),
+					},
+					{ query: globalNewsQuery, mode: "news", max_results: 5 },
+				],
+			});
+			const batch = (edge?.ok ? (edge.data as { batch?: Record<string, unknown>[] } | null)?.batch : null) ?? [];
+			const toResult = (d: Record<string, unknown> | undefined) => ({
+				ok: Boolean(d && !d.error),
+				error: d ? null : (edge?.error ?? null),
+			});
+			const [localEdgeData = null, globalEdgeData = null] = batch;
+			const localEdge = toResult(batch[0]);
+			const globalEdge = toResult(batch[1]);
 
 			const localRawResults = localEdge?.ok ? ((localEdgeData?.results ?? []) as unknown[]) : [];
 			const localResults = filterLocalizedArticles(localRawResults, lang, 5);

@@ -900,7 +900,7 @@ const EventPanel = ({ selectedDate, onClose }: EventPanelProps) => {
 						onClick={handleCloseAddForm}
 					>
 						<div
-							className={`z-[22010] w-full max-w-xl max-h-[85vh] overflow-y-auto rounded-2xl border-2 shadow-2xl p-6 space-y-4 ${modalCardCls}`}
+							className={`z-[22010] w-full max-w-xl md:max-w-4xl max-h-[90vh] overflow-y-auto rounded-2xl border-2 shadow-2xl p-6 space-y-4 ${modalCardCls}`}
 							onClick={(e) => e.stopPropagation()}
 						>
 							<div className="flex items-center justify-between mb-4">
@@ -917,6 +917,9 @@ const EventPanel = ({ selectedDate, onClose }: EventPanelProps) => {
 							</div>
 
 							<form onSubmit={handleSubmit} className="space-y-3 pr-1">
+								{/* 넓은 화면: 기본 정보 | 참석자·설명·옵션 2열 → 스크롤 없이 한 화면에 */}
+								<div className="grid gap-x-6 gap-y-3 md:grid-cols-2">
+								<div className="space-y-3 min-w-0">
 								<input
 									type="text"
 									placeholder={t("events.event_title_placeholder")}
@@ -1134,6 +1137,8 @@ const EventPanel = ({ selectedDate, onClose }: EventPanelProps) => {
 										}
 									/>
 								</div>
+								</div>
+								<div className="space-y-3 min-w-0">
 								<div className="space-y-2">
 									<label
 										className={`text-xs font-medium flex items-center gap-1 ${isDark ? "text-orange-400" : "text-orange-600"}`}
@@ -1477,6 +1482,8 @@ const EventPanel = ({ selectedDate, onClose }: EventPanelProps) => {
 											))}
 										</select>
 									</div>
+								</div>
+								</div>
 								</div>
 								<div className="flex gap-2">
 									<button

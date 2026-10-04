@@ -25,6 +25,8 @@ assert.equal(
 	cleanSnippet("Most auto executives agree that electric vehicles will eventually replace conventional cars."),
 	"Most auto executives agree that electric vehicles will eventually replace conventional cars.",
 );
+assert.equal(cleanSnippet("World + Africa + Americas + Asia + Australia + China + Europe US Politics + Trump + Facts First"), "");
+assert.equal(cleanSnippet("Shares rose 2% as A + B testing results came in"), "Shares rose 2% as A + B testing results came in");
 assert.equal(cleanSnippet(""), "");
 
 console.log("article quality checks: OK");
