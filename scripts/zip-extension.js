@@ -28,7 +28,12 @@ async function zipDir() {
     archive.on("error", reject);
   });
   archive.pipe(output);
-  archive.directory(distDir, false);
+  // 배포용 zip에서는 localhost(개발 서버) 연결 허용을 뺌 — dist/는 로컬 개발용으로 그대로 둠
+  const manifest = JSON.parse(readFileSync(join(distDir, "manifest.json"), "utf-8"));
+  const ec = manifest.externally_connectable;
+  if (ec?.matches) ec.matches = ec.matches.filter((m) => !m.includes("localhost"));
+  archive.directory(distDir, false, (entry) => (entry.name === "manifest.json" ? false : entry));
+  archive.append(JSON.stringify(manifest, null, 2), { name: "manifest.json" });
   await archive.finalize();
   await closed;
   console.log(`✅  Extension packaged: morningbriefing-extension-v${version}.zip (${archive.pointer()} bytes)`);

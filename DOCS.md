@@ -926,7 +926,7 @@ pin_lock_mode              text  default 'immediate'  -- "immediate" | "off" | "
 | `google_tokens` | `add_google_tokens.sql` (added 2026-10-05) | Encrypted Google refresh token per user. RLS on, no policies, no anon/authenticated grants — only Edge Functions (service role) can access. |
 | `briefing_snapshots` | `add_briefing_snapshots.sql` (added 2026-10-04) | Time-stamped briefing snapshots for diary synthesis: `date`, `captured_at`, `source`, `payload jsonb` |
 
-Run order for a fresh project: `schema.sql` → `add_personalization.sql` → `add_fixed_interests.sql` → `add_user_qa.sql` → `add_briefing_snapshots.sql` → `add_google_tokens.sql` (SQL editor; files have no timestamp prefix so `supabase db push` ignores them).
+Run order for a fresh project: `schema.sql` → `add_personalization.sql` → `add_fixed_interests.sql` → `add_user_qa.sql` → `add_briefing_snapshots.sql` → `add_google_tokens.sql` → `revoke_anon_grants.sql` (SQL editor; files have no timestamp prefix so `supabase db push` ignores them).
 
 ### RLS policies
 

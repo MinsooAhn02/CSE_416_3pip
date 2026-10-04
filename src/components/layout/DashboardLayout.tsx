@@ -28,12 +28,6 @@ const STANDARD_WIDGET_COMPONENTS: Record<string, React.ComponentType> = {
 	news: NewsWidget,
 };
 
-interface SmartWidgetProps {
-	keyword: string;
-}
-
-const SmartWidget = ({ keyword }: SmartWidgetProps) => <SmartWidgetContent keyword={keyword} />;
-
 const DASHBOARD_VIEWPORT_H = "calc(100vh - 6rem)";
 
 const DashboardLayout = () => {
@@ -110,16 +104,14 @@ const DashboardLayout = () => {
 
 	/* Render a single widget by id */
 	const renderWidget = useCallback((id: string) => {
-		let Component: React.ComponentType | null = STANDARD_WIDGET_COMPONENTS[id] ?? null;
-		if (!Component && id.startsWith("smart_")) {
-			const kw = id.slice(6);
-			Component = () => <SmartWidget keyword={kw} />;
-		}
-		if (!Component) return null;
+		// 매 렌더마다 새 컴포넌트 타입을 만들면 React가 위젯을 remount해 로컬 state가 날아감 (R4) → element로 렌더
+		const Standard = STANDARD_WIDGET_COMPONENTS[id];
+		const content = Standard ? <Standard /> : id.startsWith("smart_") ? <SmartWidgetContent keyword={id.slice(6)} /> : null;
+		if (!content) return null;
 		return (
 			<div key={id} className="min-w-0">
 				<Suspense fallback={<WidgetSkeleton />}>
-					<Component />
+					{content}
 				</Suspense>
 			</div>
 		);

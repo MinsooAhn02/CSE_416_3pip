@@ -7,6 +7,16 @@
 
 ## 2026-10-05
 
+### [Fix] Widget state, weather flash, news/trends duplicates, dependency updates (BACKLOG R4, R8, A9)
+- Smart widgets keep their local state (open category menu, keyword edit) when the dashboard re-renders; they used to remount.
+- The weather widget shows "Loading" instead of "No weather data available" until the first load finishes.
+- Live Trends no longer repeats the News widget: the trend list is no longer built from the news results, and trend articles already shown in News are dropped (kept if fewer than 3 would remain).
+- The smart widget's category button shows the chosen category's emoji after a manual category change.
+- The packaged extension zip no longer allows http://localhost:3000 in xternally_connectable (dist/ keeps it for local development).
+- 
+pm audit fix (non-breaking): vite 6.4.3, tar, ws, postcss, nanoid, browserslist, @babel/core. 5 high remain, all via Tailwind 3's build-time glob (races); fixing needs Tailwind 4.
+- New migration evoke_anon_grants.sql (revokes anon table privileges; not yet applied).
+
 ### [Fix] Google sync after 1 hour, per-account data, guest leaks, news quality (BACKLOG R2, A8, R10, R11, R13)
 - Google refresh tokens are now kept server-side (new `google_tokens` table, AES-GCM encrypted, Edge Functions only) and `google-refresh` renews the 1-hour access token from them. Needs the secrets `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_TOKEN_ENC_KEY`; existing users reconnect once. "Reconnect Google" now asks for consent so Google issues a refresh token. Expired session tokens (>~55 min after sign-in) are no longer reused.
 - The reconnect banner only appears for users with calendar/health permission.

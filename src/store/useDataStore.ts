@@ -1639,41 +1639,6 @@ export const useDataStore = create<DataState>()((set, get) => ({
 			}
 		}
 
-		// ✅ 3순위: 이미 로드된 news 결과에서 트렌드 파생 (Tavily 호출 절약)
-		if (!force) {
-			const currentNewsResults = get().newsResults ?? [];
-			const newsLang = get().fetchedLanguage?.news;
-			if (currentNewsResults.length >= 3 && newsLang === lang) {
-				try {
-					const derivedTrends = await buildLocalizedTrendTitles(
-						currentNewsResults,
-						[],
-						lang,
-						8,
-					);
-					if (derivedTrends.length >= 2) {
-						const trendsResults = currentNewsResults.slice(0, 7);
-						_trendsMemCache[lang] = { trends: derivedTrends, trendsResults };
-						set({
-							trends: derivedTrends,
-							trendsResults,
-							fetchedLanguage: { ...get().fetchedLanguage, trends: lang },
-						});
-						await writeApiCache(
-							cacheKey,
-							{ trends: derivedTrends, results: trendsResults },
-							userId,
-						);
-						get().markFetched("trends");
-						get().setApiStatus("trends", "ok");
-						return;
-					}
-				} catch (e) {
-					handleApiError(e, "fetchTrends:derive");
-				}
-			}
-		}
-
 		// ✅ 캐시 없으면 여기서 loading: true
 		set((s) => ({
 			loading: { ...s.loading, trends: true },
@@ -1698,8 +1663,11 @@ export const useDataStore = create<DataState>()((set, get) => ({
 					7,
 				);
 				const fallbackResults = normalizeArticleList((edgeData.results ?? []) as unknown[], 7);
-				const rawDisplayResults =
-					localizedResults.length > 0 ? localizedResults : fallbackResults;
+				const candidates = localizedResults.length > 0 ? localizedResults : fallbackResults;
+				// 뉴스 위젯과 같은 기사는 제외 (남는 게 3건 미만이면 그대로 사용)
+				const newsUrls = new Set((get().newsResults ?? []).map((a) => (a as ArticleItem).url).filter(Boolean));
+				const unique = candidates.filter((a) => !newsUrls.has((a as ArticleItem).url));
+				const rawDisplayResults = unique.length >= 3 ? unique : candidates;
 				const displayResults =
 					lang === "ko"
 						? await translateArticlesToKorean(rawDisplayResults)

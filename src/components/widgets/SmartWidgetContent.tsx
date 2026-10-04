@@ -289,7 +289,7 @@ const SmartWidgetContent = ({ keyword }: SmartWidgetContentProps) => {
 						>
 							<Layers size={9} aria-hidden="true" className="shrink-0 opacity-50" />
 							<span aria-hidden="true" className="text-[12px] leading-none">
-								{data.emoji || "🔍"}
+								{categoryOptions.find((o) => o.value === categoryOverride)?.emoji ?? (data.emoji || "🔍")}
 							</span>
 							<span
 								aria-hidden="true"

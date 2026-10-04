@@ -107,7 +107,7 @@ const WeatherWidget = () => {
 	const { t, i18n } = useTranslation();
 	const isKo = i18n.language?.startsWith("ko");
 	// Consolidated data-field selector — one subscription, shallow equality
-	const { weather, loading, error, apiStatus, usingDefaultLocation, manualWeatherCity } =
+	const { weather, loading, error, apiStatus, usingDefaultLocation, manualWeatherCity, initialFetchDone } =
 		useDataStore(useShallow((s) => ({
 			weather: s.weather,
 			loading: s.loading.weather,
@@ -115,6 +115,7 @@ const WeatherWidget = () => {
 			apiStatus: s.apiStatus.weather ?? null,
 			usingDefaultLocation: s.usingDefaultWeatherLocation,
 			manualWeatherCity: s.manualWeatherCity,
+			initialFetchDone: s.initialFetchDone,
 		})));
 	// Actions are stable Zustand references — separate subscriptions cause no extra renders
 	const fetchWeather = useDataStore((s) => s.fetchWeather);
@@ -177,7 +178,8 @@ const WeatherWidget = () => {
 			apiStatus={apiStatus}
 			apiError={error}
 		>
-			{loading ? (
+			{/* 첫 fetch 전(캐시 로딩 중)에는 '데이터 없음' 대신 로딩 표시 */}
+			{loading || (!weather && !error && !initialFetchDone) ? (
 				<p className="text-sm opacity-50">{t("widgets.weather.loading")}</p>
 			) : weather ? (
 				<div className="space-y-3">
