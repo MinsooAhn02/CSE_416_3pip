@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { supabase } from "../lib/supabase";
+import { callEdge } from "../lib/edge";
 import { isGuest } from "../lib/guest";
 import { isLowQualityResult, cleanSnippet } from "../utils/articleQuality";
 import { load, save } from "../utils/storage";
@@ -43,10 +44,7 @@ const isCacheStale = (): boolean => {
 	return delta > CACHE_THRESHOLD_MS;
 };
 
-/* ── Edge Function 호출 헬퍼 (직접 fetch - supabase.functions.invoke 대체) ── */
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
-const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
-
+/* ── Edge Function 호출 헬퍼: 공용 코어 callEdge(src/lib/edge.ts) 위의 얇은 래퍼 ── */
 interface EdgeResult {
 	ok: boolean;
 	data: unknown;
@@ -57,82 +55,27 @@ interface EdgeResult {
 }
 
 const invokeEdgeDetailed = async (fnName: string, body: Record<string, unknown> = {}): Promise<EdgeResult | null> => {
-	if (!SUPABASE_URL || !SUPABASE_ANON_KEY || isGuest()) return null;
-	const url = `${SUPABASE_URL}/functions/v1/${fnName}`;
-	const startedAt = Date.now();
-	const controller = new AbortController();
-	const timer = setTimeout(() => controller.abort(), EDGE_TIMEOUT_MS);
-
-	let bearerToken = SUPABASE_ANON_KEY;
-	if (supabase) {
-		const { data: { session } } = await supabase.auth.getSession();
-		if (session?.access_token) bearerToken = session.access_token;
+	const r = await callEdge(fnName, body, { timeoutMs: EDGE_TIMEOUT_MS });
+	if (!r) return null;
+	const area = `edge:${fnName}`;
+	if (r.ok) {
+		return { ok: true, data: r.data, error: null, errorType: null, timedOut: false, elapsedMs: r.elapsedMs };
 	}
-
-	try {
-		const res = await fetch(url, {
-			method: "POST",
-			headers: {
-				"Content-Type": "application/json",
-				apikey: SUPABASE_ANON_KEY,
-				Authorization: `Bearer ${bearerToken}`,
-			},
-			body: JSON.stringify(body),
-			signal: controller.signal,
-		});
-		clearTimeout(timer);
-
-		if (!res.ok) {
-			const text = await res.text().catch(() => "");
-			handleApiError(
-				{ message: `HTTP ${res.status}: ${text}` },
-				`edge:${fnName}`,
-				{ httpStatus: res.status },
-			);
-			return {
-				ok: false,
-				data: null,
-				error: `HTTP ${res.status}: ${text}`,
-				errorType: res.status >= 500 ? "http_5xx" : "http_4xx",
-				timedOut: false,
-				elapsedMs: Date.now() - startedAt,
-			};
-		}
-
-		const data: unknown = await res.json();
-
-		return {
-			ok: true,
-			data,
-			error: null,
-			errorType: null,
-			timedOut: false,
-			elapsedMs: Date.now() - startedAt,
-		};
-	} catch (e) {
-		clearTimeout(timer);
-		const err = e as Error;
-		if (err.name === "AbortError") {
-			handleApiError(err, `edge:${fnName}`, { userVisible: true });
-			return {
-				ok: false,
-				data: null,
-				error: `timeout ${EDGE_TIMEOUT_MS}ms`,
-				errorType: "timeout",
-				timedOut: true,
-				elapsedMs: Date.now() - startedAt,
-			};
-		}
-		handleApiError(err, `edge:${fnName}`);
-		return {
-			ok: false,
-			data: null,
-			error: err.message || "Edge invoke failed",
-			errorType: "network",
-			timedOut: false,
-			elapsedMs: Date.now() - startedAt,
-		};
+	if (r.errorType === "http_4xx" || r.errorType === "http_5xx") {
+		handleApiError({ message: r.error }, area, { httpStatus: r.status });
+	} else if (r.timedOut) {
+		handleApiError(r.cause, area, { userVisible: true });
+	} else {
+		handleApiError(r.cause, area);
 	}
+	return {
+		ok: false,
+		data: null,
+		error: r.error,
+		errorType: r.errorType,
+		timedOut: r.timedOut,
+		elapsedMs: r.elapsedMs,
+	};
 };
 
 const invokeEdge = async (fnName: string, body: Record<string, unknown> = {}): Promise<unknown> => {

@@ -1,4 +1,4 @@
-const pad2 = (value: number): string => String(value).padStart(2, "0");
+export const pad2 = (value: number | string): string => String(value).padStart(2, "0");
 
 export const formatLocalDate = (input: Date | string = new Date()): string => {
 	const date = input instanceof Date ? new Date(input) : new Date(input);

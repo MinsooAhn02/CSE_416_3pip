@@ -115,16 +115,16 @@ If `.env` is missing or empty, the app boots in **Demo mode** (the login screen 
 
 ### 4. Database setup
 
-The required tables are defined in `supabase/schema.sql` and migrations in `supabase/migrations/`.
+The schema is defined entirely by the timestamped files in `supabase/migrations/` (the first one, `20260501000000_base_schema.sql`, holds the base tables). Link the project and apply them all:
 
-In the Supabase Dashboard → SQL Editor, run the following files in order:
-1. `supabase/schema.sql` — base tables (`user_settings`, `widget_layouts`, `todos` (unused), `smart_keywords`, `api_cache`, `diaries`)
-2. `supabase/migrations/add_personalization.sql` — `diaries`, `keyword_score_log`, personalization columns
-3. `supabase/migrations/add_fixed_interests.sql` — `fixed_interests`, `onboarding_perms` columns
-4. `supabase/migrations/add_user_qa.sql` — `user_qa` table
-5. `supabase/migrations/add_briefing_snapshots.sql` — `briefing_snapshots` table
+```powershell
+npx supabase link --project-ref <your-project-ref>
+npx supabase db push
+```
 
-> **Note:** The migration files have no timestamp prefix, so `supabase db push` ignores them — run them by hand. Since 2026-05-30 Supabase no longer auto-grants permissions on new tables; the SQL files include explicit `GRANT` blocks.
+To change the schema later, create a new file with `npx supabase migration new <name>`, write the SQL, and run `npx supabase db push`.
+
+> **Note:** Since 2026-05-30 Supabase no longer auto-grants permissions on new tables; the SQL files include explicit `GRANT` blocks (authenticated/service_role only — the anon role has no table privileges).
 
 ### 5. Edge Functions deployment
 

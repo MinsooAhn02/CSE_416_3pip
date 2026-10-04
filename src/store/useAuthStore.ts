@@ -9,6 +9,7 @@ import { useOnboardingStore } from "./useOnboardingStore";
 import type { AppUser, Perms, Interest } from "../types";
 import { handleApiError } from "../utils/errorHandler";
 import { isGuest } from "../lib/guest";
+import { callEdge } from "../lib/edge";
 
 let settingsLoadedFor: string | null = null;
 let settingsLoadPromise: Promise<void> = Promise.resolve();
@@ -46,6 +47,7 @@ const sessionTokenExpiry = (session: Session | null): number => {
 	return Number.isFinite(signedInAt) ? signedInAt + 60 * 60 * 1000 - TOKEN_SAFETY_MS : 0;
 };
 
+const GOOGLE_REFRESH_TIMEOUT_MS = 25000;
 type GoogleRefreshResult = { access_token?: string; expires_in?: number; error?: string; status: number };
 
 /**
@@ -55,11 +57,10 @@ type GoogleRefreshResult = { access_token?: string; expires_in?: number; error?:
  */
 const callGoogleRefresh = async (body: Record<string, unknown>): Promise<GoogleRefreshResult> => {
 	if (!supabase) return { status: 0 };
-	const { data, error } = await supabase.functions.invoke("google-refresh", { body });
-	if (!error) return { ...(data as object), status: 200 };
-	const res = (error as { context?: Response }).context;
-	const payload = res ? await res.json().catch(() => ({})) : {};
-	return { ...(payload as object), status: res?.status ?? 0 };
+	const r = await callEdge("google-refresh", body, { timeoutMs: GOOGLE_REFRESH_TIMEOUT_MS });
+	if (!r) return { status: 0 };
+	const payload = r.data && typeof r.data === "object" ? (r.data as object) : {};
+	return { ...payload, status: r.ok ? 200 : r.status };
 };
 
 export const useAuthStore = create<AuthState>()((set, get) => ({

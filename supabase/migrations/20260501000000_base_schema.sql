@@ -22,7 +22,6 @@ create table if not exists public.user_settings (
 );
 
 -- Data API grants (Supabase는 2026-05-30부터 public 테이블에 자동 GRANT를 하지 않음)
-grant select on public.user_settings to anon;
 grant select, insert, update, delete on public.user_settings to authenticated;
 grant select, insert, update, delete on public.user_settings to service_role;
 
@@ -62,7 +61,6 @@ create table if not exists public.widget_layouts (
   updated_at timestamptz default now()
 );
 
-grant select on public.widget_layouts to anon;
 grant select, insert, update, delete on public.widget_layouts to authenticated;
 grant select, insert, update, delete on public.widget_layouts to service_role;
 
@@ -84,55 +82,6 @@ create policy "Users can update own layouts"
   using (auth.uid() = id);
 
 
--- 3. todos
-create table if not exists public.todos (
-  id uuid primary key default gen_random_uuid(),
-  user_id uuid references auth.users(id) on delete cascade not null,
-  text text not null,
-  done boolean default false,
-  completed boolean default false,
-  is_fixed boolean default false,
-  is_recurring boolean generated always as (is_fixed) stored,
-  created_at timestamptz default now()
-);
-
-grant select on public.todos to anon;
-grant select, insert, update, delete on public.todos to authenticated;
-grant select, insert, update, delete on public.todos to service_role;
-
-alter table public.todos
-  add column if not exists completed boolean default false;
-
-alter table public.todos
-  add column if not exists is_fixed boolean default false;
-
-update public.todos
-set completed = coalesce(completed, done, false)
-where completed is distinct from coalesce(done, false);
-
-alter table public.todos enable row level security;
-
-drop policy if exists "Users can read own todos" on public.todos;
-create policy "Users can read own todos"
-  on public.todos for select
-  using (auth.uid() = user_id);
-
-drop policy if exists "Users can insert own todos" on public.todos;
-create policy "Users can insert own todos"
-  on public.todos for insert
-  with check (auth.uid() = user_id);
-
-drop policy if exists "Users can update own todos" on public.todos;
-create policy "Users can update own todos"
-  on public.todos for update
-  using (auth.uid() = user_id);
-
-drop policy if exists "Users can delete own todos" on public.todos;
-create policy "Users can delete own todos"
-  on public.todos for delete
-  using (auth.uid() = user_id);
-
-
 -- 4. smart_keywords
 create table if not exists public.smart_keywords (
   id uuid primary key default gen_random_uuid(),
@@ -142,7 +91,6 @@ create table if not exists public.smart_keywords (
   unique(user_id, keyword)
 );
 
-grant select on public.smart_keywords to anon;
 grant select, insert, update, delete on public.smart_keywords to authenticated;
 grant select, insert, update, delete on public.smart_keywords to service_role;
 
@@ -177,7 +125,6 @@ create table if not exists public.diaries (
   unique(user_id, date)
 );
 
-grant select on public.diaries to anon;
 grant select, insert, update, delete on public.diaries to authenticated;
 grant select, insert, update, delete on public.diaries to service_role;
 
@@ -249,7 +196,6 @@ create table if not exists public.api_cache (
   fetched_at timestamptz default now()
 );
 
-grant select on public.api_cache to anon;
 grant select, insert, update, delete on public.api_cache to authenticated;
 grant select, insert, update, delete on public.api_cache to service_role;
 

@@ -1,15 +1,13 @@
 /// <reference types="vite/client" />
 import { create } from "zustand";
 import { supabase } from "../lib/supabase";
-import { isGuest } from "../lib/guest";
+import { callEdge } from "../lib/edge";
 import { load, save } from "../utils/storage";
-import { formatLocalDate } from "../utils/date";
+import { formatLocalDate, pad2 } from "../utils/date";
 import { buildEventRecurrence, parseEventRepeat, EventRepeat } from "../utils/eventRepeat";
 import { useAuthStore } from "./useAuthStore";
 
 const EDGE_TIMEOUT_MS = 25000;
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
-const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
 const LOCAL_EVENTS_KEY = "mb_calendar_events";
 const LOCAL_TASKS_KEY = "mb_google_tasks";
 const TASK_LIST_FILTER_KEY = "mb_task_list_filter";
@@ -211,7 +209,6 @@ const writeTaskListFilter = (value: string): void =>
 const getLocalTimeZone = (): string =>
 	Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
 
-const pad2 = (value: number | string): string => String(value).padStart(2, "0");
 const hasRealTaskLists = (lists: TaskList[] = []): boolean =>
 	Array.isArray(lists) && lists.some((list) => list?.id && list.id !== "@default");
 
@@ -499,58 +496,24 @@ const getGoogleSyncErrorMessage = (error: unknown, fallbackMessage: string): str
 		: message;
 };
 
-const parseEdgeResponse = async (response: Response): Promise<unknown> => {
-	const text = await response.text().catch(() => "");
-	if (!text) return null;
-
-	try {
-		return JSON.parse(text);
-	} catch {
-		return text;
-	}
-};
-
 const invokeGoogleFunction = async (name: string, body: Record<string, unknown>): Promise<unknown> => {
-	if (!supabase || !SUPABASE_URL || !SUPABASE_ANON_KEY || isGuest()) return null;
-
-	const { data: { session } } = await supabase.auth.getSession();
-	const bearerToken = session?.access_token ?? SUPABASE_ANON_KEY;
-
-	const controller = new AbortController();
-	const timerId = window.setTimeout(() => controller.abort(), EDGE_TIMEOUT_MS);
-	try {
-		const response = await fetch(`${SUPABASE_URL}/functions/v1/${name}`, {
-			method: "POST",
-			headers: {
-				"Content-Type": "application/json",
-				apikey: SUPABASE_ANON_KEY,
-				Authorization: `Bearer ${bearerToken}`,
-			},
-			body: JSON.stringify(body),
-			signal: controller.signal,
-		});
-
-		const payload = await parseEdgeResponse(response);
-		if (!response.ok) {
-			const p = payload as Record<string, unknown> | string | null;
-			const detail =
-				typeof p === "string"
-					? p
-					: (p as Record<string, unknown> | null)?.error ||
-					  (p as Record<string, unknown> | null)?.message ||
-					  JSON.stringify(p || {});
-			throw new Error(`HTTP ${response.status}: ${detail}`);
-		}
-
-		return payload;
-	} catch (error) {
-		if ((error as { name?: string })?.name === "AbortError") {
-			throw new Error(`Edge function timeout after ${EDGE_TIMEOUT_MS}ms`);
-		}
-		throw error;
-	} finally {
-		window.clearTimeout(timerId);
+	if (!supabase) return null;
+	const r = await callEdge(name, body, { timeoutMs: EDGE_TIMEOUT_MS });
+	if (!r) return null;
+	if (r.timedOut) throw new Error(`Edge function timeout after ${EDGE_TIMEOUT_MS}ms`);
+	if (r.errorType === "network") throw r.cause;
+	const payload = r.data;
+	if (!r.ok) {
+		const p = payload as Record<string, unknown> | string | null;
+		const detail =
+			typeof p === "string"
+				? p
+				: (p as Record<string, unknown> | null)?.error ||
+				  (p as Record<string, unknown> | null)?.message ||
+				  JSON.stringify(p || {});
+		throw new Error(`HTTP ${r.status}: ${detail}`);
 	}
+	return payload;
 };
 
 // Google edge 호출 + 인증 실패(401/403) 시 토큰 강제 갱신 후 1회 자동 재시도.
@@ -573,6 +536,19 @@ const invokeGoogleWithAuth = async (
 const eventMatchesMonth = (event: CalendarEvent, monthKey: string): boolean => {
 	if (!monthKey) return true;
 	return String(event?.date || "").slice(0, 7) === monthKey;
+};
+
+// 진행 중인 동일 요청 공유 (초기 로드/StrictMode 중복 호출 방지).
+// skipLoading 여부에 따라 no-token 분기 동작이 달라지므로 키에 포함해 호출자별 동작을 보존한다.
+const inflight = new Map<string, Promise<unknown>>();
+const dedupe = <T,>(key: string, run: () => Promise<T>): Promise<T> => {
+	const existing = inflight.get(key);
+	if (existing) return existing as Promise<T>;
+	const p = run().finally(() => {
+		if (inflight.get(key) === p) inflight.delete(key);
+	});
+	inflight.set(key, p);
+	return p;
 };
 
 // ---------------------------------------------------------------------------
@@ -605,148 +581,192 @@ export const useGoogleCalendarStore = create<GoogleCalendarState>()((set, get) =
 		set({ selectedTaskListFilter: resolvedFilterId });
 	},
 
-	fetchEvents: async (options: FetchEventsOptions = {}) => {
+	fetchEvents: (options: FetchEventsOptions = {}) => {
 		const { date = get().selectedDate || formatLocalDate(), force = false, skipLoading = false } =
 			options;
 		const { monthKey, timeMin, timeMax } = getMonthWindow(`${date}T00:00:00`);
+		return dedupe(`events|${timeMin}|${timeMax}|${force}|${skipLoading}`, async () => {
 
-		if (!skipLoading) {
-			if (!force && get().loadedMonthKey === monthKey && get().events.length > 0) {
-				return get().events;
+			if (!skipLoading) {
+				if (!force && get().loadedMonthKey === monthKey && get().events.length > 0) {
+					return get().events;
+				}
+				set({ loading: true, error: null });
 			}
-			set({ loading: true, error: null });
-		}
 
-		try {
-			if (!supabase) {
-				const localEvents = (readLocalEvents() as unknown[])
-					.map((e) => normalizeEvent(e as Record<string, unknown>))
-					.filter((event) => eventMatchesMonth(event, monthKey));
-				set({ events: localEvents, loadedMonthKey: monthKey, error: null });
-				return localEvents;
-			}
-			const token = await getProviderToken();
-			if (!token) {
+			try {
+				if (!supabase) {
+					const localEvents = (readLocalEvents() as unknown[])
+						.map((e) => normalizeEvent(e as Record<string, unknown>))
+						.filter((event) => eventMatchesMonth(event, monthKey));
+					set({ events: localEvents, loadedMonthKey: monthKey, error: null });
+					return localEvents;
+				}
+				const token = await getProviderToken();
+				if (!token) {
+					const cachedEvents = (readLocalEvents() as unknown[])
+						.map((e) => normalizeEvent(e as Record<string, unknown>))
+						.filter((event) => eventMatchesMonth(event, monthKey));
+					if (skipLoading) {
+						set({ events: cachedEvents, loadedMonthKey: monthKey });
+						return cachedEvents;
+					}
+					throw new Error(GOOGLE_SYNC_AUTH_ERROR);
+				}
+
+				const data = await invokeGoogleWithAuth("events", {
+					action: "list",
+					timeMin,
+					timeMax,
+				}, token);
+
+				const events = Array.isArray(data)
+					? (data as unknown[]).map((e) => normalizeEvent(e as Record<string, unknown>))
+					: [];
+				set({ events, loadedMonthKey: monthKey, error: null });
+				writeLocalEvents(events);
+				return events;
+			} catch (err) {
+				const message = getGoogleSyncErrorMessage(
+					err,
+					"Failed to load calendar events.",
+				);
 				const cachedEvents = (readLocalEvents() as unknown[])
 					.map((e) => normalizeEvent(e as Record<string, unknown>))
 					.filter((event) => eventMatchesMonth(event, monthKey));
-				if (skipLoading) {
-					set({ events: cachedEvents, loadedMonthKey: monthKey });
-					return cachedEvents;
+				set({
+					events: cachedEvents,
+					loadedMonthKey: monthKey,
+					error: message,
+				});
+				throw err;
+			} finally {
+				if (!skipLoading) {
+					set({ loading: false });
 				}
-				throw new Error(GOOGLE_SYNC_AUTH_ERROR);
 			}
-
-			const data = await invokeGoogleWithAuth("events", {
-				action: "list",
-				timeMin,
-				timeMax,
-			}, token);
-
-			const events = Array.isArray(data)
-				? (data as unknown[]).map((e) => normalizeEvent(e as Record<string, unknown>))
-				: [];
-			set({ events, loadedMonthKey: monthKey, error: null });
-			writeLocalEvents(events);
-			return events;
-		} catch (err) {
-			const message = getGoogleSyncErrorMessage(
-				err,
-				"Failed to load calendar events.",
-			);
-			const cachedEvents = (readLocalEvents() as unknown[])
-				.map((e) => normalizeEvent(e as Record<string, unknown>))
-				.filter((event) => eventMatchesMonth(event, monthKey));
-			set({
-				events: cachedEvents,
-				loadedMonthKey: monthKey,
-				error: message,
-			});
-			throw err;
-		} finally {
-			if (!skipLoading) {
-				set({ loading: false });
-			}
-		}
+		});
 	},
 
-	fetchTasks: async (options: FetchTasksOptions = {}) => {
+	fetchTasks: (options: FetchTasksOptions = {}) => {
 		const { skipLoading = false } = options;
-		if (!skipLoading) {
-			set({ loading: true, error: null });
-		}
-
-		try {
-			if (!supabase) {
-				const localTasks = (readLocalTasks() as unknown[]).map(normalizeTask);
-				set({ tasks: localTasks, tasksLoaded: true, error: null });
-				return localTasks;
-			}
-			const token = await getProviderToken();
-			if (!token) {
-				const cachedTasks = (readLocalTasks() as unknown[]).map(normalizeTask);
-				if (skipLoading) {
-					set({ tasks: cachedTasks, tasksLoaded: true });
-					return cachedTasks;
-				}
-				throw new Error(GOOGLE_SYNC_AUTH_ERROR);
-			}
-
-			const [listsData, data] = await Promise.all([
-				get().taskListsLoaded && hasRealTaskLists(get().taskLists)
-					? Promise.resolve(get().taskLists)
-					: invokeGoogleWithAuth("tasks", {
-						action: "listTaskLists",
-					}, token).catch((err) => {
-						console.warn("[gcal] listTaskLists failed, using fallback:", err);
-						return FALLBACK_TASK_LISTS;
-					}),
-				invokeGoogleWithAuth("tasks", {
-					action: "list",
-					showCompleted: true,
-					showHidden: true,
-					allTaskLists: true,
-				}, token),
-			]);
-
-			const tasks = Array.isArray(data) ? (data as unknown[]).map(normalizeTask) : [];
-			const taskLists = normalizeTaskListsPayload(listsData);
-			const selectedTaskListFilter = resolveTaskListFilterId(
-				get().selectedTaskListFilter,
-				taskLists,
-			);
-			writeTaskListFilter(selectedTaskListFilter);
-			set({
-				tasks,
-				tasksLoaded: true,
-				taskLists,
-				taskListsLoaded: true,
-				selectedTaskListFilter,
-				error: null,
-			});
-			writeLocalTasks(tasks);
-			return tasks;
-		} catch (err) {
-			const message = getGoogleSyncErrorMessage(
-				err,
-				"Failed to load Google Tasks.",
-			);
-			const cachedTasks = (readLocalTasks() as unknown[]).map(normalizeTask);
-			set({ tasks: cachedTasks, tasksLoaded: true, error: message });
-			throw err;
-		} finally {
+		return dedupe(`tasks|${skipLoading}`, async () => {
 			if (!skipLoading) {
-				set({ loading: false });
+				set({ loading: true, error: null });
 			}
-		}
+
+			try {
+				if (!supabase) {
+					const localTasks = (readLocalTasks() as unknown[]).map(normalizeTask);
+					set({ tasks: localTasks, tasksLoaded: true, error: null });
+					return localTasks;
+				}
+				const token = await getProviderToken();
+				if (!token) {
+					const cachedTasks = (readLocalTasks() as unknown[]).map(normalizeTask);
+					if (skipLoading) {
+						set({ tasks: cachedTasks, tasksLoaded: true });
+						return cachedTasks;
+					}
+					throw new Error(GOOGLE_SYNC_AUTH_ERROR);
+				}
+
+				const [listsData, data] = await Promise.all([
+					get().taskListsLoaded && hasRealTaskLists(get().taskLists)
+						? Promise.resolve(get().taskLists)
+						: invokeGoogleWithAuth("tasks", {
+							action: "listTaskLists",
+						}, token).catch((err) => {
+							console.warn("[gcal] listTaskLists failed, using fallback:", err);
+							return FALLBACK_TASK_LISTS;
+						}),
+					invokeGoogleWithAuth("tasks", {
+						action: "list",
+						showCompleted: true,
+						showHidden: true,
+						allTaskLists: true,
+					}, token),
+				]);
+
+				const tasks = Array.isArray(data) ? (data as unknown[]).map(normalizeTask) : [];
+				const taskLists = normalizeTaskListsPayload(listsData);
+				const selectedTaskListFilter = resolveTaskListFilterId(
+					get().selectedTaskListFilter,
+					taskLists,
+				);
+				writeTaskListFilter(selectedTaskListFilter);
+				set({
+					tasks,
+					tasksLoaded: true,
+					taskLists,
+					taskListsLoaded: true,
+					selectedTaskListFilter,
+					error: null,
+				});
+				writeLocalTasks(tasks);
+				return tasks;
+			} catch (err) {
+				const message = getGoogleSyncErrorMessage(
+					err,
+					"Failed to load Google Tasks.",
+				);
+				const cachedTasks = (readLocalTasks() as unknown[]).map(normalizeTask);
+				set({ tasks: cachedTasks, tasksLoaded: true, error: message });
+				throw err;
+			} finally {
+				if (!skipLoading) {
+					set({ loading: false });
+				}
+			}
+		});
 	},
 
-	fetchTaskLists: async () => {
+	fetchTaskLists: () => {
 		if (get().taskListsLoaded && hasRealTaskLists(get().taskLists)) {
-			return get().taskLists;
+			return Promise.resolve(get().taskLists);
 		}
-		try {
-			if (!supabase) {
+		return dedupe("taskLists", async () => {
+			try {
+				if (!supabase) {
+					const selectedTaskListFilter = resolveTaskListFilterId(
+						get().selectedTaskListFilter,
+						FALLBACK_TASK_LISTS,
+					);
+					writeTaskListFilter(selectedTaskListFilter);
+					set({
+						taskLists: FALLBACK_TASK_LISTS,
+						taskListsLoaded: true,
+						selectedTaskListFilter,
+					});
+					return FALLBACK_TASK_LISTS;
+				}
+				const token = await getProviderToken();
+				if (!token) {
+					const selectedTaskListFilter = resolveTaskListFilterId(
+						get().selectedTaskListFilter,
+						FALLBACK_TASK_LISTS,
+					);
+					writeTaskListFilter(selectedTaskListFilter);
+					set({
+						taskLists: FALLBACK_TASK_LISTS,
+						taskListsLoaded: true,
+						selectedTaskListFilter,
+					});
+					return FALLBACK_TASK_LISTS;
+				}
+				const data = await invokeGoogleWithAuth("tasks", {
+					action: "listTaskLists",
+				}, token);
+				const lists = normalizeTaskListsPayload(data);
+				const selectedTaskListFilter = resolveTaskListFilterId(
+					get().selectedTaskListFilter,
+					lists,
+				);
+				writeTaskListFilter(selectedTaskListFilter);
+				set({ taskLists: lists, taskListsLoaded: true, selectedTaskListFilter });
+				return lists;
+			} catch (err) {
+				console.warn("[gcal] fetchTaskLists failed, using fallback:", err);
 				const selectedTaskListFilter = resolveTaskListFilterId(
 					get().selectedTaskListFilter,
 					FALLBACK_TASK_LISTS,
@@ -759,45 +779,7 @@ export const useGoogleCalendarStore = create<GoogleCalendarState>()((set, get) =
 				});
 				return FALLBACK_TASK_LISTS;
 			}
-			const token = await getProviderToken();
-			if (!token) {
-				const selectedTaskListFilter = resolveTaskListFilterId(
-					get().selectedTaskListFilter,
-					FALLBACK_TASK_LISTS,
-				);
-				writeTaskListFilter(selectedTaskListFilter);
-				set({
-					taskLists: FALLBACK_TASK_LISTS,
-					taskListsLoaded: true,
-					selectedTaskListFilter,
-				});
-				return FALLBACK_TASK_LISTS;
-			}
-			const data = await invokeGoogleWithAuth("tasks", {
-				action: "listTaskLists",
-			}, token);
-			const lists = normalizeTaskListsPayload(data);
-			const selectedTaskListFilter = resolveTaskListFilterId(
-				get().selectedTaskListFilter,
-				lists,
-			);
-			writeTaskListFilter(selectedTaskListFilter);
-			set({ taskLists: lists, taskListsLoaded: true, selectedTaskListFilter });
-			return lists;
-		} catch (err) {
-			console.warn("[gcal] fetchTaskLists failed, using fallback:", err);
-			const selectedTaskListFilter = resolveTaskListFilterId(
-				get().selectedTaskListFilter,
-				FALLBACK_TASK_LISTS,
-			);
-			writeTaskListFilter(selectedTaskListFilter);
-			set({
-				taskLists: FALLBACK_TASK_LISTS,
-				taskListsLoaded: true,
-				selectedTaskListFilter,
-			});
-			return FALLBACK_TASK_LISTS;
-		}
+		});
 	},
 
 	createTaskList: async (title: string) => {

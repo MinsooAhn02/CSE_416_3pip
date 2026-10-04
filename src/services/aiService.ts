@@ -2,7 +2,7 @@ import i18n, { getCurrentLanguage } from "../l10n/i18n";
 
 const bs = (key: string, lng: string) => i18n.t(`briefing_sections.${key}`, { lng }) as string;
 import { handleApiError } from "../utils/errorHandler";
-import { supabase } from "../lib/supabase";
+import { callEdge } from "../lib/edge";
 import { isGuest } from "../lib/guest";
 import { load, save } from "../utils/storage";
 import { formatLocalDate } from "../utils/date";
@@ -409,44 +409,22 @@ const AI_TIMEOUT_MS = 20000;
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
+// Edge Function이 로그인 사용자만 허용 → callEdge가 세션 토큰 전송 (없으면 anon → 401)
 const invokeFunction = async (name: string, body: Record<string, unknown>): Promise<Record<string, unknown> | null> => {
-	if (!SUPABASE_URL || !SUPABASE_ANON_KEY || isGuest()) return null;
-	const startedAt = Date.now();
-	const controller = new AbortController();
-	const timer = setTimeout(() => controller.abort(), AI_TIMEOUT_MS);
-	// Edge Function이 로그인 사용자만 허용 → 세션 토큰 전송 (없으면 anon → 401)
-	const session = supabase ? (await supabase.auth.getSession()).data.session : null;
-	try {
-		const res = await fetch(`${SUPABASE_URL}/functions/v1/${name}`, {
-			method: "POST",
-			headers: {
-				"Content-Type": "application/json",
-				apikey: SUPABASE_ANON_KEY,
-				Authorization: `Bearer ${session?.access_token ?? SUPABASE_ANON_KEY}`,
-			},
-			body: JSON.stringify(body),
-			signal: controller.signal,
-		});
-		clearTimeout(timer);
-		if (!res.ok) {
-			const text = await res.text().catch(() => "");
-			handleApiError(
-				{ message: `HTTP ${res.status}: ${text}` },
-				`ai:${name}`,
-				{ httpStatus: res.status },
-			);
-			return null;
-		}
-		const data = await res.json();
+	const r = await callEdge(name, body, { timeoutMs: AI_TIMEOUT_MS });
+	if (!r) return null;
+	if (r.ok) {
 		if (DEBUG_FLOW) {
-			console.log(`[ai] ${name} ok in ${Date.now() - startedAt}ms`);
+			console.log(`[ai] ${name} ok in ${r.elapsedMs}ms`);
 		}
-		return data;
-	} catch (e) {
-		clearTimeout(timer);
-		handleApiError(e, `ai:${name}`);
-		return null;
+		return r.data as Record<string, unknown> | null;
 	}
+	if (r.errorType === "http_4xx" || r.errorType === "http_5xx") {
+		handleApiError({ message: r.error }, `ai:${name}`, { httpStatus: r.status });
+	} else {
+		handleApiError(r.cause, `ai:${name}`);
+	}
+	return null;
 };
 
 /**
@@ -656,10 +634,11 @@ const hostFromUrl = (url: unknown): string => {
  */
 // ── 브리핑 캐시 (BACKLOG R12/A3) ──────────────────────────────
 // 같은 입력이면 60분간 재사용 + 동시 요청 합치기 → 새로고침·첫 로그인 모달/위젯 중복 Groq 호출 제거.
-// Groq 요약이 실패한(로컬 문구로 대체된) 결과는 캐시하지 않음.
+// Groq 요약이 실패한(로컬 문구로 대체된) 결과는 5분만 캐시 — 한도 초과 중에 새로고침할 때마다 다시 호출하지 않도록.
 const BRIEFING_CACHE_KEY = "mb_briefing_cache";
 const BRIEFING_CACHE_TTL_MS = 60 * 60 * 1000;
-type BriefingCacheEntry = { fp: string; at: number; result: BriefingResult };
+const BRIEFING_FAILED_TTL_MS = 5 * 60 * 1000;
+type BriefingCacheEntry = { fp: string; at: number; result: BriefingResult; aiOk?: boolean };
 let briefingMemCache: BriefingCacheEntry | null = null;
 const briefingInFlight = new Map<string, Promise<BriefingResult>>();
 
@@ -672,7 +651,8 @@ const briefingFingerprint = (tone: string, length: string, context: BriefingCont
 		lang,
 		tone,
 		length,
-		[context?.weather?.city, context?.weather?.temp, context?.weather?.condition],
+		// 기온은 재조회마다 1~2도씩 바뀌어 캐시를 깨므로 제외 (도시·날씨 상태만)
+		[context?.weather?.city, context?.weather?.condition],
 		titles(context?.calEvents as { title?: string; start?: string }[]),
 		titles(context?.tomorrowEvents as { title?: string; start?: string }[]),
 		titles(context?.newsResults),
@@ -684,7 +664,8 @@ const briefingFingerprint = (tone: string, length: string, context: BriefingCont
 
 const readBriefingCache = (fp: string): BriefingResult | null => {
 	const entry = briefingMemCache ?? load<BriefingCacheEntry | null>(BRIEFING_CACHE_KEY, null);
-	if (!entry || entry.fp !== fp || Date.now() - entry.at > BRIEFING_CACHE_TTL_MS) return null;
+	const ttl = entry?.aiOk === false ? BRIEFING_FAILED_TTL_MS : BRIEFING_CACHE_TTL_MS;
+	if (!entry || entry.fp !== fp || Date.now() - entry.at > ttl) return null;
 	briefingMemCache = entry;
 	return entry.result;
 };
@@ -703,11 +684,9 @@ export async function generateDetailedBriefing(
 	}
 	const run = buildDetailedBriefing({ tone, length, context })
 		.then(({ result, aiOk }) => {
-			if (aiOk) {
-				briefingMemCache = { fp, at: Date.now(), result };
-				// 게스트(샘플 데이터) 결과는 실제 사용자 localStorage에 남기지 않음
-				if (!isGuest()) save(BRIEFING_CACHE_KEY, briefingMemCache);
-			}
+			briefingMemCache = { fp, at: Date.now(), result, aiOk };
+			// 게스트(샘플 데이터) 결과는 실제 사용자 localStorage에 남기지 않음
+			if (!isGuest()) save(BRIEFING_CACHE_KEY, briefingMemCache);
 			return result;
 		})
 		.finally(() => {

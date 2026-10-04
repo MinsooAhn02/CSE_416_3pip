@@ -92,7 +92,7 @@ No keys were removed because all stored data serves a clear functional purpose.
 
 ## Supabase RLS Status
 
-All 8 application tables have Row Level Security enabled and policies restricting
+All 7 listed application tables have Row Level Security enabled and policies restricting
 reads/writes to the authenticated row owner (`auth.uid() = user_id` or
 `auth.uid() = id`).
 
@@ -100,7 +100,6 @@ reads/writes to the authenticated row owner (`auth.uid() = user_id` or
 |-------|-----|---------|
 | `user_settings` | ✅ | SELECT, INSERT, UPDATE |
 | `widget_layouts` | ✅ | SELECT, INSERT, UPDATE |
-| `todos` | ✅ | SELECT, INSERT, UPDATE, DELETE |
 | `smart_keywords` | ✅ | SELECT, INSERT, DELETE |
 | `diaries` | ✅ | SELECT, INSERT, UPDATE, DELETE |
 | `api_cache` | ✅ | SELECT, INSERT, UPDATE |

@@ -43,7 +43,7 @@ src/
   hooks/ utils/ constants/ types/ lib/ (supabase client, googleMaps loader)
   l10n/                  i18n.ts + en.json + ko.json
 supabase/
-  schema.sql, migrations/*.sql   run by hand in the SQL editor (order in DOCS §10)
+  migrations/<timestamp>_*.sql   whole schema (first file = base schema); `npx supabase db push` (DOCS §10)
   functions/<name>/index.ts      Deno Edge Functions
 public/                  manifest.json + background.js for the extension, images, privacy policy
 archive/course/          old course deliverables — historical, do not treat as current
@@ -64,7 +64,7 @@ archive/course/          old course deliverables — historical, do not treat as
 - **Edge Functions → callers**: weather, stocks, fitness → `useDataStore`; groq, tavily → `aiService`
   and `useDataStore` (groq also `personalizationService`); events → `useGoogleCalendarStore` and
   `useDataStore`; tasks → `useGoogleCalendarStore`; google-refresh → `useAuthStore`.
-  There are five separate call helpers — see DOCS §9 before adding a new call.
+  All calls go through `callEdge` (`src/lib/edge.ts`) via thin per-area wrappers — see DOCS §9 before adding a new call.
 
 ## Conventions
 
@@ -79,7 +79,7 @@ archive/course/          old course deliverables — historical, do not treat as
 - i18n: user-facing text goes through `t("…")`; add every key to **both** `en.json` and `ko.json`.
 - `supabase` from `src/lib/supabase.ts` can be `null` — guard every use.
 - Code comments are mostly Korean; docs are English. Either is fine, match the surrounding file.
-- New tables: add a migration file with explicit `GRANT`s and RLS policies (Supabase stopped auto-grants).
+- New tables: `npx supabase migration new <name>` (timestamped file) with explicit `GRANT`s (authenticated/service_role, never anon) and RLS policies (Supabase stopped auto-grants), then `npx supabase db push`.
 
 ## Pitfalls
 

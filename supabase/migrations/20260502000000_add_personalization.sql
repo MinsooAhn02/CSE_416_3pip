@@ -16,7 +16,6 @@ create table if not exists public.diaries (
 ); 
 
 -- Data API grants (Supabase는 2026-05-30부터 public 테이블에 자동 GRANT를 하지 않음)
-grant select on public.diaries to anon;
 grant select, insert, update, delete on public.diaries to authenticated;
 grant select, insert, update, delete on public.diaries to service_role;
 
@@ -59,7 +58,6 @@ create table if not exists public.keyword_score_log (
   created_at timestamptz default now()
 );
 
-grant select on public.keyword_score_log to anon;
 grant select, insert, update, delete on public.keyword_score_log to authenticated;
 grant select, insert, update, delete on public.keyword_score_log to service_role;
 

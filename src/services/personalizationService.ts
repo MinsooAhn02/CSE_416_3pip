@@ -1,4 +1,5 @@
 import { supabase, getSessionUser } from "../lib/supabase";
+import { callEdge } from "../lib/edge";
 import { formatLocalDate } from "../utils/date";
 
 const VALID_CATEGORIES = ["food", "place", "content", "shopping", "lifestyle", "mood", "interest"];
@@ -32,8 +33,7 @@ async function extractKeywords(text: string, source: string): Promise<ExtractedK
   if (!text?.trim() || !supabase) return [];
 
   try {
-    const { data, error } = await supabase.functions.invoke("groq", {
-      body: {
+    const r = await callEdge("groq", {
         system: [
           "당신은 텍스트에서 관심 키워드를 추출하는 AI입니다.",
           "반드시 JSON 배열만 반환하세요. 다른 텍스트는 포함하지 마세요.",
@@ -52,10 +52,10 @@ async function extractKeywords(text: string, source: string): Promise<ExtractedK
           "키워드가 없으면 빈 배열 [] 반환",
         ].join("\n"),
         temperature: 0.2,
-      },
-    });
+    }, { timeoutMs: 25000 });
 
-    if (error || !data?.text) return [];
+    const data = r?.ok ? (r.data as { text?: unknown } | null) : null;
+    if (!data?.text) return [];
 
     const text_ = (data.text as string).trim();
     const match = text_.match(/\[[\s\S]*\]/);

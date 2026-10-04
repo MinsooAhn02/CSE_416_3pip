@@ -6,7 +6,7 @@
 -- ============================================================
 
 revoke all on
-  public.user_settings, public.widget_layouts, public.todos, public.smart_keywords,
+  public.user_settings, public.widget_layouts, public.smart_keywords,
   public.diaries, public.api_cache, public.briefing_snapshots, public.user_qa,
   public.keyword_score_log
 from anon;

@@ -197,12 +197,15 @@ src/
 
 supabase/
   config.toml                     # Supabase CLI project config
-  schema.sql                      # Base table definitions
-  migrations/
-    add_personalization.sql       # diaries, keyword_score_log, keyword_interests columns
-    add_fixed_interests.sql       # fixed_interests, onboarding_perms columns
-    add_user_qa.sql               # user_qa table
-    add_briefing_snapshots.sql    # briefing_snapshots table
+  migrations/                     # timestamped; applied with `npx supabase db push`
+    20260501000000_base_schema.sql          # Base table definitions
+    20260502000000_add_personalization.sql  # diaries, keyword_score_log, keyword_interests columns
+    20260513000000_add_fixed_interests.sql  # fixed_interests, onboarding_perms columns
+    20260520000000_add_user_qa.sql          # user_qa table
+    20261004000000_add_briefing_snapshots.sql # briefing_snapshots table
+    20261005000000_add_google_tokens.sql    # google_tokens table
+    20261005000100_revoke_anon_grants.sql   # revoke anon table privileges
+    20261005000200_drop_todos.sql           # drop unused todos table
   functions/
     events/    fitness/   google-refresh/   groq/
     stocks/    tasks/     tavily/            weather/
@@ -871,15 +874,17 @@ sequenceDiagram
 
 ### Calling convention from the browser
 
-There is no single gateway — five call paths exist. The three helpers send `Content-Type: application/json` plus an `apikey: <anon-key>` header; the google-refresh fetch sends the same headers:
+Every call goes through one core, `callEdge(name, body, { timeoutMs })` in `src/lib/edge.ts`: it POSTs JSON with `apikey: <anon-key>` and `Authorization: Bearer <session JWT, or anon key if signed out>`, parses the body (JSON, else text), and returns `{ ok, status, data, error, errorType, timedOut, elapsedMs }` — or `null` without a network call when Supabase isn't configured or in guest mode. It never reports errors itself; the thin wrappers below keep their own contracts and `handleApiError` areas. Add new calls through an existing wrapper or `callEdge`, never a raw `fetch`.
 
-| Helper | File | Authorization | Used for |
-|--------|------|---------------|----------|
-| `invokeEdgeDetailed` / `invokeEdge` | `src/store/useDataStore.ts` | session JWT, falls back to anon key | weather, stocks, fitness, events, tavily, groq |
-| `invokeFunction` | `src/services/aiService.ts` | session JWT, falls back to anon key | groq, tavily |
-| `invokeGoogleFunction` / `invokeGoogleWithAuth` | `src/store/useGoogleCalendarStore.ts` | session JWT (retries on 401/403 after `ensureProviderToken(forceRefresh)`) | events, tasks |
-| `supabase.functions.invoke("google-refresh")` | `src/store/useAuthStore.ts` (`callGoogleRefresh`) | supabase-js session | google-refresh |
-| `supabase.functions.invoke("groq")` | `src/services/personalizationService.ts` | supabase-js session | groq |
+| Wrapper | File | On failure | Used for |
+|--------|------|------------|----------|
+| `invokeEdgeDetailed` / `invokeEdge` | `src/store/useDataStore.ts` | `EdgeResult` with `ok: false` / `null`; area `edge:` | weather, stocks, fitness, events, tavily, groq |
+| `invokeFunction` | `src/services/aiService.ts` | `null`; area `ai:` (20 s timeout) | groq, tavily |
+| `invokeGoogleFunction` / `invokeGoogleWithAuth` | `src/store/useGoogleCalendarStore.ts` | throws `HTTP <status>: <detail>`; retries once on 401/403 after `ensureProviderToken(forceRefresh)` | events, tasks |
+| `callGoogleRefresh` | `src/store/useAuthStore.ts` | `{ ...payload, status }` (0 = no response) | google-refresh |
+| `extractKeywords` | `src/services/personalizationService.ts` | `[]` | groq |
+
+`useGoogleCalendarStore` also shares in-flight `fetchTasks` / `fetchEvents` / `fetchTaskLists` requests (`dedupe`), so concurrent callers on page load make one request.
 
 The anon key is public and scoped only to what RLS policies permit. **Every** Edge Function rejects callers without a logged-in user (401): events/tasks/fitness check inline, the rest via `supabase/functions/_shared/auth.ts` (`rejectIfNoUser`). The anon key is itself a valid JWT, so the gateway's `verify_jwt` alone does not stop anonymous use. Paid-API functions also cap input: groq (model allowlist, prompt length, `max_completion_tokens`), tavily (≤10 batch queries, ≤20 results), stocks (≤30 symbols), weather (numeric lat/lon).
 
@@ -894,16 +899,15 @@ The anon key is public and scoped only to what RLS policies permit. **Every** Ed
 
 ## 10) Database Schema
 
-> Full DDL is in `supabase/schema.sql` and `supabase/migrations/`. This section is a summary.
-> **Note:** From 2026-05-30, Supabase stops auto-granting permissions on new tables. All SQL files include explicit `GRANT` blocks.
+> Full DDL is in `supabase/migrations/`. This section is a summary.
+> **Note:** From 2026-05-30, Supabase stops auto-granting permissions on new tables. All SQL files include explicit `GRANT` blocks; the anon role has no table privileges.
 
-### Core tables (schema.sql)
+### Core tables (20260501000000_base_schema.sql)
 
 | Table | Primary Key | Purpose |
 |-------|-------------|---------|
 | `user_settings` | `id` (= `auth.users.id`) | All per-user preferences and personalization data |
 | `widget_layouts` | `id` | Per-user widget grid positions (`{lg, md, sm}` breakpoints) |
-| `todos` | `id` | **Unused by the app** — todos mirror Google Tasks + localStorage (`useTodoStore`); no `.from("todos")` call exists |
 | `smart_keywords` | `id`, UNIQUE(`user_id`, `keyword`) | Smart widget keyword list |
 | `api_cache` | `id` (text, e.g. `u:{userId}:news_KR_ko_base`) | External API response cache (6-hour app-level TTL via `CACHE_THRESHOLD_MS`) |
 
@@ -920,13 +924,13 @@ pin_lock_mode              text  default 'immediate'  -- "immediate" | "off" | "
 
 | Table | File | Purpose |
 |-------|------|---------|
-| `diaries` | `add_personalization.sql` (also fully defined in `schema.sql`) | Per-user diaries. The app reads/writes `ai_generated_diary` + `edited_diary` (+ `memo`, `answers`); `diary_text` is legacy (created by `add_personalization.sql`, backfilled into `ai_generated_diary` by the `schema.sql` upgrade block — run it on older projects) |
-| `keyword_score_log` | `add_personalization.sql` | Raw interest keyword scoring events (30-day window) |
-| `user_qa` | `add_user_qa.sql` | Daily Q&A question/answer pairs |
-| `google_tokens` | `add_google_tokens.sql` (added 2026-10-05) | Encrypted Google refresh token per user. RLS on, no policies, no anon/authenticated grants — only Edge Functions (service role) can access. |
-| `briefing_snapshots` | `add_briefing_snapshots.sql` (added 2026-10-04) | Time-stamped briefing snapshots for diary synthesis: `date`, `captured_at`, `source`, `payload jsonb` |
+| `diaries` | `20260502000000_add_personalization.sql` (also fully defined in `20260501000000_base_schema.sql`) | Per-user diaries. The app reads/writes `ai_generated_diary` + `edited_diary` (+ `memo`, `answers`); `diary_text` is legacy (created by `add_personalization.sql`, backfilled into `ai_generated_diary` by the base schema's upgrade block) |
+| `keyword_score_log` | `20260502000000_add_personalization.sql` | Raw interest keyword scoring events (30-day window) |
+| `user_qa` | `20260520000000_add_user_qa.sql` | Daily Q&A question/answer pairs |
+| `google_tokens` | `20261005000000_add_google_tokens.sql` (added 2026-10-05) | Encrypted Google refresh token per user. RLS on, no policies, no anon/authenticated grants — only Edge Functions (service role) can access. |
+| `briefing_snapshots` | `20261004000000_add_briefing_snapshots.sql` (added 2026-10-04) | Time-stamped briefing snapshots for diary synthesis: `date`, `captured_at`, `source`, `payload jsonb` |
 
-Run order for a fresh project: `schema.sql` → `add_personalization.sql` → `add_fixed_interests.sql` → `add_user_qa.sql` → `add_briefing_snapshots.sql` → `add_google_tokens.sql` → `revoke_anon_grants.sql` (SQL editor; files have no timestamp prefix so `supabase db push` ignores them).
+Fresh project: `npx supabase link --project-ref <ref>` then `npx supabase db push` applies every file in `supabase/migrations/` in timestamp order (base schema → personalization → fixed interests → user_qa → briefing_snapshots → google_tokens → revoke anon grants → drop todos). New schema change: `npx supabase migration new <name>`, write the SQL, `npx supabase db push`. The unused `todos` table was dropped by `20261005000200_drop_todos.sql`; the todo list itself lives in Google Tasks + localStorage (`mb_todos`).
 
 ### RLS policies
 
@@ -934,7 +938,7 @@ All tables restrict rows to `auth.uid() = user_id` (or `= id` for `user_settings
 
 | Table | Policies |
 |-------|----------|
-| `diaries`, `todos` | select, insert, update, delete |
+| `diaries` | select, insert, update, delete |
 | `user_settings`, `widget_layouts`, `api_cache` | select, insert, update (no delete) |
 | `smart_keywords`, `keyword_score_log`, `user_qa`, `briefing_snapshots` | select, insert, delete (no update) |
 

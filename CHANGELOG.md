@@ -7,6 +7,12 @@
 
 ## 2026-10-05
 
+### [Fix] Fewer calls on page load, single Edge Function client, DB cleanup (BACKLOG B3, R6, R7, A9)
+- Google Tasks/Calendar: concurrent fetches share one request, so a page load calls `tasks` 2× and `events` 1× (was 6× and 2× in dev).
+- AI briefing: a briefing whose Groq summary failed is cached for 5 minutes, so reloads during a rate limit don't call Groq again; the weather temperature is no longer part of the cache key (it changed on every weather refresh). A normal reload makes 0 Groq calls.
+- All Edge Function calls go through `callEdge` in `src/lib/edge.ts`; the five helpers are thin wrappers with unchanged behavior. `google-refresh` and keyword extraction now time out (25 s) and make no network call in guest mode. `pad2` has one definition.
+- Migrations are timestamped (`supabase/schema.sql` → `20260501000000_base_schema.sql`) and recorded on the linked project, so setup is `supabase link` + `supabase db push`.
+- Dropped the unused `todos` table (rows backed up locally); removed anon grants from the SQL files.
 ### [Fix] Widget state, weather flash, news/trends duplicates, event form, dependency updates (BACKLOG R4, R8, A9)
 - Smart widgets keep their local state (open category menu, keyword edit) when the dashboard re-renders; they used to remount.
 - The weather widget shows "Loading" instead of "No weather data available" until the first load finishes.
