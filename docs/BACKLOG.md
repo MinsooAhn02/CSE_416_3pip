@@ -8,7 +8,7 @@ IDs (R*, A*, B*) come from the 2026-10-04 reviews and are referenced from commit
 
 | # | Issue | Approach | Where |
 |---|---|---|---|
-| R2 | Google token refresh is implemented server-side (`google-refresh` + encrypted `google_tokens`), but **inactive until the secrets `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_TOKEN_ENC_KEY` are set**. After that, each existing user must click "Reconnect Google" once (consent) so Google issues a refresh token to store. | Set secrets (README §5), then verify: wait >1h after sign-in, calendar still syncs. | `supabase/functions/google-refresh`, `useAuthStore.ts` |
+| R2 | Server-side Google token refresh is **active** (secrets set 2026-10-05; verified: encrypted row stored, refresh returns a new access token, calendar call succeeds with it). Remaining: each existing user clicks "Reconnect Google" once; deploy the web app so users get the new client; observe a real >1h session. | — | `supabase/functions/google-refresh`, `useAuthStore.ts` |
 
 ## Needs a manual (infra) step
 
