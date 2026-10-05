@@ -7,6 +7,12 @@
 
 ## 2026-10-05
 
+### [Feature] End-to-end diary encryption (BACKLOG I5)
+- Optional, in Settings → Diary: a passphrase (8+ characters, separate from the 4-digit PIN) derives an AES-GCM key in the browser (PBKDF2-SHA256, 310k iterations, per-user salt). Diary text, memo and answers are stored as ciphertext in Supabase and in localStorage; the server only keeps the salt and a verifier (`user_settings.diary_encryption`).
+- The unlocked key is remembered on the device as a non-extractable key in IndexedDB (cleared on logout); a new device asks for the passphrase once. While locked, diary screens show an unlock prompt, the briefing skips yesterday's diary, and nightly diary generation waits until unlock.
+- Turning it on re-encrypts existing diaries and clears the legacy plaintext `diary_text` column; turning it off restores plaintext. A forgotten passphrase cannot be recovered.
+- Logout now waits for the device key to be cleared before reloading.
+
 ### [Improve] Keyboard-accessible dialogs, fewer re-renders, lighter login screen (BACKLOG I1–I3)
 - All modals and popups (settings, event/task forms and details, diary list, PIN, confirm, widget details, …) close with Escape, keep keyboard focus inside while open and return it afterwards, and are announced as dialogs (`useDialog` in `src/hooks/useDialog.ts`). Onboarding stays mandatory (Escape does nothing). Icon-only buttons got accessible names.
 - Components now subscribe only to the store fields they use, and the header clock re-renders once a minute instead of every second.

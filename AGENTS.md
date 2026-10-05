@@ -90,6 +90,8 @@ archive/course/          old course deliverables — historical, do not treat as
 - `provider_refresh_token` is stripped from localStorage on purpose (`secureStorage` in `src/lib/supabase.ts`); right
   after sign-in it is sent to `google-refresh {action:"store"}` and kept encrypted in `google_tokens` (server only).
   `provider_token` (1h) is persisted. See docs/security/localStorage-audit.md.
+- Diary text may be end-to-end encrypted (`src/lib/diaryCrypto.ts`, `useDiaryStore.encryptionStatus`). Never read
+  `diaries` text columns directly and send them anywhere without `decryptDiaryField`, and never write plaintext while locked.
 - Reloads read the 6h `api_cache`; only the page opened by the Google OAuth callback forces a refetch
   (`openedFromOAuthRedirect`). Don't reintroduce unconditional cache clearing in `runFullInit`.
 - Google access tokens last 1h; `ensureProviderToken` refreshes them through `google-refresh` (needs the

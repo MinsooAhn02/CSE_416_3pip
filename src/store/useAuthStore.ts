@@ -137,7 +137,7 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
 		}
 		// 이 계정의 로컬 데이터(일기·브리핑·일정 캐시 등) 삭제 후 새로고침 —
 		// 메모리에 남은 스토어 상태까지 비워야 다음 사람(또는 둘러보기)에게 안 보임
-		clearUserData();
+		await clearUserData();
 		localStorage.removeItem(LAST_USER_KEY);
 		window.location.reload();
 	},
@@ -150,7 +150,7 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
 			if (lastUserId !== u.id) {
 				save(LAST_USER_KEY, u.id);
 				if (lastUserId) {
-					clearUserData();
+					await clearUserData();
 					window.location.reload();
 					return;
 				}

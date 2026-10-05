@@ -930,6 +930,8 @@ pin_lock_mode              text  default 'immediate'  -- "immediate" | "off" | "
 | `google_tokens` | `20261005000000_add_google_tokens.sql` (added 2026-10-05) | Encrypted Google refresh token per user. RLS on, no policies, no anon/authenticated grants — only Edge Functions (service role) can access. |
 | `briefing_snapshots` | `20261004000000_add_briefing_snapshots.sql` (added 2026-10-04) | Time-stamped briefing snapshots for diary synthesis: `date`, `captured_at`, `source`, `payload jsonb` |
 
+**Diary encryption (optional, `src/lib/diaryCrypto.ts`).** When `user_settings.diary_encryption` (`{v, salt, iterations, verifier}`) is set, `diaries.ai_generated_diary/edited_diary/memo/answers` hold `enc:v1:<iv>:<ct>` (AES-GCM, key = PBKDF2-SHA256 of the user's passphrase). The key never leaves the browser; it is kept as a non-extractable `CryptoKey` in IndexedDB (`mb_diary_keys`) per user and removed by `clearUserData`. `useDiaryStore.encryptionStatus` is `off | locked | unlocked`; store `entries` only ever hold plaintext, and are blanked while locked. Writes are refused while locked. A lost passphrase is unrecoverable. Self-check: `node scripts/check-diary-crypto.mjs`.
+
 Fresh project: `npx supabase link --project-ref <ref>` then `npx supabase db push` applies every file in `supabase/migrations/` in timestamp order (base schema → personalization → fixed interests → user_qa → briefing_snapshots → google_tokens → revoke anon grants → drop todos). New schema change: `npx supabase migration new <name>`, write the SQL, `npx supabase db push`. The unused `todos` table was dropped by `20261005000200_drop_todos.sql`; the todo list itself lives in Google Tasks + localStorage (`mb_todos`).
 
 ### RLS policies

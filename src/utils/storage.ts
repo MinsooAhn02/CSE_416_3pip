@@ -1,4 +1,5 @@
 import { isGuest } from "../lib/guest";
+import { clearDeviceKeys } from "../lib/diaryCrypto";
 
 export const load = <T>(k: string, fb: T): T => {
 	try {
@@ -23,6 +24,7 @@ export const save = (k: string, v: unknown): void => {
  */
 const USER_DATA_KEYS = [
 	"mb_diary_entries",
+	"mb_diary_enc_config",
 	"mb_diary_pin", // 이전 사용자의 PIN으로 다음 사용자가 잠기지 않게
 	"mb_diary_pin_auth",
 	"mb_diary_pin_auth_expires_at",
@@ -46,9 +48,18 @@ const USER_DATA_PREFIXES = ["mb_cache_"]; // 날씨·일정·건강·주식 등 
 
 export const LAST_USER_KEY = "mb_last_user_id";
 
-export const clearUserData = (): void => {
+// useDiaryStore가 등록 — storage ↔ store import 순환 없이 메모리의 일기 키를 폐기
+const clearListeners: (() => void)[] = [];
+export const onClearUserData = (fn: () => void): void => {
+	clearListeners.push(fn);
+};
+
+/** 호출부는 await 후 새로고침 — IndexedDB의 일기 암호 키 삭제가 새로고침에 끊기지 않게 */
+export const clearUserData = async (): Promise<void> => {
+	for (const fn of clearListeners) fn();
 	for (const k of USER_DATA_KEYS) localStorage.removeItem(k);
 	for (const k of Object.keys(localStorage)) {
 		if (USER_DATA_PREFIXES.some((p) => k.startsWith(p))) localStorage.removeItem(k);
 	}
+	await clearDeviceKeys();
 };

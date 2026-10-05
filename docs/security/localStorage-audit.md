@@ -33,7 +33,7 @@
 | `mb_cache_*_at` | `useDataStore` | number (ms) | ⚪ None | Cache timestamp |
 | `mb_last_fetched_at` | `useDataStore` | object | ⚪ None | Per-key fetch times |
 | `mb_manual_city` | `useDataStore` | object | 🟡 Low | User-selected city (explicitly chosen) |
-| `mb_diary_entries` | `useDiaryStore` | object | 🔴 High | Personal diary text — necessary for offline use; protected by PIN |
+| `mb_diary_entries` | `useDiaryStore` | object | 🔴 High | Personal diary text — necessary for offline use. Plaintext unless diary encryption is on (then `enc:v1:` ciphertext; key in IndexedDB). The PIN is only a screen lock |
 | `mb_last_access_date` | `useDiaryStore` | string (date) | ⚪ None | Daily reset marker |
 | `mb_diary_pin` | `useDiaryStore` | string | 🟠 Medium | SHA-256 hash of user's PIN (not plaintext) |
 | `mb_diary_pin_auth` | `useDiaryStore` | boolean | ⚪ None | In-session auth flag |

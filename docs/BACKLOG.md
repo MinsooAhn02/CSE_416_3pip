@@ -22,7 +22,6 @@ IDs (R*, A*, B*) come from the 2026-10-04 reviews and are referenced from commit
 |---|---|---|
 | R8 | `npm audit`: 5 high left, all `braces` (stack overflow on deeply nested glob patterns) via Tailwind 3's content scanner. Not exploitable here: the patterns come from our own `tailwind.config`, and it runs only at build/dev time, never in the shipped bundle. Decision 2026-10-05: no Tailwind 4 migration for this; revisit if Tailwind 3 stops getting fixes. | `package-lock.json` |
 | I4 | Very large files: `aiService.ts` (~3.8k lines), `useDataStore.ts` (~2.3k), `EventPanel.tsx` (~1.8k). Split by domain when next touched. | `src/services`, `src/store` |
-| I5 | Diary PIN is a client-side privacy screen (unsalted SHA-256 of 4 digits in localStorage; diary text unencrypted). Real protection would need encrypting diary text with a PIN-derived key. | `useDiaryStore.ts` || B4 | 4.8 MB of course PDFs/xlsx tracked under `archive/course/` — keep or untrack (history keeps them either way). | `archive/course/` |
 
 ### GitHub issues
 

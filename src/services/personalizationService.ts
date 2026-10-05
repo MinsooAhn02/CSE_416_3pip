@@ -1,6 +1,7 @@
 import { supabase, getSessionUser } from "../lib/supabase";
 import { callEdge } from "../lib/edge";
 import { formatLocalDate } from "../utils/date";
+import { decryptDiaryField } from "../store/useDiaryStore";
 
 const VALID_CATEGORIES = ["food", "place", "content", "shopping", "lifestyle", "mood", "interest"];
 const SOURCE_WEIGHTS: Record<string, number> = { personal: 2, diary: 1 };
@@ -166,7 +167,10 @@ export async function runPersonalizationBatch(): Promise<ScoreMapEntry[] | undef
       .eq("date", yesterday)
       .maybeSingle();
     const diaryRow = diary as { ai_generated_diary?: string | null; edited_diary?: string | null } | null;
-    const yesterdayDiaryText = diaryRow?.edited_diary || diaryRow?.ai_generated_diary || "";
+    // 암호화된 필드는 메모리 키로 복호화, 잠겨 있으면 "" (키워드 추출 건너뜀)
+    const yesterdayDiaryText =
+      (await decryptDiaryField(diaryRow?.edited_diary)) ||
+      (await decryptDiaryField(diaryRow?.ai_generated_diary));
 
     const newLogRows: {
       user_id: string;

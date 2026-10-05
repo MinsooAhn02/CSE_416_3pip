@@ -15,6 +15,7 @@ import { useDiaryStore } from "../../store/useDiaryStore";
 import { useSettingsStore } from "../../store/useSettingsStore";
 import PINModal from "./PINModal";
 import DiaryPanel from "../layout/DiaryPanel";
+import DiaryUnlock from "../common/DiaryUnlock";
 
 /**
  * DiaryListModal — PIN-protected list of all historical diary entries
@@ -42,6 +43,7 @@ const DiaryListModal = ({ onClose }: DiaryListModalProps) => {
 		pinAuthExpiresAt,
 		refreshPinAuthState,
 		clearPinSession,
+		encryptionStatus,
 	} = useDiaryStore(
 		useShallow((s) => ({
 			entries: s.entries,
@@ -51,6 +53,7 @@ const DiaryListModal = ({ onClose }: DiaryListModalProps) => {
 			pinAuthExpiresAt: s.pinAuthExpiresAt,
 			refreshPinAuthState: s.refreshPinAuthState,
 			clearPinSession: s.clearPinSession,
+			encryptionStatus: s.encryptionStatus,
 		})),
 	);
 	const pinLockMode = useSettingsStore((state) => state.pinLockMode);
@@ -241,8 +244,14 @@ const DiaryListModal = ({ onClose }: DiaryListModalProps) => {
 						</div>
 
 						{/* Unlocked Content */}
-						{isAuthenticated && (
-							<>
+						{isAuthenticated && encryptionStatus === "locked" && (
+								<div className="p-6">
+									<DiaryUnlock />
+								</div>
+							)}
+
+							{isAuthenticated && encryptionStatus !== "locked" && (
+								<>
 								{/* Search & Sort Controls */}
 								<div
 									className={`p-4 border-b space-y-3 ${`${borderCls} ${secondaryBgCls}`}`}

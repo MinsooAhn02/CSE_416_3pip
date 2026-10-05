@@ -155,6 +155,10 @@ export const generateAndSaveDiaryForDate = async (
 	{ overwrite = false, wasActiveDay, briefingSnapshots, previousDayDiary, previousDayFeedback }: DiaryGenerationOptions = {},
 ): Promise<DiaryGenerationResult> => {
 	const diaryStore = useDiaryStore.getState();
+	// 암호화 켜짐+잠김: 본문을 읽을 수 없고 저장도 불가 — AI 호출 전에 실패로 반환 (호출부는 재시도 대상으로 취급)
+	if (diaryStore.encryptionStatus === "locked") {
+		return { ok: false, error: "diary_locked" };
+	}
 	const existingEntry = diaryStore.getDiary(dateStr);
 
 	if (!overwrite && existingEntry?.diary?.trim()) {

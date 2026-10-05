@@ -32,6 +32,7 @@ import {
 import Toggle from "../common/Toggle";
 import ConfirmDialog from "../common/ConfirmDialog";
 import PINModal from "./PINModal";
+import DiaryEncryptionSettings from "../common/DiaryEncryptionSettings";
 
 const FONT_SIZE_OPTIONS = [
 	{ key: "small" as const },
@@ -476,6 +477,8 @@ const SettingsModal = () => {
 								</div>
 
 								<>
+									<DiaryEncryptionSettings />
+
 									<div
 										className={`p-4 rounded-xl border ${isDark ? "bg-white/5 border-white/10" : "bg-gray-50 border-gray-200"}`}
 									>

@@ -9,6 +9,7 @@ import { useSettingsStore } from "../../store/useSettingsStore";
 import { useBriefingHistoryStore } from "../../store/useBriefingHistoryStore";
 import { generateAndSaveDiaryForDate } from "../../services/diaryGenerationService";
 import PINModal from "../modals/PINModal";
+import DiaryUnlock from "../common/DiaryUnlock";
 
 interface DiaryPanelProps {
 	selectedDate: string | null;
@@ -36,6 +37,7 @@ const DiaryPanel = ({ selectedDate, onClose, compact = false, skipPinCheck = fal
 		pinAuthExpiresAt,
 		refreshPinAuthState,
 		clearPinSession,
+		encryptionStatus,
 	} = useDiaryStore(
 		useShallow((s) => ({
 			getDiary: s.getDiary,
@@ -51,6 +53,7 @@ const DiaryPanel = ({ selectedDate, onClose, compact = false, skipPinCheck = fal
 			pinAuthExpiresAt: s.pinAuthExpiresAt,
 			refreshPinAuthState: s.refreshPinAuthState,
 			clearPinSession: s.clearPinSession,
+			encryptionStatus: s.encryptionStatus,
 		})),
 	);
 	const pinLockMode = useSettingsStore((state) => state.pinLockMode);
@@ -127,6 +130,8 @@ const DiaryPanel = ({ selectedDate, onClose, compact = false, skipPinCheck = fal
 	}, [selectedDate, currentEntry?.diary, currentEntry?.notes, currentEntry?.memo]);
 
 	const isAuthenticated = skipPinCheck || !pinRequired || isPinAuthenticated;
+	// 암호화 키가 잠겨 있으면 일기 내용/편집 UI 대신 패스프레이즈 입력을 보여준다
+	const isEncLocked = encryptionStatus === "locked";
 
 	useEffect(() => {
 		if (skipPinCheck) return;
@@ -354,9 +359,13 @@ const DiaryPanel = ({ selectedDate, onClose, compact = false, skipPinCheck = fal
 							{pinSet ? copy.unlock : copy.setupPin}
 						</button>
 					</div>
-				) : (
-					<div
-						className={`h-12 rounded-lg px-3 flex items-center gap-3 ${secondaryBgCls}`}
+				) : isEncLocked ? (
+						<div className={`rounded-lg px-3 py-3 ${secondaryBgCls}`}>
+							<DiaryUnlock />
+						</div>
+					) : (
+						<div
+							className={`h-12 rounded-lg px-3 flex items-center gap-3 ${secondaryBgCls}`}
 					>
 						<p
 							className={`text-[11px] whitespace-nowrap ${isDark ? "text-gray-400" : "text-gray-500"}`}
@@ -454,8 +463,14 @@ const DiaryPanel = ({ selectedDate, onClose, compact = false, skipPinCheck = fal
 				</div>
 			)}
 
-			{isAuthenticated && (
-				<div className="space-y-4">
+			{isAuthenticated && isEncLocked && (
+					<div className={`rounded-lg px-4 py-4 ${secondaryBgCls}`}>
+						<DiaryUnlock />
+					</div>
+				)}
+
+				{isAuthenticated && !isEncLocked && (
+					<div className="space-y-4">
 					<p
 						className={`text-xs font-medium flex-shrink-0 ${isDark ? "text-gray-400" : "text-gray-600"}`}
 						style={bodyStyle}
