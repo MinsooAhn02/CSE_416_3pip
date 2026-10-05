@@ -17,14 +17,18 @@ that proxy Groq, Tavily, OpenWeather, Twelve Data/Yahoo and Google Calendar/Task
 | Install | `npm install` (lockfile is committed) |
 | Dev server | `npm run dev` → http://localhost:3000 (port fixed, `strictPort`) |
 | Typecheck | `npm run typecheck` |
+| Tests | `npm test` (Vitest, once) · `npm run test:watch` |
 | Production build | `npm run build` (`tsc -b && vite build` → `dist/`) |
 | Extension zip | `npm run build:extension` → `morningbriefing-extension-v<version>.zip` |
 | Deploy web | `npm run build && npx wrangler deploy` |
 | Deploy an Edge Function | `npx supabase functions deploy <name>` |
 
-There is no automated test suite and no linter. Before calling a change done, run `npm run typecheck`
-and `npm run build`; for UI changes also open the dev server. `scripts/test-diary-generation.mjs` is a
-manual script that calls the live `groq` function.
+Tests: Vitest + jsdom, `*.test.ts` next to the code (also `supabase/functions/_shared/`); config in `vite.config.ts`
+(Supabase env forced empty → no live calls; `TZ=Asia/Seoul`). Mock modules with `vi.doMock` + `vi.resetModules()` and a
+dynamic import — stores keep module-level state. `src/test/fakeSupabase.ts` is an in-memory query-builder fake.
+CI (`.github/workflows/ci.yml`) runs typecheck → test → build on every push to main and every PR. Before calling a
+change done, run `npm run typecheck`, `npm test` and `npm run build`; for UI changes also open the dev server.
+There is no linter. `scripts/test-diary-generation.mjs` is a manual script that calls the live `groq` function.
 
 Setup from scratch: `.env.example` → `.env`, then the SQL and secrets steps in README §4–5.
 Without `.env`, `supabase` is `null` and the app boots in Demo mode.

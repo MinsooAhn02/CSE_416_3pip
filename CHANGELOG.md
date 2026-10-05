@@ -7,6 +7,10 @@
 
 ## 2026-10-05
 
+### [Dev] Automated tests and CI
+- Vitest + jsdom: 189 tests in 17 files covering link safety, article filters, dates (Seoul before 09:00), diary crypto and key state, Google error sanitizing, edge client (guest/timeout/HTTP/network), AI briefing cache (TTL, failed-result TTL, hashed key, encryption), calendar store (shared in-flight requests, stale month, refresh-after-write), news language race, private api_cache keys, diary/Q&A/briefing-history encryption migration and locked mode, midnight retry. Key tests were checked by breaking the code and watching them fail.
+- GitHub Actions runs typecheck, tests and build on every push to main and every pull request. The old `scripts/check-*.mjs` self-checks moved into the test suite.
+
 ### [Privacy] Encryption covers Q&A and briefing history; less personal data on the server
 - With diary encryption on, daily-question questions/answers (`user_qa`) and briefing history (`briefing_snapshots`, `mb_briefing_history`) are stored encrypted too, and the briefing cache (`mb_briefing_cache`) is encrypted or kept in memory only. Previously the briefing's "yesterday" section (an AI rewrite of the diary) was saved in plaintext. Turning encryption on/off migrates all three tables. While locked, the daily question shows the unlock prompt and the briefing omits yesterday's diary.
 - With encryption on, keywords are no longer extracted from the diary or answers for personalization (they were stored in plaintext and used in news searches).
