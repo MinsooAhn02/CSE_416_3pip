@@ -37,8 +37,8 @@ and must not `save()` sample data to localStorage.
 ```
 src/
   main.tsx, App.tsx      entry; App does auth bootstrap + post-login init
-  store/                 Zustand stores (one hook per file, useXStore.ts)
-  services/              aiService (Groq prompts + Tavily search), diaryGenerationService, personalizationService
+  store/                 Zustand stores (one hook per file, useXStore.ts); data/ = useDataStore helpers (apiCache, articles, translate, normalize, …)
+  services/              aiService.ts (barrel) → ai/ (client, briefing, dailyQuestion, smartWidget*, diary), diaryGenerationService, personalizationService
   components/            layout/ (dashboard, panels, login), widgets/, modals/, common/, banners/
   hooks/ utils/ constants/ types/ lib/ (supabase client, googleMaps loader)
   l10n/                  i18n.ts + en.json + ko.json

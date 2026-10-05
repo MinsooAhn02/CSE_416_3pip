@@ -171,13 +171,13 @@ src/
     supabase.ts                   # Supabase client init + secureStorage adapter (strips provider_refresh_token)
     googleMaps.ts                 # Google Maps Places JS API loader + place-label helpers
   services/
-    aiService.ts                  # Groq LLM calls (briefing, diary generation, diary rewrite, smart-widget)
+    aiService.ts                  # Barrel re-exporting src/services/ai/* (client, briefing, dailyQuestion, smartWidget*, diary)
     diaryGenerationService.ts     # Diary context builder + generateAndSaveDiaryForDate
     personalizationService.ts     # runPersonalizationBatch() — keyword extraction + 30-day decayed scoring
   store/
     useAuthStore.ts
     useBriefingHistoryStore.ts    # Time-stamped briefing snapshots (localStorage + Supabase)
-    useDataStore.ts               # Weather/stocks/news/trends/health/calendar fetch + cache (inline mock fallbacks)
+    useDataStore.ts               # Weather/stocks/news/trends/health/calendar fetch actions; helpers in store/data/
     useDiaryStore.ts
     useGoogleCalendarStore.ts     # Google Calendar/Tasks sync + local fallback
     useOnboardingStore.ts         # Onboarding state (step, perms flow) — extracted 2026-05-24
@@ -832,7 +832,7 @@ sequenceDiagram
 5. Groq bullets: if no Korean characters in output → request re-translation (1 extra call); only validated Korean items accepted
 
 **Key files:**
-- `src/services/aiService.ts`: category classification, section planning, Tavily search, filtering
+- `src/services/ai/smartWidget*.ts`: category classification, section planning, Tavily search, filtering
 - `src/store/useWidgetStore.ts`: smart widget state, cache, category override
 - `src/components/widgets/SmartWidgetContent.tsx`: widget UI, keyword editing, category dropdown, card rendering
 
@@ -878,8 +878,8 @@ Every call goes through one core, `callEdge(name, body, { timeoutMs })` in `src/
 
 | Wrapper | File | On failure | Used for |
 |--------|------|------------|----------|
-| `invokeEdgeDetailed` / `invokeEdge` | `src/store/useDataStore.ts` | `EdgeResult` with `ok: false` / `null`; area `edge:` | weather, stocks, fitness, events, tavily, groq |
-| `invokeFunction` | `src/services/aiService.ts` | `null`; area `ai:` (20 s timeout) | groq, tavily |
+| `invokeEdgeDetailed` / `invokeEdge` | `src/store/data/edge.ts` | `EdgeResult` with `ok: false` / `null`; area `edge:` | weather, stocks, fitness, events, tavily, groq |
+| `invokeFunction` | `src/services/ai/client.ts` | `null`; area `ai:` (20 s timeout) | groq, tavily |
 | `invokeGoogleFunction` / `invokeGoogleWithAuth` | `src/store/useGoogleCalendarStore.ts` | throws `HTTP <status>: <detail>`; retries once on 401/403 after `ensureProviderToken(forceRefresh)` | events, tasks |
 | `callGoogleRefresh` | `src/store/useAuthStore.ts` | `{ ...payload, status }` (0 = no response) | google-refresh |
 | `extractKeywords` | `src/services/personalizationService.ts` | `[]` | groq |

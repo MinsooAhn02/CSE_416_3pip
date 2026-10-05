@@ -21,7 +21,6 @@ IDs (R*, A*, B*) come from the 2026-10-04 reviews and are referenced from commit
 | # | Issue | Where |
 |---|---|---|
 | R8 | `npm audit`: 5 high left, all `braces` (stack overflow on deeply nested glob patterns) via Tailwind 3's content scanner. Not exploitable here: the patterns come from our own `tailwind.config`, and it runs only at build/dev time, never in the shipped bundle. Decision 2026-10-05: no Tailwind 4 migration for this; revisit if Tailwind 3 stops getting fixes. | `package-lock.json` |
-| I4 | Very large files: `aiService.ts` (~3.8k lines), `useDataStore.ts` (~2.3k), `EventPanel.tsx` (~1.8k). Split by domain when next touched. | `src/services`, `src/store` |
 
 ### GitHub issues
 

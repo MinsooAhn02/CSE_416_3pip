@@ -7,6 +7,9 @@
 
 ## 2026-10-05
 
+### [Refactor] Split the largest files (BACKLOG I4)
+- `src/services/aiService.ts` (3.8k lines) is now a barrel over `src/services/ai/` (client, briefing, dailyQuestion, smartWidgetConfig/Classify/Match, smartWidget, diary); `useDataStore.ts` 2.3k → 1.3k lines with helpers in `src/store/data/`; `EventPanel.tsx` 1.8k → 0.7k lines with `event/EventForm.tsx`, `event/EventDetail.tsx`, `event/eventDescription.ts`, `event/eventFormData.ts`. Code moved verbatim (declaration counts match); no behavior change.
+
 ### [Feature] End-to-end diary encryption (BACKLOG I5)
 - Optional, in Settings → Diary: a passphrase (8+ characters, separate from the 4-digit PIN) derives an AES-GCM key in the browser (PBKDF2-SHA256, 310k iterations, per-user salt). Diary text, memo and answers are stored as ciphertext in Supabase and in localStorage; the server only keeps the salt and a verifier (`user_settings.diary_encryption`).
 - The unlocked key is remembered on the device as a non-extractable key in IndexedDB (cleared on logout); a new device asks for the passphrase once. While locked, diary screens show an unlock prompt, the briefing skips yesterday's diary, and nightly diary generation waits until unlock.
