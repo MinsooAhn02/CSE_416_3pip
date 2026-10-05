@@ -7,6 +7,10 @@
 
 ## 2026-10-05
 
+### [Improve] Keyboard-accessible dialogs, fewer re-renders, lighter login screen (BACKLOG I1–I3)
+- All modals and popups (settings, event/task forms and details, diary list, PIN, confirm, widget details, …) close with Escape, keep keyboard focus inside while open and return it afterwards, and are announced as dialogs (`useDialog` in `src/hooks/useDialog.ts`). Onboarding stays mandatory (Escape does nothing). Icon-only buttons got accessible names.
+- Components now subscribe only to the store fields they use, and the header clock re-renders once a minute instead of every second.
+- The login screen's three.js background (≈128 kB gzip) is not loaded in the Chrome extension or when the OS asks for reduced motion (the gradient stays), and it pauses while the tab is hidden.
 ### [Fix] Link safety, error handling, midnight rollover, Korean UI (2026-10-05 audit 1–9)
 - Links from search results, AI output and Google (news, trends, briefing, smart widgets, Meet links) open only if they are http/https (`safeExternalUrl` in `src/utils/url.ts`); anything else is shown as plain text. Blocks `javascript:` links.
 - Edge Functions no longer return upstream error bodies: Google errors become `Google <service> <status> [reason]` (`supabase/functions/_shared/googleError.ts`), Groq/Tavily return only the status; details go to the function logs. Removed four unused deployed functions (`gemini`, `kakao-places`, `calendar`, `smart-widget`).

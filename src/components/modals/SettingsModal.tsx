@@ -1,5 +1,7 @@
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useShallow } from "zustand/react/shallow";
+import { useDialog } from "../../hooks/useDialog";
 import {
 	X,
 	User,
@@ -112,7 +114,27 @@ const SettingsModal = () => {
 		addKeywordInterest,
 		removeKeywordInterest,
 		resetKeywordInterests,
-	} = useSettingsStore();
+	} = useSettingsStore(
+		useShallow((s) => ({
+			showSettings: s.showSettings,
+			settingsTab: s.settingsTab,
+			priorityOrder: s.priorityOrder,
+			showFirstLoginBriefing: s.showFirstLoginBriefing,
+			fixedInterestIds: s.fixedInterestIds,
+			keywordInterests: s.keywordInterests,
+			setShowSettings: s.setShowSettings,
+			setSettingsTab: s.setSettingsTab,
+			pinLockMode: s.pinLockMode,
+			setPriorityOrder: s.setPriorityOrder,
+			setPinLockMode: s.setPinLockMode,
+			diaryLanguage: s.diaryLanguage,
+			setDiaryLanguage: s.setDiaryLanguage,
+			setShowFirstLoginBriefing: s.setShowFirstLoginBriefing,
+			addKeywordInterest: s.addKeywordInterest,
+			removeKeywordInterest: s.removeKeywordInterest,
+			resetKeywordInterests: s.resetKeywordInterests,
+		})),
+	);
 
 	const [newInterestKeyword, setNewInterestKeyword] = useState("");
 	const {
@@ -127,11 +149,38 @@ const SettingsModal = () => {
 		setGlobalFontSize,
 		addSmartWidget,
 		removeSmartWidget,
-	} = useWidgetStore();
-	const { logout } = useAuthStore();
-	const { setShowOnboarding, setObStep, setOnboarded, perms, savePerm } = useOnboardingStore();
+	} = useWidgetStore(
+		useShallow((s) => ({
+			vis: s.vis,
+			smartKeywords: s.smartKeywords,
+			smartWidgetData: s.smartWidgetData,
+			newKeyword: s.newKeyword,
+			globalFontSize: s.globalFontSize,
+			toggleVis: s.toggleVis,
+			setVis: s.setVis,
+			setNewKeyword: s.setNewKeyword,
+			setGlobalFontSize: s.setGlobalFontSize,
+			addSmartWidget: s.addSmartWidget,
+			removeSmartWidget: s.removeSmartWidget,
+		})),
+	);
+	const logout = useAuthStore((s) => s.logout);
+	const { setShowOnboarding, setObStep, setOnboarded, perms, savePerm } = useOnboardingStore(
+		useShallow((s) => ({
+			setShowOnboarding: s.setShowOnboarding,
+			setObStep: s.setObStep,
+			setOnboarded: s.setOnboarded,
+			perms: s.perms,
+			savePerm: s.savePerm,
+		})),
+	);
 	const pinSet = useDiaryStore((s) => s.pinSet);
 	const applyPinLockMode = useDiaryStore((s) => s.applyPinLockMode);
+	const { ref: dialogRef, dialogProps } = useDialog<HTMLDivElement>({
+		open: showSettings,
+		onClose: () => setShowSettings(false),
+		labelledBy: "settings-modal-title",
+	});
 
 	// Confirm dialog state: null | { title, message, onConfirm }
 	const [confirmState, setConfirmState] = useState<{ title: string; message: string; onConfirm: () => void } | null>(null);
@@ -205,6 +254,8 @@ const SettingsModal = () => {
 	return (
 		<div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[20500] p-4">
 			<div
+				ref={dialogRef}
+				{...dialogProps}
 				className={`w-full max-w-2xl rounded-3xl shadow-2xl border overflow-hidden flex flex-col h-[640px] max-h-[85vh] ${
 					isDark
 						? "bg-slate-800 border-white/20 text-white"
@@ -214,8 +265,8 @@ const SettingsModal = () => {
 				<div
 					className={`flex-shrink-0 flex items-center justify-between p-6 border-b ${isDark ? "border-white/10" : "border-gray-200"}`}
 				>
-					<h2 className="text-lg font-bold">{t("settings_modal.title")}</h2>
-					<button onClick={() => setShowSettings(false)}>
+					<h2 id="settings-modal-title" className="text-lg font-bold">{t("settings_modal.title")}</h2>
+					<button onClick={() => setShowSettings(false)} aria-label={t("common.close")}>
 						<X size={20} className="opacity-60 hover:opacity-100" />
 					</button>
 				</div>
@@ -834,6 +885,7 @@ const SettingsModal = () => {
 												setNewInterestKeyword("");
 											}
 										}}
+										aria-label={t("common.add")}
 										className="px-3 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg text-sm transition-colors"
 									>
 										<Plus size={14} />
@@ -938,6 +990,7 @@ const SettingsModal = () => {
 															? "hover:bg-red-500/20 text-white/40 hover:text-red-300"
 															: "hover:bg-red-50 text-gray-400 hover:text-red-500"
 													}`}
+													aria-label={t("common.delete")}
 												>
 													<Trash2 size={12} />
 												</button>

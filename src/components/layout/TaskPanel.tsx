@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
+import { useShallow } from "zustand/react/shallow";
+import { useDialog } from "../../hooks/useDialog";
 import {
 	CheckCircle2,
 	ChevronRight,
@@ -97,7 +99,21 @@ const TaskPanel = ({ selectedDate }: TaskPanelProps) => {
 		updateTask,
 		fetchTaskLists,
 		setSelectedTaskListFilter,
-	} = useGoogleCalendarStore();
+	} = useGoogleCalendarStore(
+		useShallow((s) => ({
+			tasks: s.tasks,
+			taskLists: s.taskLists,
+			selectedTaskListFilter: s.selectedTaskListFilter,
+			loading: s.loading,
+			error: s.error,
+			addTask: s.addTask,
+			createTaskList: s.createTaskList,
+			deleteTask: s.deleteTask,
+			updateTask: s.updateTask,
+			fetchTaskLists: s.fetchTaskLists,
+			setSelectedTaskListFilter: s.setSelectedTaskListFilter,
+		})),
+	);
 	const reconnectGoogle = useAuthStore((s) => s.reconnectGoogle);
 
 	const modalCardCls = isDark
@@ -298,6 +314,31 @@ const TaskPanel = ({ selectedDate }: TaskPanelProps) => {
 		}
 	};
 
+	const closeAddForm = () => {
+		setShowAddForm(false);
+		resetForm();
+	};
+	const closeCreateList = () => {
+		if (isCreatingTaskList) return;
+		setCreateTaskListTarget(null);
+		setNewTaskListTitle("");
+	};
+	const { ref: addDialogRef, dialogProps: addDialogProps } = useDialog<HTMLDivElement>({
+		open: showAddForm,
+		onClose: closeAddForm,
+		labelledBy: "task-form-title",
+	});
+	const { ref: listDialogRef, dialogProps: listDialogProps } = useDialog<HTMLDivElement>({
+		open: !!createTaskListTarget,
+		onClose: closeCreateList,
+		labelledBy: "task-list-title",
+	});
+	const { ref: detailDialogRef, dialogProps: detailDialogProps } = useDialog<HTMLDivElement>({
+		open: !!selectedTaskForDetail,
+		onClose: () => setSelectedTaskForDetail(null),
+		labelledBy: "task-detail-title",
+	});
+
 	const handleEditFromDetail = (task: Task) => {
 		setFormData(formDataFromTask(task));
 		setEditingTaskDate(getTaskDisplayDate(task as unknown as TaskLike) || selectedDate);
@@ -314,6 +355,7 @@ const TaskPanel = ({ selectedDate }: TaskPanelProps) => {
 					<h3 className="font-bold text-sm">{t("tasks.title")}</h3>
 				</div>
 				<button
+					aria-label={t("tasks.add_task")}
 					onClick={() => {
 						const nextOpen = !showAddForm;
 						setShowAddForm(nextOpen);
@@ -384,14 +426,17 @@ const TaskPanel = ({ selectedDate }: TaskPanelProps) => {
 						}}
 					>
 						<div
+							ref={addDialogRef}
+							{...addDialogProps}
 							className={`z-[22010] w-full max-w-md rounded-2xl border-2 shadow-2xl p-6 space-y-4 max-h-[90vh] overflow-y-auto ${modalCardCls}`}
 							onClick={(e: React.MouseEvent<HTMLDivElement>) => e.stopPropagation()}
 						>
 							<div className="flex items-center justify-between mb-4">
-								<h2 className="font-bold text-lg">
+								<h2 id="task-form-title" className="font-bold text-lg">
 									{editingId ? t("tasks.edit_task") : t("tasks.add_task")}
 								</h2>
 								<button
+									aria-label={t("common.close")}
 									onClick={() => {
 										setShowAddForm(false);
 										resetForm();
@@ -515,13 +560,16 @@ const TaskPanel = ({ selectedDate }: TaskPanelProps) => {
 						}}
 					>
 						<div
+							ref={listDialogRef}
+							{...listDialogProps}
 							className={`z-[23010] w-full max-w-xs rounded-2xl border-2 shadow-2xl p-5 space-y-4 ${modalCardCls}`}
 							onClick={(e: React.MouseEvent<HTMLDivElement>) => e.stopPropagation()}
 						>
 							<div className="flex items-center justify-between gap-3">
-								<h2 className="font-bold text-base">{t("tasks.create_list")}</h2>
+								<h2 id="task-list-title" className="font-bold text-base">{t("tasks.create_list")}</h2>
 								<button
 									type="button"
+									aria-label={t("common.close")}
 									onClick={() => {
 										if (isCreatingTaskList) return;
 										setCreateTaskListTarget(null);
@@ -630,6 +678,8 @@ const TaskPanel = ({ selectedDate }: TaskPanelProps) => {
 						onClick={() => setSelectedTaskForDetail(null)}
 					>
 						<div
+							ref={detailDialogRef}
+							{...detailDialogProps}
 							className={`z-[22010] w-full max-w-md rounded-2xl border-2 shadow-2xl p-6 space-y-4 ${modalCardCls}`}
 							onClick={(e: React.MouseEvent<HTMLDivElement>) => e.stopPropagation()}
 						>
@@ -637,6 +687,9 @@ const TaskPanel = ({ selectedDate }: TaskPanelProps) => {
 								<div className="flex items-center gap-2">
 									<button
 										onClick={() => handleToggleComplete(selectedTaskForDetail)}
+										aria-label={
+											selectedTaskForDetail.completed ? t("tasks.mark_incomplete") : t("tasks.mark_complete")
+										}
 										className={`p-1 rounded transition-colors ${hoverCls}`}
 									>
 										<CheckCircle2
@@ -645,6 +698,7 @@ const TaskPanel = ({ selectedDate }: TaskPanelProps) => {
 										/>
 									</button>
 									<h2
+										id="task-detail-title"
 										className={`font-bold text-lg ${
 											selectedTaskForDetail.completed ? "line-through opacity-50" : ""
 										}`}
@@ -656,6 +710,7 @@ const TaskPanel = ({ selectedDate }: TaskPanelProps) => {
 									</h2>
 								</div>
 								<button
+									aria-label={t("common.close")}
 									onClick={() => setSelectedTaskForDetail(null)}
 									className={`p-1.5 rounded-lg ${hoverCls}`}
 								>

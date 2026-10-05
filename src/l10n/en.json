@@ -711,5 +711,9 @@
     "custom_yearly_n": "Every {{count}} years",
     "custom_weekly_days_1": "Every week on {{days}}",
     "custom_weekly_days_n": "Every {{count}} weeks on {{days}}"
+  },
+  "a11y": {
+    "prev_month": "Previous month",
+    "next_month": "Next month"
   }
 }

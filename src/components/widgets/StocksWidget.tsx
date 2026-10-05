@@ -6,6 +6,7 @@ import { TrendingUp, RefreshCw, X, GripVertical, Plus } from "lucide-react";
 import ConfirmDialog from "../common/ConfirmDialog";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 import { useTranslation } from "react-i18next";
+import { useDialog } from "../../hooks/useDialog";
 import { useTheme } from "../../hooks/useTheme";
 import { useDataStore } from "../../store/useDataStore";
 import { useFontSize } from "../../hooks/useFontSize";
@@ -135,6 +136,11 @@ const StocksWidget = () => {
 	const { body: bodyStyle } = useFontSize();
 	const { t } = useTranslation();
 	const [showModal, setShowModal] = useState(false);
+	const { ref: dialogRef, dialogProps } = useDialog<HTMLDivElement>({
+		open: showModal,
+		onClose: () => setShowModal(false),
+		labelledBy: "stocks-modal-title",
+	});
 	const [customSymbol, setCustomSymbol] = useState("");
 	const [confirmDelete, setConfirmDelete] = useState<{ open: boolean; symbol: string | null }>({ open: false, symbol: null });
 	const [validating, setValidating] = useState(false);
@@ -428,6 +434,8 @@ const StocksWidget = () => {
 								transition={{ duration: 0.2 }}
 							>
 								<div
+									ref={dialogRef}
+									{...dialogProps}
 									className={`w-full max-w-5xl max-h-[80vh]
 										rounded-2xl border shadow-2xl flex flex-col overflow-hidden ${
 											isDark
@@ -446,12 +454,13 @@ const StocksWidget = () => {
 									>
 										<div className="flex items-center gap-3">
 											<TrendingUp size={20} className="text-blue-500" />
-											<h3 className="font-bold text-base">
+											<h3 id="stocks-modal-title" className="font-bold text-base">
 												{t("widgets.stocks.title")}
 											</h3>
 										</div>
 										<button
 											onClick={() => setShowModal(false)}
+											aria-label={t("common.close")}
 											className={`p-2 rounded-full transition-colors ${
 												isDark
 													? "hover:bg-morning-dark-hover"
@@ -683,6 +692,7 @@ const StocksWidget = () => {
 																											e.stopPropagation();
 																											setConfirmDelete({ open: true, symbol: s?.symbol ?? s?.name });
 																										}}
+																										aria-label={t("common.delete")}
 																										className={`absolute top-1.5 right-1.5 p-0.5 rounded-full opacity-30 hover:opacity-100 transition-opacity ${isDark ? "hover:bg-red-500/20" : "hover:bg-red-500/10"}`}
 																									>
 																										<X size={11} />

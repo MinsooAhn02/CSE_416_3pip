@@ -2,6 +2,7 @@ import { createPortal } from "react-dom";
 import { AlertTriangle } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useTheme } from "../../hooks/useTheme";
+import { useDialog } from "../../hooks/useDialog";
 
 /**
  * ConfirmDialog — modal-style confirm, replaces native browser confirm().
@@ -37,6 +38,7 @@ const ConfirmDialog = ({
 }: ConfirmDialogProps) => {
 	const { t } = useTranslation();
 	const { isDark } = useTheme();
+	const { ref, dialogProps } = useDialog<HTMLDivElement>({ open: true, onClose: onCancel, labelledBy: "confirm-dialog-title" });
 	const resolvedTitle = title ?? t("common.confirm");
 	const resolvedConfirmLabel = confirmLabel ?? t("common.confirm");
 	const resolvedCancelLabel = cancelLabel ?? t("common.cancel");
@@ -61,6 +63,8 @@ const ConfirmDialog = ({
 			onClick={(e: React.MouseEvent<HTMLDivElement>) => { e.stopPropagation(); onCancel(); }}
 		>
 			<div
+				ref={ref}
+				{...dialogProps}
 				className={`w-full max-w-sm rounded-2xl border-2 shadow-2xl p-6 space-y-4 ${cardCls}`}
 				onClick={(e: React.MouseEvent<HTMLDivElement>) => e.stopPropagation()}
 			>
@@ -70,7 +74,7 @@ const ConfirmDialog = ({
 						className={`mt-0.5 flex-shrink-0 ${danger ? "text-red-400" : "text-amber-400"}`}
 					/>
 					<div className="space-y-1">
-						<h3 className="font-bold text-base">{resolvedTitle}</h3>
+						<h3 id="confirm-dialog-title" className="font-bold text-base">{resolvedTitle}</h3>
 						{message && (
 							<p
 								className={`text-sm ${isDark ? "text-gray-300" : "text-gray-600"}`}

@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { Newspaper, RefreshCw, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { useDialog } from "../../hooks/useDialog";
 import { useShallow } from "zustand/react/shallow";
 import { useTheme } from "../../hooks/useTheme";
 import { useDataStore, type ArticleItem } from "../../store/useDataStore";
@@ -39,6 +40,11 @@ const NewsWidget = () => {
 	const maxShow = MAX_ITEMS[fontKey as keyof typeof MAX_ITEMS]?.[viewType as keyof (typeof MAX_ITEMS)[keyof typeof MAX_ITEMS]] ?? 3;
 
 	const [showAllModal, setShowAllModal] = useState(false);
+	const { ref: dialogRef, dialogProps } = useDialog<HTMLDivElement>({
+		open: showAllModal,
+		onClose: () => setShowAllModal(false),
+		labelledBy: "news-all-title",
+	});
 	const [imgErrors, setImgErrors] = useState<Record<number, boolean>>({});
 	const [modalImgErrors, setModalImgErrors] = useState<Record<number, boolean>>({});
 
@@ -249,16 +255,19 @@ const NewsWidget = () => {
 								transition={{ duration: 0.2 }}
 							>
 								<div
+									ref={dialogRef}
+									{...dialogProps}
 									className={`w-full max-w-2xl max-h-[85vh] rounded-2xl border shadow-2xl flex flex-col overflow-hidden ${modalCls}`}
 									onClick={(e) => e.stopPropagation()}
 								>
 									<div className={`flex-shrink-0 flex items-center justify-between p-4 border-b ${dividerCls}`}>
 										<div className="flex items-center gap-3">
 											<Newspaper size={18} className="text-blue-500" />
-											<h3 className="font-bold text-base">{t("widgets.news.title")}</h3>
+											<h3 id="news-all-title" className="font-bold text-base">{t("widgets.news.title")}</h3>
 										</div>
 										<button
 											onClick={() => setShowAllModal(false)}
+											aria-label={t("common.close")}
 											className={`p-2 rounded-full transition-colors ${hoverBtnCls}`}
 										>
 											<X size={18} />

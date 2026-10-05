@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { Sparkles, RefreshCw, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { useDialog } from "../../hooks/useDialog";
 import { useTheme } from "../../hooks/useTheme";
 import { useFontSize } from "../../hooks/useFontSize";
 import { useDataStore } from "../../store/useDataStore";
@@ -201,6 +202,12 @@ const BriefingWidget = () => {
 		setIsExpanded(false);
 	};
 
+	const { ref: dialogRef, dialogProps } = useDialog<HTMLDivElement>({
+		open: isExpanded,
+		onClose: handleClose,
+		labelledBy: "briefing-detail-title",
+	});
+
 	return (
 		<>
 			<div
@@ -305,6 +312,8 @@ const BriefingWidget = () => {
 							/>
 
 							<motion.div
+								ref={dialogRef}
+								{...dialogProps}
 								className={`fixed top-1/2 left-1/2 z-[10000] w-full max-w-2xl max-h-[80vh] rounded-2xl border shadow-2xl flex flex-col overflow-hidden ${
 									isDark
 										? "bg-morning-dark-card border-morning-dark-hover text-morning-dark-text"
@@ -326,7 +335,7 @@ const BriefingWidget = () => {
 								>
 									<div className="flex items-center gap-3">
 										<Sparkles size={22} className="text-blue-500" />
-										<h3 className="font-bold text-base">
+										<h3 id="briefing-detail-title" className="font-bold text-base">
 											{t("briefing.detailed_briefing")}
 										</h3>
 									</div>
@@ -340,6 +349,7 @@ const BriefingWidget = () => {
 													: "hover:bg-morning-light-hover/30"
 											} ${isLoading ? "opacity-50" : ""}`}
 											title={t("briefing.refresh")}
+											aria-label={t("briefing.refresh")}
 										>
 											<RefreshCw
 												size={16}
@@ -348,6 +358,7 @@ const BriefingWidget = () => {
 										</button>
 										<button
 											onClick={handleClose}
+											aria-label={t("common.close")}
 											className={`p-2 rounded-full transition-colors ${
 												isDark
 													? "hover:bg-morning-dark-hover"

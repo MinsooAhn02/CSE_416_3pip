@@ -1,5 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { createPortal } from "react-dom";
+import { useShallow } from "zustand/react/shallow";
+import { useDialog } from "../../hooks/useDialog";
 import { Globe, MoreHorizontal, X, Plus, Trash2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useTheme } from "../../hooks/useTheme";
@@ -14,7 +16,20 @@ const QuickLinks = () => {
 	const { cardCls, inputCls, navBtnCls, secondaryBgCls, borderCls } = useTheme();
 	const { t } = useTranslation();
 	const { links, showEditor, setShowEditor, addLink, removeLink } =
-		useQuickLinksStore();
+		useQuickLinksStore(
+			useShallow((s) => ({
+				links: s.links,
+				showEditor: s.showEditor,
+				setShowEditor: s.setShowEditor,
+				addLink: s.addLink,
+				removeLink: s.removeLink,
+			})),
+		);
+	const { ref: editorRef, dialogProps: editorDialogProps } = useDialog<HTMLDivElement>({
+		open: showEditor,
+		onClose: () => setShowEditor(false),
+		labelledBy: "quicklinks-editor-title",
+	});
 
 	const [hovered, setHovered] = useState<boolean>(false);
 	const [newName, setNewName] = useState<string>("");
@@ -22,7 +37,6 @@ const QuickLinks = () => {
 	const [newIcon, setNewIcon] = useState<string>("");
 	const [newColor, setNewColor] = useState<string>("#4285F4");
 	const containerRef = useRef<HTMLDivElement>(null);
-	const editorRef = useRef<HTMLDivElement>(null);
 	const [editorPos, setEditorPos] = useState<EditorPos>({ top: 0, right: 0 });
 
 	// Close editor on outside click & calculate position
@@ -118,6 +132,7 @@ const QuickLinks = () => {
 			{showEditor && createPortal(
 				<div
 					ref={editorRef}
+					{...editorDialogProps}
 					className={`fixed w-80 rounded-2xl shadow-2xl border p-4 z-[10001] ${
 						cardCls
 					}`}
@@ -127,8 +142,8 @@ const QuickLinks = () => {
 					}}
 				>
 					<div className="flex items-center justify-between mb-3 ">
-						<h3 className="text-sm font-bold">{t("nav.edit_quicklinks")}</h3>
-						<button onClick={() => setShowEditor(false)}>
+						<h3 id="quicklinks-editor-title" className="text-sm font-bold">{t("nav.edit_quicklinks")}</h3>
+						<button onClick={() => setShowEditor(false)} aria-label={t("common.close")}>
 							<X size={16} className="opacity-60 hover:opacity-100" />
 						</button>
 					</div>
@@ -154,6 +169,7 @@ const QuickLinks = () => {
 								</div>
 								<button
 									onClick={() => removeLink(link.id)}
+									aria-label={t("common.delete")}
 									className="text-red-400 hover:text-red-300 flex-shrink-0"
 								>
 									<Trash2 size={14} />

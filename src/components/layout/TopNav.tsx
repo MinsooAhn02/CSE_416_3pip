@@ -6,6 +6,7 @@ import { useSettingsStore } from "../../store/useSettingsStore";
 import { useAuthStore } from "../../store/useAuthStore";
 import { useDataStore } from "../../store/useDataStore";
 import QuickLinks from "./QuickLinks";
+import Clock from "./Clock";
 import DiaryListModal from "../modals/DiaryListModal";
 
 const TopNav = () => {
@@ -15,11 +16,9 @@ const TopNav = () => {
 	const user = useAuthStore((s) => s.user);
 	const fetchWeather = useDataStore((s) => s.fetchWeather);
 
-	const [currentTime, setCurrentTime] = useState<Date>(new Date());
 	const [searchQuery, setSearchQuery] = useState<string>("");
 	const [showDiaryList, setShowDiaryList] = useState<boolean>(false);
 	const [panelOpen, setPanelOpen] = useState<boolean>(true);
-	const isKo = i18n.language?.toLowerCase().startsWith("ko");
 
 	// Language toggle
 	const handleLanguageToggle = () => {
@@ -28,12 +27,6 @@ const TopNav = () => {
 		localStorage.setItem("language", newLang);
 		fetchWeather(undefined, undefined, undefined, true);
 	};
-
-	// Clock tick
-	useEffect(() => {
-		const id = setInterval(() => setCurrentTime(new Date()), 1000);
-		return () => clearInterval(id);
-	}, []);
 
 	// Sync panelOpen with DashboardLayout via custom event
 	useEffect(() => {
@@ -49,16 +42,6 @@ const TopNav = () => {
 			new CustomEvent("toggle-widget-panel", { detail: { open: next } }),
 		);
 	};
-
-	// Compact time format
-	const h = currentTime.getHours() % 12 || 12;
-	const m = String(currentTime.getMinutes()).padStart(2, "0");
-	const ampm = currentTime.getHours() >= 12 ? "PM" : "AM";
-	const dayStr = currentTime.toLocaleDateString(isKo ? "ko-KR" : "en-US", {
-		weekday: "short",
-		month: "short",
-		day: "numeric",
-	});
 
 	const handleSearch = (e: React.FormEvent<HTMLFormElement>) => {
 		e.preventDefault();
@@ -108,21 +91,7 @@ const TopNav = () => {
 					}`}
 				/>
 
-				<div className="hidden sm:flex items-baseline gap-1.5">
-					<span
-						className="text-[19px] font-light tabular-nums"
-						style={{ letterSpacing: "-0.04em" }}
-					>
-						{h}:{m}
-					</span>
-					<span
-						className={`text-[10px] font-medium ${
-							isDark ? "text-morning-dark-muted" : "text-morning-light-muted"
-						}`}
-					>
-						{ampm} · {dayStr}
-					</span>
-				</div>
+				<Clock />
 			</div>
 
 			{/* ── Center: Search ── */}

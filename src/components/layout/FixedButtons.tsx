@@ -66,6 +66,7 @@ const FixedButtons = () => {
 									setShowPopup(false);
 									setNewKeyword("");
 								}}
+								aria-label={t("common.close")}
 								className="ml-auto"
 							>
 								<X size={14} className={muted} />

@@ -1,6 +1,9 @@
 import { forwardRef, useEffect, useMemo, useRef, useState } from "react";
 import { X, Lock, AlertCircle } from "lucide-react";
+import { useTranslation } from "react-i18next";
+import { useShallow } from "zustand/react/shallow";
 import { useTheme } from "../../hooks/useTheme";
+import { useDialog } from "../../hooks/useDialog";
 import { useDiaryStore } from "../../store/useDiaryStore";
 import {
 	DEFAULT_PIN_LOCK_MODE,
@@ -85,8 +88,22 @@ interface PINModalProps {
 
 const PINModal = ({ onSuccess, onCancel, mode = "verify" }: PINModalProps) => {
 	const { isDark, cardCls, inputCls, hoverCls, secondaryBgCls } = useTheme();
+	const { t } = useTranslation();
+	const { ref: dialogRef, dialogProps } = useDialog<HTMLDivElement>({
+		open: true,
+		onClose: onCancel,
+		labelledBy: "pin-modal-title",
+	});
 	const { setPIN, verifyPIN, pinSet, resetPIN, setPinModalVisible } =
-		useDiaryStore();
+		useDiaryStore(
+			useShallow((s) => ({
+				setPIN: s.setPIN,
+				verifyPIN: s.verifyPIN,
+				pinSet: s.pinSet,
+				resetPIN: s.resetPIN,
+				setPinModalVisible: s.setPinModalVisible,
+			})),
+		);
 	const pinLockMode = useSettingsStore((state) => state.pinLockMode);
 	const setPinLockMode = useSettingsStore((state) => state.setPinLockMode);
 
@@ -285,6 +302,8 @@ const PINModal = ({ onSuccess, onCancel, mode = "verify" }: PINModalProps) => {
 			<div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
 
 			<div
+				ref={dialogRef}
+				{...dialogProps}
 				className={`relative z-10 w-full max-w-sm rounded-2xl border shadow-2xl p-6 flex flex-col gap-4 ${cardCls}`}
 				onClick={(e) => e.stopPropagation()}
 			>
@@ -295,7 +314,7 @@ const PINModal = ({ onSuccess, onCancel, mode = "verify" }: PINModalProps) => {
 						<Lock size={20} className="text-blue-500" />
 					</div>
 					<div>
-						<h2 className="font-bold text-lg">{modalCopy.title}</h2>
+						<h2 id="pin-modal-title" className="font-bold text-lg">{modalCopy.title}</h2>
 						<p
 							className={`text-xs ${isDark ? "text-gray-400" : "text-gray-600"}`}
 						>
@@ -305,6 +324,7 @@ const PINModal = ({ onSuccess, onCancel, mode = "verify" }: PINModalProps) => {
 					{onCancel && (
 						<button
 							onClick={onCancel}
+							aria-label={t("common.close")}
 							className={`ml-auto p-1 rounded-full transition-colors ${hoverCls}`}
 						>
 							<X size={18} />

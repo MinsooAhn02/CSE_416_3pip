@@ -1,4 +1,4 @@
-import { useState, useRef, lazy, Suspense } from "react";
+import { useState, useRef, useEffect, lazy, Suspense } from "react";
 import { useTranslation } from "react-i18next";
 import {
 	Sparkles,
@@ -28,11 +28,26 @@ const FEATURES = [
 	{ icon: LayoutGrid, title: "login_screen.f_smart_t", desc: "login_screen.f_smart_d" },
 ];
 
+// 확장 프로그램(새 탭)에서는 three.js 배경을 로드하지 않음
+const IS_EXTENSION = typeof location !== "undefined" && location.protocol === "chrome-extension:";
+const REDUCED_MOTION_QUERY = "(prefers-reduced-motion: reduce)";
+
 const LoginScreen = () => {
 	const { t } = useTranslation();
 	const login = useAuthStore((s) => s.login);
 	const [loading, setLoading] = useState<boolean>(false);
 	const bgRef = useRef<HTMLDivElement>(null);
+	const [reducedMotion, setReducedMotion] = useState<boolean>(
+		() => typeof window.matchMedia === "function" && window.matchMedia(REDUCED_MOTION_QUERY).matches
+	);
+	useEffect(() => {
+		if (typeof window.matchMedia !== "function") return;
+		const mq = window.matchMedia(REDUCED_MOTION_QUERY);
+		const onChange = () => setReducedMotion(mq.matches);
+		mq.addEventListener("change", onChange);
+		return () => mq.removeEventListener("change", onChange);
+	}, []);
+	const showLines = !IS_EXTENSION && !reducedMotion;
 
 	const handleLogin = async () => {
 		setLoading(true);
@@ -70,6 +85,7 @@ const LoginScreen = () => {
 		>
 			{/* Animated FloatingLines background (subtle, brand blue/indigo) — fixed behind scrolling content */}
 			<div ref={bgRef} className="absolute inset-0 z-0 opacity-40">
+				{showLines && (
 				<Suspense fallback={null}>
 					<FloatingLines
 						linesGradient={["#1e3a8a", "#4f46e5", "#818cf8"]}
@@ -83,6 +99,7 @@ const LoginScreen = () => {
 						parallax={true}
 					/>
 				</Suspense>
+				)}
 			</div>
 			<div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-blue-500/10 rounded-full blur-[120px] z-0" />
 			<div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-indigo-500/10 rounded-full blur-[120px] z-0" />

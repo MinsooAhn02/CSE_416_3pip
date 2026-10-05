@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import toast from "react-hot-toast";
+import { useShallow } from "zustand/react/shallow";
 import { useTheme } from "../../hooks/useTheme";
 import {
 	filterTasksByTaskList,
@@ -55,7 +56,9 @@ const CalendarWidget = () => {
 	const selectedTaskListFilter = useGoogleCalendarStore(
 		(s) => s.selectedTaskListFilter,
 	);
-	const { events = [], tasks = [] } = useGoogleCalendarStore();
+	const { events = [], tasks = [] } = useGoogleCalendarStore(
+		useShallow((s) => ({ events: s.events, tasks: s.tasks })),
+	);
 	const filteredTasks = useMemo(
 		() => filterTasksByTaskList(tasks, selectedTaskListFilter),
 		[tasks, selectedTaskListFilter],
@@ -214,6 +217,7 @@ const CalendarWidget = () => {
 						<>
 							<button
 								onClick={goToPrev}
+								aria-label={t("a11y.prev_month")}
 								className={`p-1 rounded-full transition-colors ${hoverCls}`}
 							>
 								<ChevronLeft size={16} />
@@ -245,6 +249,7 @@ const CalendarWidget = () => {
 
 							<button
 								onClick={goToNext}
+								aria-label={t("a11y.next_month")}
 								className={`p-1 rounded-full transition-colors ${hoverCls}`}
 							>
 								<ChevronRight size={16} />

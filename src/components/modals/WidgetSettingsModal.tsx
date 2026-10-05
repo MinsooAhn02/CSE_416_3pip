@@ -1,5 +1,6 @@
 import { X } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { useDialog } from "../../hooks/useDialog";
 import { useTheme } from "../../hooks/useTheme";
 import { useSettingsStore } from "../../store/useSettingsStore";
 import { useWidgetStore } from "../../store/useWidgetStore";
@@ -18,6 +19,11 @@ const WidgetSettingsModal = () => {
 	const closeWidgetSettings = useWidgetStore((s) => s.closeWidgetSettings);
 	const setShowSettings = useSettingsStore((s) => s.setShowSettings);
 	const setSettingsTab = useSettingsStore((s) => s.setSettingsTab);
+	const { ref: dialogRef, dialogProps } = useDialog<HTMLDivElement>({
+		open: !!activeWidgetSettings,
+		onClose: closeWidgetSettings,
+		labelledBy: "widget-settings-title",
+	});
 	const viewLabels: Record<string, string> = {
 		text: t("widget_settings.view_text"),
 		news: t("widget_settings.view_news"),
@@ -60,6 +66,8 @@ const WidgetSettingsModal = () => {
 			onClick={closeWidgetSettings}
 		>
 			<div
+				ref={dialogRef}
+				{...dialogProps}
 				className={`relative w-76 rounded-2xl p-5 shadow-2xl ${cardCls}`}
 				style={{ width: "300px" }}
 				onClick={(e) => e.stopPropagation()}
@@ -68,10 +76,11 @@ const WidgetSettingsModal = () => {
 				<div className="flex items-center justify-between mb-5">
 					<div>
 						<p className={`text-[10px] ${muted} mb-0.5`}>{t("widget_settings.title")}</p>
-						<h3 className="font-semibold text-sm">{displayName}</h3>
+						<h3 id="widget-settings-title" className="font-semibold text-sm">{displayName}</h3>
 					</div>
 					<button
 						onClick={closeWidgetSettings}
+						aria-label={t("common.close")}
 						className={`p-1.5 rounded-lg transition-opacity opacity-50 hover:opacity-100 ${isDark ? "hover:bg-white/10" : "hover:bg-gray-100"}`}
 					>
 						<X size={15} />

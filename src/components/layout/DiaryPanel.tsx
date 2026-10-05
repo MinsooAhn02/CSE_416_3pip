@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { BookOpen, Lock, Edit2, RotateCcw, Save, Settings, X, ThumbsUp, ThumbsDown, RefreshCw, CheckCircle } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { useShallow } from "zustand/react/shallow";
 import { useTheme } from "../../hooks/useTheme";
 import { useFontSize } from "../../hooks/useFontSize";
 import { useDiaryStore } from "../../store/useDiaryStore";
@@ -35,7 +36,23 @@ const DiaryPanel = ({ selectedDate, onClose, compact = false, skipPinCheck = fal
 		pinAuthExpiresAt,
 		refreshPinAuthState,
 		clearPinSession,
-	} = useDiaryStore();
+	} = useDiaryStore(
+		useShallow((s) => ({
+			getDiary: s.getDiary,
+			saveDiary: s.saveDiary,
+			saveMemo: s.saveMemo,
+			revertDiaryToGenerated: s.revertDiaryToGenerated,
+			setFeedbackRating: s.setFeedbackRating,
+			applyFeedbackRewrite: s.applyFeedbackRewrite,
+			confirmRewrite: s.confirmRewrite,
+			discardPendingRewrite: s.discardPendingRewrite,
+			pinSet: s.pinSet,
+			isPinAuthenticated: s.isPinAuthenticated,
+			pinAuthExpiresAt: s.pinAuthExpiresAt,
+			refreshPinAuthState: s.refreshPinAuthState,
+			clearPinSession: s.clearPinSession,
+		})),
+	);
 	const pinLockMode = useSettingsStore((state) => state.pinLockMode);
 	const setShowSettings = useSettingsStore((state) => state.setShowSettings);
 	const setSettingsTab = useSettingsStore((state) => state.setSettingsTab);

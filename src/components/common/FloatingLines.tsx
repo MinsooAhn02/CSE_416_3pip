@@ -438,10 +438,13 @@ export default function FloatingLines({
 		}
 
 		let raf = 0;
+		let elapsed = 0;
 		const renderLoop = () => {
 			if (!active) return;
 
-			uniforms.iTime.value = clock.getElapsedTime();
+			// 탭이 숨겨진 동안 누적하지 않도록 delta로 직접 시간 누적
+			elapsed += clock.getDelta();
+			uniforms.iTime.value = elapsed;
 
 			if (interactive) {
 				currentMouseRef.current.lerp(targetMouseRef.current, mouseDamping);
@@ -459,12 +462,25 @@ export default function FloatingLines({
 			renderer.render(scene, camera);
 			raf = requestAnimationFrame(renderLoop);
 		};
-		renderLoop();
+
+		// 탭이 숨겨지면 루프 중단, 다시 보이면 재개 (시간은 이어서 진행)
+		const handleVisibility = () => {
+			if (document.hidden) {
+				cancelAnimationFrame(raf);
+				raf = 0;
+			} else if (active && !raf) {
+				clock.getDelta(); // 숨겨진 동안의 경과 시간 버림
+				renderLoop();
+			}
+		};
+		document.addEventListener("visibilitychange", handleVisibility);
+		if (!document.hidden) renderLoop();
 
 		return () => {
 			active = false;
 
 			cancelAnimationFrame(raf);
+			document.removeEventListener("visibilitychange", handleVisibility);
 
 			if (ro) ro.disconnect();
 

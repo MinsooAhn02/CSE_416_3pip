@@ -1,5 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { useShallow } from "zustand/react/shallow";
+import { useDialog } from "../../hooks/useDialog";
 import { useTranslation } from "react-i18next";
 import toast from "react-hot-toast";
 import {
@@ -393,7 +395,17 @@ const EventPanel = ({ selectedDate, onClose }: EventPanelProps) => {
 	const { isDark, cardCls, inputCls, hoverCls, secondaryBgCls } = useTheme();
 	const { body: bodyStyle } = useFontSize();
 	const { events, loading, error, addEvent, deleteEvent, updateEvent, readEvent } =
-		useGoogleCalendarStore();
+		useGoogleCalendarStore(
+			useShallow((s) => ({
+				events: s.events,
+				loading: s.loading,
+				error: s.error,
+				addEvent: s.addEvent,
+				deleteEvent: s.deleteEvent,
+				updateEvent: s.updateEvent,
+				readEvent: s.readEvent,
+			})),
+		);
 	const reconnectGoogle = useAuthStore((s) => s.reconnectGoogle);
 	const modalCardCls = isDark
 		? "bg-morning-dark-card border-morning-dark-hover text-morning-dark-text"
@@ -468,6 +480,17 @@ const EventPanel = ({ selectedDate, onClose }: EventPanelProps) => {
 		setShowAddForm(false);
 		resetForm();
 	};
+
+	const { ref: addFormDialogRef, dialogProps: addFormDialogProps } = useDialog<HTMLDivElement>({
+		open: showAddForm,
+		onClose: handleCloseAddForm,
+		labelledBy: "event-form-title",
+	});
+	const { ref: detailDialogRef, dialogProps: detailDialogProps } = useDialog<HTMLDivElement>({
+		open: !!selectedEventForDetail,
+		onClose: () => setSelectedEventForDetail(null),
+		labelledBy: "event-detail-title",
+	});
 
 	useEffect(() => {
 		setShowAddForm(false);
@@ -845,6 +868,7 @@ const EventPanel = ({ selectedDate, onClose }: EventPanelProps) => {
 					<h3 className="font-bold text-sm">{t("events.title")}</h3>
 				</div>
 				<button
+					aria-label={t("events.add_event")}
 					onClick={() => {
 						const nextOpen = !showAddForm;
 						setShowAddForm(nextOpen);
@@ -903,16 +927,19 @@ const EventPanel = ({ selectedDate, onClose }: EventPanelProps) => {
 						onClick={handleCloseAddForm}
 					>
 						<div
+							ref={addFormDialogRef}
+							{...addFormDialogProps}
 							className={`z-[22010] w-full max-w-xl md:max-w-4xl max-h-[90vh] overflow-y-auto rounded-2xl border-2 shadow-2xl p-6 space-y-4 ${modalCardCls}`}
 							onClick={(e) => e.stopPropagation()}
 						>
 							<div className="flex items-center justify-between mb-4">
-								<h2 className="font-bold text-lg">
+								<h2 id="event-form-title" className="font-bold text-lg">
 									{editingId ? t("events.edit_event") : t("events.add_event")}
 								</h2>
 								<button
 									type="button"
 									onClick={handleCloseAddForm}
+									aria-label={t("common.close")}
 									className={`p-1.5 rounded-lg ${hoverCls}`}
 								>
 									<X size={20} />
@@ -1550,14 +1577,17 @@ const EventPanel = ({ selectedDate, onClose }: EventPanelProps) => {
 						onClick={() => setSelectedEventForDetail(null)}
 					>
 						<div
+							ref={detailDialogRef}
+							{...detailDialogProps}
 							className={`z-[22010] w-full max-w-md rounded-2xl border-2 shadow-2xl p-6 space-y-4 ${modalCardCls}`}
 							onClick={(e) => e.stopPropagation()}
 						>
 							<div className="flex items-center justify-between mb-4">
-								<h2 className="font-bold text-lg">
+								<h2 id="event-detail-title" className="font-bold text-lg">
 									{getDisplayEventTitle(selectedEventForDetail, noTitleLabel)}
 								</h2>
 								<button
+									aria-label={t("common.close")}
 									onClick={() => setSelectedEventForDetail(null)}
 									className={`p-1.5 rounded-lg ${hoverCls}`}
 								>

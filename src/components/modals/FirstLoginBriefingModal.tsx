@@ -2,6 +2,7 @@ import { useEffect, useState, useMemo, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Sparkles, X, RefreshCw } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { useDialog } from "../../hooks/useDialog";
 import { useTheme } from "../../hooks/useTheme";
 import { useSettingsStore } from "../../store/useSettingsStore";
 import { useDataStore } from "../../store/useDataStore";
@@ -25,6 +26,12 @@ const FirstLoginBriefingModal = () => {
 	const dismissFirstLoginModal = useSettingsStore(
 		(s) => s.dismissFirstLoginModal,
 	);
+	// Escape는 X 버튼과 동일 (카운트다운 무시하고 즉시 닫기)
+	const { ref: dialogRef, dialogProps } = useDialog<HTMLDivElement>({
+		open: showFirstLoginModal,
+		onClose: dismissFirstLoginModal,
+		labelledBy: "first-login-briefing-title",
+	});
 	const BRIEFING_LENGTH = "medium";
 
 	const { tone, fetchTodayQA, buildContext } = useBriefingContext();
@@ -170,6 +177,8 @@ const FirstLoginBriefingModal = () => {
 			>
 				{/* Modal Content - Fixed height with internal scrolling */}
 				<motion.div
+					ref={dialogRef}
+					{...dialogProps}
 					className={`relative z-[71] w-full max-w-2xl h-[600px] max-h-[80vh] rounded-3xl border-2 shadow-2xl flex flex-col overflow-hidden ${
 						isDark
 							? "bg-morning-dark-card border-morning-dark-hover text-morning-dark-text"
@@ -186,6 +195,7 @@ const FirstLoginBriefingModal = () => {
 						onClick={() => dismissFirstLoginModal()}
 						className="absolute top-4 right-4 p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors rounded-full z-10 hover:bg-gray-200/10 dark:hover:bg-gray-700/10"
 						title={t("first_login_briefing.close")}
+						aria-label={t("first_login_briefing.close")}
 					>
 						<X size={20} />
 					</button>
@@ -205,7 +215,7 @@ const FirstLoginBriefingModal = () => {
 								<Sparkles size={24} className="text-blue-500" />
 							</div>
 							<div>
-								<h2 className="font-bold text-lg">{t("first_login_briefing.title")}</h2>
+								<h2 id="first-login-briefing-title" className="font-bold text-lg">{t("first_login_briefing.title")}</h2>
 								<p className={`text-xs ${muted}`}>{t("first_login_briefing.subtitle")}</p>
 							</div>
 						</div>
@@ -219,6 +229,7 @@ const FirstLoginBriefingModal = () => {
 									: "hover:bg-morning-light-hover/20"
 							} ${isLoading ? "opacity-50" : ""}`}
 							title={t("first_login_briefing.refresh")}
+							aria-label={t("first_login_briefing.refresh")}
 						>
 							<RefreshCw
 								size={18}

@@ -124,13 +124,20 @@ const SmartWidgetContent = ({ keyword }: SmartWidgetContentProps) => {
 			setCategoryMenuOpen(false);
 		};
 
+		// Escape로 메뉴 닫기 (포커스 가두기 없음 — 드롭다운)
+		const closeOnEscape = (event: KeyboardEvent) => {
+			if (event.key === "Escape") setCategoryMenuOpen(false);
+		};
+
 		window.addEventListener("resize", updateCategoryMenuPosition);
 		window.addEventListener("scroll", updateCategoryMenuPosition, true);
 		document.addEventListener("mousedown", closeIfOutside);
+		document.addEventListener("keydown", closeOnEscape);
 		return () => {
 			window.removeEventListener("resize", updateCategoryMenuPosition);
 			window.removeEventListener("scroll", updateCategoryMenuPosition, true);
 			document.removeEventListener("mousedown", closeIfOutside);
+			document.removeEventListener("keydown", closeOnEscape);
 		};
 	}, [categoryMenuOpen]);
 
@@ -344,6 +351,7 @@ const SmartWidgetContent = ({ keyword }: SmartWidgetContentProps) => {
 					</div>
 					<button
 						onClick={() => removeSmartWidget(keyword)}
+						aria-label={t("smart_widget.remove_widget")}
 						className={`${muted} hover:opacity-100 transition-opacity p-1 rounded-lg ${hoverCls}`}
 					>
 						<X size={14} />

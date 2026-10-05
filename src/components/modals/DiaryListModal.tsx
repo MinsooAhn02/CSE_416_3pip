@@ -9,6 +9,8 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useTranslation } from "react-i18next";
 import { useTheme } from "../../hooks/useTheme";
 import { useFontSize } from "../../hooks/useFontSize";
+import { useShallow } from "zustand/react/shallow";
+import { useDialog } from "../../hooks/useDialog";
 import { useDiaryStore } from "../../store/useDiaryStore";
 import { useSettingsStore } from "../../store/useSettingsStore";
 import PINModal from "./PINModal";
@@ -40,7 +42,17 @@ const DiaryListModal = ({ onClose }: DiaryListModalProps) => {
 		pinAuthExpiresAt,
 		refreshPinAuthState,
 		clearPinSession,
-	} = useDiaryStore();
+	} = useDiaryStore(
+		useShallow((s) => ({
+			entries: s.entries,
+			getDiaryDates: s.getDiaryDates,
+			pinSet: s.pinSet,
+			isPinAuthenticated: s.isPinAuthenticated,
+			pinAuthExpiresAt: s.pinAuthExpiresAt,
+			refreshPinAuthState: s.refreshPinAuthState,
+			clearPinSession: s.clearPinSession,
+		})),
+	);
 	const pinLockMode = useSettingsStore((state) => state.pinLockMode);
 	const pinRequired = pinSet && pinLockMode !== "off";
 
@@ -51,6 +63,13 @@ const DiaryListModal = ({ onClose }: DiaryListModalProps) => {
 
 	/* Check if PIN is authenticated */
 	const isAuthenticated = !pinRequired || isPinAuthenticated;
+
+	// 상세 보기에서는 Escape가 목록으로, 목록에서는 모달 닫기. PIN 화면은 PINModal이 처리
+	const { ref: dialogRef, dialogProps } = useDialog<HTMLDivElement>({
+		open: isAuthenticated,
+		onClose: () => (detailDateStr ? setDetailDateStr(null) : onClose()),
+		labelledBy: "diary-list-title",
+	});
 
 	useEffect(() => {
 		refreshPinAuthState?.();
@@ -182,6 +201,8 @@ const DiaryListModal = ({ onClose }: DiaryListModalProps) => {
 				{!detailDateStr ? (
 					<motion.div
 						key="list-view"
+						ref={dialogRef}
+						{...dialogProps}
 						className={`relative z-10 w-full max-w-2xl max-h-[80vh] rounded-2xl border shadow-2xl flex flex-col overflow-hidden ${cardCls}`}
 						onClick={(e) => e.stopPropagation()}
 						initial={{ opacity: 0, scale: 0.95 }}
@@ -200,7 +221,7 @@ const DiaryListModal = ({ onClose }: DiaryListModalProps) => {
 									<BookOpen size={18} className="text-blue-500" />
 								</div>
 								<div>
-									<h2 className="font-bold text-lg">Diary List</h2>
+									<h2 id="diary-list-title" className="font-bold text-lg">Diary List</h2>
 									{diaryDates.length > 0 && (
 										<p
 											className={`text-xs ${isDark ? "text-gray-400" : "text-gray-600"}`}
@@ -212,6 +233,7 @@ const DiaryListModal = ({ onClose }: DiaryListModalProps) => {
 							</div>
 							<button
 								onClick={onClose}
+								aria-label={t("common.close")}
 								className={`p-1 rounded-full transition-colors ${hoverCls}`}
 							>
 								<X size={18} />
@@ -329,6 +351,9 @@ const DiaryListModal = ({ onClose }: DiaryListModalProps) => {
 				{detailDateStr ? (
 					<motion.div
 						key="detail-view"
+						ref={dialogRef}
+						{...dialogProps}
+						aria-labelledby={undefined}
 						className="relative z-10 w-full max-w-2xl max-h-[85vh] overflow-y-auto custom-scrollbar"
 						onClick={(e) => e.stopPropagation()}
 						initial={{ opacity: 0, scale: 0.95, x: 50 }}

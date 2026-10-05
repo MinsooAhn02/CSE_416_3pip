@@ -706,5 +706,9 @@
     "custom_yearly_n": "매 {{count}}년",
     "custom_weekly_days_1": "매주 {{days}}",
     "custom_weekly_days_n": "매 {{count}}주 {{days}}"
+  },
+  "a11y": {
+    "prev_month": "이전 달",
+    "next_month": "다음 달"
   }
 }

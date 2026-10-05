@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
+import { useDialog } from "../../hooks/useDialog";
 import { X, BookOpen, CalendarDays } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useTheme } from "../../hooks/useTheme";
@@ -34,6 +35,10 @@ const DatePanelContainer = ({ selectedDate, onClose }: { selectedDate: string | 
 	const getDiary = useDiaryStore((s) => s.getDiary);
 	const [showDiaryModal, setShowDiaryModal] = useState(false);
 	const [activePanel, setActivePanel] = useState("events");
+	const { ref: diaryDialogRef, dialogProps: diaryDialogProps } = useDialog<HTMLDivElement>({
+		open: showDiaryModal,
+		onClose: () => setShowDiaryModal(false),
+	});
 	const calEnabled = useOnboardingStore((s) => s.perms.cal);
 	const savePerm = useOnboardingStore((s) => s.savePerm);
 	const fetchCalendar = useDataStore((s) => s.fetchCalendar);
@@ -114,6 +119,7 @@ const DatePanelContainer = ({ selectedDate, onClose }: { selectedDate: string | 
 					)}
 					<button
 						onClick={onClose}
+						aria-label={t("common.close")}
 						className={`p-2 rounded-lg transition-colors ${hoverCls}`}
 					>
 						<X size={20} />
@@ -188,6 +194,9 @@ const DatePanelContainer = ({ selectedDate, onClose }: { selectedDate: string | 
 						onClick={() => setShowDiaryModal(false)}
 					>
 						<div
+							ref={diaryDialogRef}
+							{...diaryDialogProps}
+							aria-label={t("calendar.open_diary_for_date")}
 							className="w-full max-w-4xl max-h-[86vh] overflow-y-auto custom-scrollbar"
 							onClick={(e) => e.stopPropagation()}
 						>

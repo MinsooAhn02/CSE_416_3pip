@@ -1,5 +1,7 @@
 import { Activity, Calendar } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { useShallow } from "zustand/react/shallow";
+import { useDialog } from "../../hooks/useDialog";
 import { useOnboardingStore } from "../../store/useOnboardingStore";
 import { useWidgetStore } from "../../store/useWidgetStore";
 import { CATEGORIES } from "../../constants";
@@ -16,8 +18,25 @@ const OnboardingModal = () => {
 		toggleCat,
 		setPerms,
 		finishOB,
-	} = useOnboardingStore();
+	} = useOnboardingStore(
+		useShallow((s) => ({
+			showOnboarding: s.showOnboarding,
+			obStep: s.obStep,
+			selCats: s.selCats,
+			perms: s.perms,
+			setObStep: s.setObStep,
+			toggleCat: s.toggleCat,
+			setPerms: s.setPerms,
+			finishOB: s.finishOB,
+		})),
+	);
 	const setVis = useWidgetStore((s) => s.setVis);
+	// 필수 단계 — Escape로 닫을 수 없음, 포커스 가두기만 적용
+	const { ref: dialogRef, dialogProps } = useDialog<HTMLDivElement>({
+		open: showOnboarding,
+		canClose: false,
+		labelledBy: "onboarding-title",
+	});
 
 	if (!showOnboarding) return null;
 
@@ -33,12 +52,12 @@ const OnboardingModal = () => {
 
 	return (
 		<div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-			<div className="bg-slate-800 border border-white/20 rounded-3xl w-full max-w-lg p-8 text-white shadow-2xl">
+			<div ref={dialogRef} {...dialogProps} className="bg-slate-800 border border-white/20 rounded-3xl w-full max-w-lg p-8 text-white shadow-2xl">
 				{obStep === 0 && (
 					<div className="space-y-6">
 						<div className="text-center">
 							<p className="text-3xl mb-2">👋</p>
-							<h2 className="text-2xl font-bold mb-1">{t("onboarding.welcome_title")}</h2>
+							<h2 id="onboarding-title" className="text-2xl font-bold mb-1">{t("onboarding.welcome_title")}</h2>
 							<p className="text-white/60 text-sm">{t("onboarding.welcome_desc")}</p>
 						</div>
 						<div className="grid grid-cols-2 gap-3">
@@ -71,7 +90,7 @@ const OnboardingModal = () => {
 					<div className="space-y-6">
 						<div className="text-center">
 							<p className="text-3xl mb-2">🔗</p>
-							<h2 className="text-2xl font-bold mb-1">{t("onboarding.data_title")}</h2>
+							<h2 id="onboarding-title" className="text-2xl font-bold mb-1">{t("onboarding.data_title")}</h2>
 							<p className="text-white/60 text-sm">{t("onboarding.data_desc")}</p>
 						</div>
 						<div className="space-y-3">
