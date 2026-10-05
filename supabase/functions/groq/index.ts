@@ -54,10 +54,10 @@ serve(async (req) => {
 		});
 
 		if (!res.ok) {
-			const detail = await res.text();
+			console.error(`[groq] Groq ${res.status}:`, (await res.text()).slice(0, 500));
 			// 429(한도 초과)는 그대로 전달 — 클라이언트가 일반 오류와 구분하도록
 			if (res.status === 429) {
-				return new Response(JSON.stringify({ error: `Groq 429: ${detail}` }), {
+				return new Response(JSON.stringify({ error: "Groq 429" }), {
 					status: 429,
 					headers: {
 						...corsHeaders,
@@ -66,7 +66,7 @@ serve(async (req) => {
 					},
 				});
 			}
-			throw new Error(`Groq ${res.status}: ${detail}`);
+			throw new Error(`Groq ${res.status}`);
 		}
 
 		const data = await res.json();

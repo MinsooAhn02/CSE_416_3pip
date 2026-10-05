@@ -82,7 +82,10 @@ const runTavilySearch = async (params: TavilyQuery, apiKey: string): Promise<unk
 		body: JSON.stringify(tavilyBody),
 	});
 
-	if (!res.ok) throw new Error(`Tavily ${res.status}: ${await res.text()}`);
+	if (!res.ok) {
+		console.error(`[tavily] Tavily ${res.status}:`, (await res.text()).slice(0, 500));
+		throw new Error(`Tavily ${res.status}`);
+	}
 	const data = await res.json();
 
 	if (isNews || isSearch) {

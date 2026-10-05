@@ -1506,6 +1506,8 @@ export const useDataStore = create<DataState>()((set, get) => ({
 		if (isGuest()) return; // 새로고침 버튼이 샘플 데이터를 지우지 않게
 		const lang = resolveAppLanguage();
 		const isEn = lang === "en";
+		// await 도중 언어가 바뀌었으면 stale 결과는 store에 쓰지 않는다 (캐시 write는 언어별 키라 허용)
+		const stillCurrent = () => resolveAppLanguage() === lang;
 
 		// 트렌드는 관심사 무관 — 세상에서 실제로 뜨는 것을 보여줌
 		const cacheKey = `trends_full_${lang}`;
@@ -1568,14 +1570,15 @@ export const useDataStore = create<DataState>()((set, get) => ({
 					trends: full.trends,
 					trendsResults: full.results,
 				};
+				if (lang === "ko" && dbCached && shouldBackfillKoreanCache(dbCached.data)) {
+					await writeApiCache(cacheKey, full, userId, dbCached.fetchedAt);
+				}
+				if (!stillCurrent()) return;
 				set({
 					trends: full.trends,
 					trendsResults: full.results,
 					fetchedLanguage: { ...get().fetchedLanguage, trends: lang },
 				});
-				if (lang === "ko" && dbCached && shouldBackfillKoreanCache(dbCached.data)) {
-					await writeApiCache(cacheKey, full, userId, dbCached.fetchedAt);
-				}
 				get().markFetched("trends", dbCached?.fetchedAt);
 				get().setApiStatus("trends", "ok");
 				return;
@@ -1629,17 +1632,19 @@ export const useDataStore = create<DataState>()((set, get) => ({
 					trends: full.trends,
 					trendsResults: full.results,
 				};
+				await writeApiCache(cacheKey, full, userId);
+				if (!stillCurrent()) return;
 				set({
 					trends: full.trends,
 					trendsResults: full.results,
 				});
-				await writeApiCache(cacheKey, full, userId);
 				get().markFetched("trends");
 				get().setApiStatus("trends", "ok");
 				set((s) => ({ fetchedLanguage: { ...s.fetchedLanguage, trends: lang } }));
 				return;
 			}
 
+			if (!stillCurrent()) return;
 			set((s) => ({
 				errors: {
 					...s.errors,
@@ -1651,6 +1656,7 @@ export const useDataStore = create<DataState>()((set, get) => ({
 			get().setApiStatus("trends", "error");
 		} catch (e) {
 			handleApiError(e, "fetchTrends");
+			if (!stillCurrent()) return;
 			set((s) => ({
 				errors: {
 					...s.errors,
@@ -1674,6 +1680,8 @@ export const useDataStore = create<DataState>()((set, get) => ({
 		if (isGuest()) return; // 새로고침 버튼이 샘플 데이터를 지우지 않게
 		const lang = resolveAppLanguage();
 		const isEn = lang === "en";
+		// await 도중 언어가 바뀌었으면 stale 결과는 store에 쓰지 않는다 (캐시 write는 언어별 키라 허용)
+		const stillCurrent = () => resolveAppLanguage() === lang;
 
 		// 관심사 키워드 (상위 5개)
 		const settingsState = useSettingsStore.getState();
@@ -1709,14 +1717,15 @@ export const useDataStore = create<DataState>()((set, get) => ({
 					answer: (dbData?.answer ?? null) as string | null,
 					results: displayResults,
 				};
+				if (lang === "ko" && dbCached && shouldBackfillKoreanCache(dbCached.data)) {
+					await writeApiCache(cacheKey, full, userId, dbCached.fetchedAt);
+				}
+				if (!stillCurrent()) return;
 				set({
 					newsAnswer: full.answer,
 					newsResults: full.results,
 					fetchedLanguage: { ...get().fetchedLanguage, news: lang },
 				});
-				if (lang === "ko" && dbCached && shouldBackfillKoreanCache(dbCached.data)) {
-					await writeApiCache(cacheKey, full, userId, dbCached.fetchedAt);
-				}
 				get().markFetched("news", dbCached?.fetchedAt);
 				get().setApiStatus("news", "ok");
 				return;
@@ -1784,11 +1793,12 @@ export const useDataStore = create<DataState>()((set, get) => ({
 					answer: (localEdgeData?.answer ?? globalEdgeData?.answer ?? null) as string | null,
 					results: finalResults,
 				};
+				await writeApiCache(cacheKey, full, userId);
+				if (!stillCurrent()) return;
 				set({
 					newsAnswer: full.answer,
 					newsResults: full.results,
 				});
-				await writeApiCache(cacheKey, full, userId);
 				get().markFetched("news");
 				get().setApiStatus("news", "ok");
 				set((s) => ({ fetchedLanguage: { ...s.fetchedLanguage, news: lang } }));
@@ -1818,12 +1828,13 @@ export const useDataStore = create<DataState>()((set, get) => ({
 							const trendsResults = translatedExtended.slice(0, 7);
 							const trendsCacheKey = `trends_full_${lang}`;
 							_trendsMemCache[lang] = { trends: derivedTrends, trendsResults };
-							set({ trends: derivedTrends, trendsResults });
 							await writeApiCache(
 								trendsCacheKey,
 								{ trends: derivedTrends, results: trendsResults },
 								userId,
 							);
+							if (!stillCurrent()) return;
+							set({ trends: derivedTrends, trendsResults });
 							get().markFetched("trends");
 							get().setApiStatus("trends", "ok");
 							set((s) => ({
@@ -1843,17 +1854,19 @@ export const useDataStore = create<DataState>()((set, get) => ({
 					answer: (localEdgeData?.answer ?? globalEdgeData?.answer ?? null) as string | null,
 					results: [] as ArticleItem[],
 				};
+				await writeApiCache(cacheKey, full, userId);
+				if (!stillCurrent()) return;
 				set({
 					newsAnswer: full.answer,
 					newsResults: full.results,
 				});
-				await writeApiCache(cacheKey, full, userId);
 				get().markFetched("news");
 				get().setApiStatus("news", "ok");
 				set((s) => ({ fetchedLanguage: { ...s.fetchedLanguage, news: lang } }));
 				return;
 			}
 
+			if (!stillCurrent()) return;
 			set((s) => ({
 				errors: {
 					...s.errors,
@@ -1871,6 +1884,7 @@ export const useDataStore = create<DataState>()((set, get) => ({
 			get().setApiStatus("news", "error");
 		} catch (e) {
 			handleApiError(e, "fetchNews");
+			if (!stillCurrent()) return;
 			set((s) => ({
 				errors: {
 					...s.errors,

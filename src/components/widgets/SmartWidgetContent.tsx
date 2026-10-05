@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 import { useTheme } from "../../hooks/useTheme";
 import { getSmartWidgetCacheKey, useWidgetStore } from "../../store/useWidgetStore";
 import { useFontSize } from "../../hooks/useFontSize";
+import { safeExternalUrl } from "../../utils/url";
 import DragHandle from "../common/DragHandle";
 import { SMART_WIDGET_CATEGORY_OPTIONS } from "../../services/aiService";
 
@@ -421,17 +422,19 @@ const SmartWidgetContent = ({ keyword }: SmartWidgetContentProps) => {
 
 				{items.length > 0 && (
 					<div className={`${tags.length > 0 ? "mt-2" : ""} grid gap-1.5`}>
-						{items.map((item, j) => (
+						{items.map((item, j) => {
+							const safeUrl = safeExternalUrl(item.url);
+							return (
 							<div
 								key={`${item.url || item.title || j}_${j}`}
 								className={`p-2 rounded-xl transition-colors flex gap-2 ${
-									item.url
+									safeUrl
 										? `cursor-pointer ${isDark ? "bg-white/5 hover:bg-white/10" : "bg-gray-50 hover:bg-gray-100"}`
 										: "cursor-default"
 								}`}
 								onClick={() =>
-									item.url &&
-									window.open(item.url, "_blank", "noopener,noreferrer")
+									safeUrl &&
+									window.open(safeUrl, "_blank", "noopener,noreferrer")
 								}
 							>
 								{item.image && (
@@ -454,13 +457,14 @@ const SmartWidgetContent = ({ keyword }: SmartWidgetContentProps) => {
 										</p>
 									)}
 								</div>
-								{item.url && (
+								{safeUrl && (
 									<p className={`text-[11px] shrink-0 self-center ${muted}`}>
 										{t("smart_widget.open")}
 									</p>
 								)}
 							</div>
-						))}
+							);
+						})}
 					</div>
 				)}
 			</div>

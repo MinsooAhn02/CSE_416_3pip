@@ -1,4 +1,4 @@
-import React, { memo, useState } from "react";
+import { memo, useState } from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { Newspaper, RefreshCw, X } from "lucide-react";
@@ -9,6 +9,7 @@ import { useDataStore, type ArticleItem } from "../../store/useDataStore";
 import { useWidgetStore } from "../../store/useWidgetStore";
 import { useFontSize } from "../../hooks/useFontSize";
 import WidgetCard from "../common/WidgetCard";
+import { safeExternalUrl } from "../../utils/url";
 import { cleanContent } from "../../utils/contentUtils";
 
 const MAX_ITEMS = {
@@ -51,11 +52,11 @@ const NewsWidget = () => {
 	const displayItems = allItems.slice(0, maxShow);
 	const hasMore = allItems.length > maxShow;
 
+	// 안전하지 않은 URL이면 href 없는 <a> → 클릭 불가 텍스트로 표시
 	const linkProps = (item: ArticleItem) => ({
-		href: item.url || "#",
+		href: safeExternalUrl(item.url) || undefined,
 		target: "_blank",
 		rel: "noopener noreferrer",
-		onClick: (e: React.MouseEvent) => !item.url && e.preventDefault(),
 	});
 
 	const modalCls = isDark

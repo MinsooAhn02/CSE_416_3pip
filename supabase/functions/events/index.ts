@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { googleErrorSummary } from "../_shared/googleError.ts";
 
 const corsHeaders = {
 	"Access-Control-Allow-Origin": "*",
@@ -296,6 +297,7 @@ const getListRange = (payload: Record<string, unknown>) => {
 	};
 };
 
+
 const googleFetch = async (
 	token: string,
 	path = "",
@@ -315,9 +317,7 @@ const googleFetch = async (
 	});
 
 	if (!response.ok) {
-		throw new Error(
-			`Google Calendar ${response.status}: ${await response.text()}`,
-		);
+		throw new Error(await googleErrorSummary("Google Calendar", response, "events"));
 	}
 
 	if (response.status === 204) {

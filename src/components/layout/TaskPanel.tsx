@@ -356,7 +356,7 @@ const TaskPanel = ({ selectedDate }: TaskPanelProps) => {
 						isDark ? "bg-red-500/10 text-red-400" : "bg-red-50 text-red-600"
 					}`}
 				>
-					<p>{error}</p>
+					<p>{showReconnectGoogle ? t("gsync.auth_expired") : error}</p>
 					{showReconnectGoogle && (
 						<button
 							type="button"

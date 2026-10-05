@@ -611,7 +611,7 @@ const DiaryPanel = ({ selectedDate, onClose, compact = false, skipPinCheck = fal
 												? "text-emerald-400 bg-emerald-500/20"
 												: `${isDark ? "hover:bg-white/10" : "hover:bg-gray-100"} opacity-50 hover:opacity-100`
 										}`}
-										title="Like"
+										title={t("diary_panel.like")}
 									>
 										<ThumbsUp size={13} />
 									</button>
@@ -622,7 +622,7 @@ const DiaryPanel = ({ selectedDate, onClose, compact = false, skipPinCheck = fal
 												? "text-red-400 bg-red-500/20"
 												: `${isDark ? "hover:bg-white/10" : "hover:bg-gray-100"} opacity-50 hover:opacity-100`
 										}`}
-										title="Dislike"
+										title={t("diary_panel.dislike")}
 									>
 										<ThumbsDown size={13} />
 									</button>

@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 import { useTheme } from "../../hooks/useTheme";
 import { useDataStore } from "../../store/useDataStore";
 import { useFontSize } from "../../hooks/useFontSize";
+import { safeExternalUrl } from "../../utils/url";
 import WidgetCard from "../common/WidgetCard";
 
 const MAX_ITEMS = {
@@ -56,10 +57,9 @@ const TrendsWidget = () => {
 					{displayItems.map((item, i) => (
 						<a
 							key={i}
-							href={item.url || "#"}
+							href={safeExternalUrl(item.url) || undefined}
 							target="_blank"
 							rel="noopener noreferrer"
-							onClick={(e) => !item.url && e.preventDefault()}
 							className={`px-3 py-1.5 rounded-lg border transition-colors hover:opacity-80 ${secondaryBgCls} ${borderCls}`}
 							style={bodyStyle}
 						>

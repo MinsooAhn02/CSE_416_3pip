@@ -150,7 +150,7 @@ serve(async (req) => {
 					if (isTwelveError(data)) {
 						const p = data as Record<string, unknown>;
 						console.error(`[stocks] TwelveData error for ${sym}:`, p.code, p.message, p.status);
-						return { symbol: sym, ...ZERO, type: "unknown", currency: "", error: String(p.message ?? "API error") };
+						return { symbol: sym, ...ZERO, type: "unknown", currency: "", error: `Twelve Data ${p.code ?? "error"}` };
 					}
 
 					const p = data as Record<string, unknown>;
@@ -174,7 +174,7 @@ serve(async (req) => {
 				} catch (e: unknown) {
 					const msg = e instanceof Error ? e.message : String(e);
 					console.error(`[stocks] fetch error for ${sym}:`, msg);
-					return { symbol: sym, ...ZERO, type: "unknown", currency: "", error: msg };
+					return { symbol: sym, ...ZERO, type: "unknown", currency: "", error: msg.startsWith("HTTP ") ? msg : "fetch failed" };
 				}
 			}),
 		);
@@ -184,7 +184,8 @@ serve(async (req) => {
 		});
 	} catch (e: unknown) {
 		const msg = e instanceof Error ? e.message : String(e);
-		return new Response(JSON.stringify({ error: msg }), {
+		console.error("[stocks] request error:", msg.slice(0, 500));
+		return new Response(JSON.stringify({ error: msg === "invalid symbols" ? msg : "stocks request failed" }), {
 			status: 400,
 			headers: { ...corsHeaders, "Content-Type": "application/json" },
 		});

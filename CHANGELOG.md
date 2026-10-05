@@ -7,6 +7,14 @@
 
 ## 2026-10-05
 
+### [Fix] Link safety, error handling, midnight rollover, Korean UI (2026-10-05 audit 1–9)
+- Links from search results, AI output and Google (news, trends, briefing, smart widgets, Meet links) open only if they are http/https (`safeExternalUrl` in `src/utils/url.ts`); anything else is shown as plain text. Blocks `javascript:` links.
+- Edge Functions no longer return upstream error bodies: Google errors become `Google <service> <status> [reason]` (`supabase/functions/_shared/googleError.ts`), Groq/Tavily return only the status; details go to the function logs. Removed four unused deployed functions (`gemini`, `kakao-places`, `calendar`, `smart-widget`).
+- Creating/updating/deleting an event no longer reports failure when only the follow-up refresh failed (which led to duplicate events on retry).
+- A late calendar month response or a late news/trends response from the previous language no longer overwrites the current view.
+- Diary saves that fail on the server show an error toast (the text stays on the device).
+- The diary/daily-reset job also runs when the date changes while the tab is open, and retries a day whose diary generation failed instead of skipping it.
+- Korean: login screen, Google sync errors, diary like/dislike and diary search are translated. Smart-widget debug logs are behind `VITE_DEBUG_FLOW`.
 ### [Fix] Smart widget relevance, health widget empty state
 - Smart widgets: an article appears in only one section (the first in display order); "Key info" drops Wikipedia pages for a different sense of the keyword ("Games (film)", "WarGames" for "Games").
 - Health: when Google Fit has no records for today (everything 0), the widget says so instead of showing a 0/10,000 dashboard.

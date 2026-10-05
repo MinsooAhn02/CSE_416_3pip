@@ -6,6 +6,7 @@ import {
 	ChevronRight,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import { useTranslation } from "react-i18next";
 import { useTheme } from "../../hooks/useTheme";
 import { useFontSize } from "../../hooks/useFontSize";
 import { useDiaryStore } from "../../store/useDiaryStore";
@@ -27,6 +28,7 @@ interface DiaryListModalProps {
 }
 
 const DiaryListModal = ({ onClose }: DiaryListModalProps) => {
+	const { t } = useTranslation();
 	const { isDark, cardCls, inputCls, hoverCls, secondaryBgCls, borderCls } =
 		useTheme();
 	const { body: bodyStyle } = useFontSize();
@@ -231,7 +233,7 @@ const DiaryListModal = ({ onClose }: DiaryListModalProps) => {
 										/>
 										<input
 											type="text"
-											placeholder="Search by date or content..."
+											placeholder={t("diary_panel.list_search_placeholder")}
 											value={searchQuery}
 											onChange={(e) => setSearchQuery(e.target.value)}
 											className={`w-full pl-9 pr-3 py-2 rounded-lg text-sm outline-none border transition-all focus:ring-2 focus:ring-blue-500/30 ${inputCls}`}

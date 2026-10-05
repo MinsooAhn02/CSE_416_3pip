@@ -6,6 +6,8 @@ import { load, save } from "../utils/storage";
 import { formatLocalDate, pad2 } from "../utils/date";
 import { buildEventRecurrence, parseEventRepeat, EventRepeat } from "../utils/eventRepeat";
 import { useAuthStore } from "./useAuthStore";
+import i18n from "../l10n/i18n";
+import { handleApiError } from "../utils/errorHandler";
 
 const EDGE_TIMEOUT_MS = 25000;
 const LOCAL_EVENTS_KEY = "mb_calendar_events";
@@ -13,6 +15,7 @@ const LOCAL_TASKS_KEY = "mb_google_tasks";
 const TASK_LIST_FILTER_KEY = "mb_task_list_filter";
 const TASK_META_OPEN = "[MB_META]";
 const TASK_META_CLOSE = "[/MB_META]";
+// 내부 판별용 sentinel (error 상태와 === 비교됨). 화면에는 t("gsync.auth_expired")로 번역해 표시한다.
 export const GOOGLE_SYNC_AUTH_ERROR =
 	"Google connection expired. Reconnect Google to sync Events and Tasks again.";
 export const ALL_TASK_LIST_FILTER_ID = "@all";
@@ -533,6 +536,18 @@ const invokeGoogleWithAuth = async (
 	}
 };
 
+// 쓰기 성공 후 재조회 실패는 쓰기 실패로 취급하지 않는다 (중복 생성 방지)
+const refetchAfterWrite = async (run: () => Promise<unknown>): Promise<void> => {
+	try {
+		await run();
+	} catch (e) {
+		handleApiError(e, "edge:events-refetch");
+	}
+};
+
+// 월 이동 시 늦게 도착한 이전 응답이 최신 상태를 덮어쓰지 않도록 요청 번호를 둔다.
+let eventsRunSeq = 0;
+
 const eventMatchesMonth = (event: CalendarEvent, monthKey: string): boolean => {
 	if (!monthKey) return true;
 	return String(event?.date || "").slice(0, 7) === monthKey;
@@ -586,6 +601,8 @@ export const useGoogleCalendarStore = create<GoogleCalendarState>()((set, get) =
 			options;
 		const { monthKey, timeMin, timeMax } = getMonthWindow(`${date}T00:00:00`);
 		return dedupe(`events|${timeMin}|${timeMax}|${force}|${skipLoading}`, async () => {
+			const runId = ++eventsRunSeq;
+			const isLatest = () => runId === eventsRunSeq;
 
 			if (!skipLoading) {
 				if (!force && get().loadedMonthKey === monthKey && get().events.length > 0) {
@@ -623,22 +640,26 @@ export const useGoogleCalendarStore = create<GoogleCalendarState>()((set, get) =
 				const events = Array.isArray(data)
 					? (data as unknown[]).map((e) => normalizeEvent(e as Record<string, unknown>))
 					: [];
-				set({ events, loadedMonthKey: monthKey, error: null });
-				writeLocalEvents(events);
+				if (isLatest()) {
+					set({ events, loadedMonthKey: monthKey, error: null });
+					writeLocalEvents(events);
+				}
 				return events;
 			} catch (err) {
 				const message = getGoogleSyncErrorMessage(
 					err,
-					"Failed to load calendar events.",
+					i18n.t("gsync.load_events_failed"),
 				);
 				const cachedEvents = (readLocalEvents() as unknown[])
 					.map((e) => normalizeEvent(e as Record<string, unknown>))
 					.filter((event) => eventMatchesMonth(event, monthKey));
-				set({
-					events: cachedEvents,
-					loadedMonthKey: monthKey,
-					error: message,
-				});
+				if (isLatest()) {
+					set({
+						events: cachedEvents,
+						loadedMonthKey: monthKey,
+						error: message,
+					});
+				}
 				throw err;
 			} finally {
 				if (!skipLoading) {
@@ -708,7 +729,7 @@ export const useGoogleCalendarStore = create<GoogleCalendarState>()((set, get) =
 			} catch (err) {
 				const message = getGoogleSyncErrorMessage(
 					err,
-					"Failed to load Google Tasks.",
+					i18n.t("gsync.load_tasks_failed"),
 				);
 				const cachedTasks = (readLocalTasks() as unknown[]).map(normalizeTask);
 				set({ tasks: cachedTasks, tasksLoaded: true, error: message });
@@ -821,7 +842,7 @@ export const useGoogleCalendarStore = create<GoogleCalendarState>()((set, get) =
 			return created;
 		} catch (err) {
 			set({
-				error: getGoogleSyncErrorMessage(err, "Failed to create task list."),
+				error: getGoogleSyncErrorMessage(err, i18n.t("gsync.create_tasklist_failed")),
 			});
 			throw err;
 		} finally {
@@ -845,7 +866,7 @@ export const useGoogleCalendarStore = create<GoogleCalendarState>()((set, get) =
 			]);
 			return { events, tasks };
 		} catch (err) {
-			set({ error: (err as { message?: string })?.message || "Failed to load calendar data." });
+			set({ error: (err as { message?: string })?.message || i18n.t("gsync.load_calendar_failed") });
 			throw err;
 		} finally {
 			set({ loading: false });
@@ -873,7 +894,7 @@ export const useGoogleCalendarStore = create<GoogleCalendarState>()((set, get) =
 			return data ? normalizeEvent(data as Record<string, unknown>) : null;
 		} catch (err) {
 			set({
-				error: getGoogleSyncErrorMessage(err, "Failed to load event details."),
+				error: getGoogleSyncErrorMessage(err, i18n.t("gsync.load_event_details_failed")),
 			});
 			throw err;
 		}
@@ -899,11 +920,9 @@ export const useGoogleCalendarStore = create<GoogleCalendarState>()((set, get) =
 					timeZone: getLocalTimeZone(),
 				}, token);
 				created = normalizeEvent(data as Record<string, unknown>);
-				await get().fetchEvents({
-					date: normalizedEvent.date || get().selectedDate || formatLocalDate(),
-					force: true,
-					skipLoading: true,
-				});
+				await refetchAfterWrite(() =>
+					get().fetchEvents({ date: normalizedEvent.date || get().selectedDate || formatLocalDate(), force: true, skipLoading: true }),
+				);
 			} else {
 				created = {
 					...normalizedEvent,
@@ -936,7 +955,7 @@ export const useGoogleCalendarStore = create<GoogleCalendarState>()((set, get) =
 			return created;
 		} catch (err) {
 			set({
-				error: getGoogleSyncErrorMessage(err, "Failed to create event."),
+				error: getGoogleSyncErrorMessage(err, i18n.t("gsync.create_event_failed")),
 			});
 			throw err;
 		} finally {
@@ -975,11 +994,9 @@ export const useGoogleCalendarStore = create<GoogleCalendarState>()((set, get) =
 					timeZone: getLocalTimeZone(),
 				}, token);
 				updated = normalizeEvent(data as Record<string, unknown>);
-				await get().fetchEvents({
-					date: merged.date || get().selectedDate || formatLocalDate(),
-					force: true,
-					skipLoading: true,
-				});
+				await refetchAfterWrite(() =>
+					get().fetchEvents({ date: merged.date || get().selectedDate || formatLocalDate(), force: true, skipLoading: true }),
+				);
 			}
 
 			if (!supabase) {
@@ -997,7 +1014,7 @@ export const useGoogleCalendarStore = create<GoogleCalendarState>()((set, get) =
 			return updated;
 		} catch (err) {
 			set({
-				error: getGoogleSyncErrorMessage(err, "Failed to update event."),
+				error: getGoogleSyncErrorMessage(err, i18n.t("gsync.update_event_failed")),
 			});
 			throw err;
 		} finally {
@@ -1016,11 +1033,9 @@ export const useGoogleCalendarStore = create<GoogleCalendarState>()((set, get) =
 					action: "delete",
 					eventId,
 				}, token);
-				await get().fetchEvents({
-					date: current?.date || get().selectedDate || formatLocalDate(),
-					force: true,
-					skipLoading: true,
-				});
+				await refetchAfterWrite(() =>
+					get().fetchEvents({ date: current?.date || get().selectedDate || formatLocalDate(), force: true, skipLoading: true }),
+				);
 			}
 
 			if (!supabase) {
@@ -1034,7 +1049,7 @@ export const useGoogleCalendarStore = create<GoogleCalendarState>()((set, get) =
 			}
 		} catch (err) {
 			set({
-				error: getGoogleSyncErrorMessage(err, "Failed to delete event."),
+				error: getGoogleSyncErrorMessage(err, i18n.t("gsync.delete_event_failed")),
 			});
 			throw err;
 		} finally {
@@ -1097,7 +1112,7 @@ export const useGoogleCalendarStore = create<GoogleCalendarState>()((set, get) =
 			return created;
 		} catch (err) {
 			set({
-				error: getGoogleSyncErrorMessage(err, "Failed to create task."),
+				error: getGoogleSyncErrorMessage(err, i18n.t("gsync.create_task_failed")),
 			});
 			throw err;
 		} finally {
@@ -1182,7 +1197,7 @@ export const useGoogleCalendarStore = create<GoogleCalendarState>()((set, get) =
 			return updated;
 		} catch (err) {
 			set({
-				error: getGoogleSyncErrorMessage(err, "Failed to update task."),
+				error: getGoogleSyncErrorMessage(err, i18n.t("gsync.update_task_failed")),
 			});
 			throw err;
 		} finally {
@@ -1214,7 +1229,7 @@ export const useGoogleCalendarStore = create<GoogleCalendarState>()((set, get) =
 			}));
 		} catch (err) {
 			set({
-				error: getGoogleSyncErrorMessage(err, "Failed to delete task."),
+				error: getGoogleSyncErrorMessage(err, i18n.t("gsync.delete_task_failed")),
 			});
 			throw err;
 		} finally {

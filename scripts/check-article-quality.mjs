@@ -56,4 +56,16 @@ assert.equal(cleanSnippet("World + Africa + Americas + Asia + Australia + China 
 assert.equal(cleanSnippet("Shares rose 2% as A + B testing results came in"), "Shares rose 2% as A + B testing results came in");
 assert.equal(cleanSnippet(""), "");
 
+// 외부 링크 검사 (javascript: 등 차단)
+const { safeExternalUrl } = await import("../src/utils/url.ts");
+assert.equal(safeExternalUrl("https://apnews.com/article/x"), "https://apnews.com/article/x");
+assert.equal(safeExternalUrl("http://example.com"), "http://example.com");
+assert.equal(safeExternalUrl("javascript:alert(1)"), "");
+assert.equal(safeExternalUrl(" JavaScript:alert(1)"), "");
+assert.equal(safeExternalUrl("java\tscript:alert(1)"), "");
+assert.equal(safeExternalUrl("data:text/html,<script>alert(1)</script>"), "");
+assert.equal(safeExternalUrl("/relative/path"), "");
+assert.equal(safeExternalUrl(""), "");
+assert.equal(safeExternalUrl(null), "");
+
 console.log("article quality checks: OK");

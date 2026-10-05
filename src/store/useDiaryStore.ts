@@ -1,4 +1,7 @@
 import { create } from "zustand";
+import toast from "react-hot-toast";
+import i18n from "../l10n/i18n";
+import { handleApiError } from "../utils/errorHandler";
 import { load, save } from "../utils/storage";
 import { supabase, getSessionUser } from "../lib/supabase";
 import { rewriteDiaryWithFeedback } from "../services/aiService";
@@ -400,7 +403,8 @@ export const useDiaryStore = create<DiaryState>()((set, get) => ({
 				{ onConflict: "user_id,date" },
 			).throwOnError(); // 실패 시 catch로 — 조용한 실패 방지
 		} catch (error) {
-			console.warn("Generated diary save to DB failed:", (error as Error)?.message);
+			handleApiError(error, "diary:generated_save");
+			toast.error(i18n.t("toast.diary_save_failed"), { id: "diary-save", duration: 5000 });
 		}
 	},
 
@@ -440,7 +444,8 @@ export const useDiaryStore = create<DiaryState>()((set, get) => ({
 				{ onConflict: "user_id,date" },
 			).throwOnError(); // 실패 시 catch로 — 조용한 실패 방지
 		} catch (error) {
-			console.warn("Diary edit save to DB failed:", (error as Error)?.message);
+			handleApiError(error, "diary:edit_save");
+			toast.error(i18n.t("toast.diary_save_failed"), { id: "diary-save", duration: 5000 });
 		}
 	},
 
@@ -477,7 +482,8 @@ export const useDiaryStore = create<DiaryState>()((set, get) => ({
 				{ onConflict: "user_id,date" },
 			).throwOnError(); // 실패 시 catch로 — 조용한 실패 방지
 		} catch (error) {
-			console.warn("Diary revert failed:", (error as Error)?.message);
+			handleApiError(error, "diary:revert");
+			toast.error(i18n.t("toast.diary_save_failed"), { id: "diary-save", duration: 5000 });
 		}
 	},
 
@@ -511,7 +517,8 @@ export const useDiaryStore = create<DiaryState>()((set, get) => ({
 				{ onConflict: "user_id,date" },
 			).throwOnError(); // 실패 시 catch로 — 조용한 실패 방지
 		} catch (error) {
-			console.warn("Memo save to DB failed:", (error as Error)?.message);
+			handleApiError(error, "diary:notes_save");
+			toast.error(i18n.t("toast.diary_save_failed"), { id: "diary-save", duration: 5000 });
 		}
 	},
 
@@ -601,7 +608,8 @@ export const useDiaryStore = create<DiaryState>()((set, get) => ({
 				{ onConflict: "user_id,date" },
 			).throwOnError(); // 실패 시 catch로 — 조용한 실패 방지
 		} catch (e) {
-			console.warn("Confirm rewrite DB sync failed:", (e as Error)?.message);
+			handleApiError(e, "diary:rewrite_confirm");
+			toast.error(i18n.t("toast.diary_save_failed"), { id: "diary-save", duration: 5000 });
 		}
 	},
 

@@ -45,6 +45,7 @@ import ConfirmDialog from "../common/ConfirmDialog";
 import GooglePlacesLocationField from "../common/GooglePlacesLocationField";
 import TimeInput from "../common/TimeInput";
 import i18n from "../../l10n/i18n";
+import { safeExternalUrl } from "../../utils/url";
 
 const EMPTY_FORM = {
 	title: "",
@@ -573,7 +574,9 @@ const EventPanel = ({ selectedDate, onClose }: EventPanelProps) => {
 			}
 		} catch (err) {
 			console.error("[gcal] save event failed:", err);
-			const errMessage = (err as { message?: string })?.message;
+			const errMessage = (err as { message?: string })?.message === GOOGLE_SYNC_AUTH_ERROR
+				? t("gsync.auth_expired")
+				: (err as { message?: string })?.message;
 			toast.error(
 				errMessage
 					? `${t("toast.event_save_failed")}: ${errMessage}`
@@ -868,7 +871,7 @@ const EventPanel = ({ selectedDate, onClose }: EventPanelProps) => {
 				<div
 					className={`p-3 rounded-lg text-xs space-y-2 ${isDark ? "bg-red-500/10 text-red-400" : "bg-red-50 text-red-600"}`}
 				>
-					<p>{error}</p>
+					<p>{showReconnectGoogle ? t("gsync.auth_expired") : error}</p>
 					{showReconnectGoogle && (
 						<button
 							type="button"
@@ -1693,11 +1696,11 @@ const EventPanel = ({ selectedDate, onClose }: EventPanelProps) => {
 										>
 											{t("events.google_meet")}
 										</p>
-										{selectedEventForDetail.meetLink ? (
+										{safeExternalUrl(selectedEventForDetail.meetLink) ? (
 											<div className="space-y-1.5">
 												<div className="flex items-start justify-between gap-3">
 													<a
-														href={selectedEventForDetail.meetLink}
+														href={safeExternalUrl(selectedEventForDetail.meetLink)}
 														target="_blank"
 														rel="noreferrer"
 														className={isDark ? "text-blue-300 underline" : "text-blue-600 underline"}

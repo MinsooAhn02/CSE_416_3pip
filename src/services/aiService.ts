@@ -2775,8 +2775,8 @@ const formatSmartItems = (results: SmartResult[], isKo: boolean, section: SmartS
 		smartResultTitleMatchesSectionKeyword(r, section),
 	);
 	if (isKo && isArticleSmartSection(section)) {
-		console.log(`[smart-fmt] ranked=${ranked.length} eligible=${eligibleRanked.length} titleMatches=${titleKeywordMatches.length}`);
-		console.log(`[smart-fmt] eligibleTitles=`, eligibleRanked.map(r => r?.title?.slice(0, 50)));
+		if (DEBUG_FLOW) console.log(`[smart-fmt] ranked=${ranked.length} eligible=${eligibleRanked.length} titleMatches=${titleKeywordMatches.length}`);
+		if (DEBUG_FLOW) console.log(`[smart-fmt] eligibleTitles=`, eligibleRanked.map(r => r?.title?.slice(0, 50)));
 	}
 	const requiredKeywordMatches = eligibleRanked.filter((r) =>
 		smartResultMatchesRequiredSectionKeyword(r, section, isKo),
@@ -3000,7 +3000,7 @@ const searchSmartSectionsBatched = async (sections: SmartSectionPlan[], isKo: bo
 
 	const batchData = await invokeFunction("tavily", { queries: primaryQueries });
 	const primaryBatch = Array.isArray(batchData?.batch) ? batchData.batch as Record<string, unknown>[] : null;
-	console.log(`[smart-batch] batchNull=${primaryBatch === null} batchLen=${primaryBatch?.length}`);
+	if (DEBUG_FLOW) console.log(`[smart-batch] batchNull=${primaryBatch === null} batchLen=${primaryBatch?.length}`);
 
 	// 2단계: 결과 처리 + retry가 필요한 섹션 수집
 	const rawResultsPerSection: SmartResult[][] = sections.map((section, i) => {
@@ -3008,8 +3008,8 @@ const searchSmartSectionsBatched = async (sections: SmartSectionPlan[], isKo: bo
 		const results = ((batchItem?.results as SmartResult[] | undefined) ?? []).filter((r) => !isBlockedSmartUrl(r?.url ?? ""));
 		const p = params[i];
 		if (isKo && isArticleSmartSection(section) && p.isKoArticle) {
-			console.log(`[smart-ko-article] section=${section.type} keyword="${section.keyword}" includeDomains=${JSON.stringify(p.includeDomains?.slice(0,3))} count=${results.length}`);
-			console.log(`[smart-ko-article] titles=`, results.map(r => r?.title?.slice(0, 60)));
+			if (DEBUG_FLOW) console.log(`[smart-ko-article] section=${section.type} keyword="${section.keyword}" includeDomains=${JSON.stringify(p.includeDomains?.slice(0,3))} count=${results.length}`);
+			if (DEBUG_FLOW) console.log(`[smart-ko-article] titles=`, results.map(r => r?.title?.slice(0, 60)));
 		}
 		return results;
 	});

@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { googleErrorSummary } from "../_shared/googleError.ts";
 
 const corsHeaders = {
 	"Access-Control-Allow-Origin": "*",
@@ -26,6 +27,7 @@ const taskPath = (taskListId = DEFAULT_TASKLIST_ID, taskId = "") => {
 	return `/lists/${encodedListId}/tasks${encodedTaskId}`;
 };
 
+
 const googleFetch = async (
 	token: string,
 	path: string,
@@ -41,7 +43,7 @@ const googleFetch = async (
 	});
 
 	if (!response.ok) {
-		throw new Error(`Google Tasks ${response.status}: ${await response.text()}`);
+		throw new Error(await googleErrorSummary("Google Tasks", response, "tasks"));
 	}
 
 	if (response.status === 204) {

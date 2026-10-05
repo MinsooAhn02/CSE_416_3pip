@@ -18,46 +18,14 @@ import { supabase } from "../../lib/supabase";
 const FloatingLines = lazy(() => import("../common/FloatingLines"));
 
 const FEATURES = [
-	{
-		icon: Sparkles,
-		title: "AI Briefing",
-		desc: "A short, narrated summary of your morning — schedule, weather, news, and more in one read.",
-	},
-	{
-		icon: CloudSun,
-		title: "Weather",
-		desc: "Current conditions, humidity, precipitation, and air quality. Toggle between °C and °F.",
-	},
-	{
-		icon: TrendingUp,
-		title: "Stocks",
-		desc: "Major indices at a glance plus any tickers you add yourself.",
-	},
-	{
-		icon: Newspaper,
-		title: "News & Trends",
-		desc: "Personalized headlines based on your interests, alongside real-time trending topics.",
-	},
-	{
-		icon: Calendar,
-		title: "Calendar & Tasks",
-		desc: "Today's events and to-dos. Connect Google Calendar to sync automatically.",
-	},
-	{
-		icon: HeartPulse,
-		title: "Health",
-		desc: "Steps, sleep, and calories. Connect Google Fit to see your real activity.",
-	},
-	{
-		icon: BookOpen,
-		title: "Diary & Q&A",
-		desc: "A daily question and a private, PIN-protected diary that the AI can help you write.",
-	},
-	{
-		icon: LayoutGrid,
-		title: "Smart Widgets",
-		desc: "Add any keyword — a brand, hobby, or person — and get a widget that tracks it for you.",
-	},
+	{ icon: Sparkles, title: "login_screen.f_briefing_t", desc: "login_screen.f_briefing_d" },
+	{ icon: CloudSun, title: "login_screen.f_weather_t", desc: "login_screen.f_weather_d" },
+	{ icon: TrendingUp, title: "login_screen.f_stocks_t", desc: "login_screen.f_stocks_d" },
+	{ icon: Newspaper, title: "login_screen.f_news_t", desc: "login_screen.f_news_d" },
+	{ icon: Calendar, title: "login_screen.f_calendar_t", desc: "login_screen.f_calendar_d" },
+	{ icon: HeartPulse, title: "login_screen.f_health_t", desc: "login_screen.f_health_d" },
+	{ icon: BookOpen, title: "login_screen.f_diary_t", desc: "login_screen.f_diary_d" },
+	{ icon: LayoutGrid, title: "login_screen.f_smart_t", desc: "login_screen.f_smart_d" },
 ];
 
 const LoginScreen = () => {
@@ -150,7 +118,7 @@ const LoginScreen = () => {
 
 					{/* Scroll-down affordance pointing to the instructions */}
 					<div className="absolute bottom-8 flex flex-col items-center gap-1 text-white/40 animate-bounce">
-						<span className="text-xs">New here? Learn how it works</span>
+						<span className="text-xs">{t("login_screen.scroll_hint")}</span>
 						<ChevronDown className="w-5 h-5" />
 					</div>
 				</section>
@@ -160,51 +128,29 @@ const LoginScreen = () => {
 					{/* 1) What is it */}
 					<section className="bg-white/5 backdrop-blur-sm border border-white/10 rounded-2xl p-6">
 						<h2 className="text-2xl font-bold mb-3">
-							What is Morning<span className="text-blue-400">Briefing</span>.AI?
+							{t("login_screen.what_is_title_pre")}<span className="text-blue-400">{t("login_screen.what_is_title_mid")}</span>{t("login_screen.what_is_title_post")}
 						</h2>
 						<p className="text-white/70 leading-relaxed">
-							MorningBriefing.AI is a personal dashboard that gathers your day —
-							weather, stocks, news, trends, calendar, health, and a private diary —
-							into a single screen and an AI-written morning briefing tailored to
-							your interests. Instead of checking a dozen apps, you open one tab and
-							see what actually matters to you.
+							{t("login_screen.what_is_p1")}
 						</p>
 						<p className="text-white/70 leading-relaxed mt-3">
-							It works as both a web app and a Chrome new-tab extension, so your
-							briefing can greet you every time you open your browser.
+							{t("login_screen.what_is_p2")}
 						</p>
 					</section>
 
 					{/* 2) How to get started */}
 					<section className="bg-white/5 backdrop-blur-sm border border-white/10 rounded-2xl p-6">
-						<h2 className="text-2xl font-bold mb-4">How to get started</h2>
+						<h2 className="text-2xl font-bold mb-4">{t("login_screen.start_title")}</h2>
 						<ol className="space-y-4">
-							{[
-								{
-									h: "Sign in with Google",
-									d: "Click “Continue with Google” above. Your account keeps your settings and data private to you.",
-								},
-								{
-									h: "Choose your interests",
-									d: "A quick onboarding lets you pick interest categories and a briefing tone so your content feels personal from day one.",
-								},
-								{
-									h: "Connect Google (optional)",
-									d: "Allow Google Calendar and Fitness access to power the schedule and health widgets. You can skip this and add it later.",
-								},
-								{
-									h: "Explore your dashboard",
-									d: "Your personalized dashboard appears. Read the AI briefing, then browse the weather, news, stocks, and other widgets.",
-								},
-							].map((step, i) => (
+							{[1, 2, 3, 4].map((step, i) => (
 								<li key={i} className="flex gap-4">
 									<span className="flex-shrink-0 w-8 h-8 rounded-full bg-blue-500/20 border border-blue-400/30 flex items-center justify-center font-bold text-blue-300">
 										{i + 1}
 									</span>
 									<div>
-										<h3 className="font-semibold">{step.h}</h3>
+										<h3 className="font-semibold">{t(`login_screen.step${step}_h`)}</h3>
 										<p className="text-white/60 text-sm leading-relaxed">
-											{step.d}
+											{t(`login_screen.step${step}_d`)}
 										</p>
 									</div>
 								</li>
@@ -214,7 +160,7 @@ const LoginScreen = () => {
 
 					{/* 3) Feature overview */}
 					<section className="bg-white/5 backdrop-blur-sm border border-white/10 rounded-2xl p-6">
-						<h2 className="text-2xl font-bold mb-4">What you'll see</h2>
+						<h2 className="text-2xl font-bold mb-4">{t("login_screen.see_title")}</h2>
 						<div className="grid sm:grid-cols-2 gap-4">
 							{FEATURES.map(({ icon: Icon, title, desc }) => (
 								<div
@@ -223,9 +169,9 @@ const LoginScreen = () => {
 								>
 									<Icon className="w-6 h-6 flex-shrink-0 text-blue-300 mt-0.5" />
 									<div>
-										<h3 className="font-semibold">{title}</h3>
+										<h3 className="font-semibold">{t(title)}</h3>
 										<p className="text-white/60 text-sm leading-relaxed">
-											{desc}
+											{t(desc)}
 										</p>
 									</div>
 								</div>
@@ -235,20 +181,13 @@ const LoginScreen = () => {
 
 					{/* 4) Make it yours */}
 					<section className="bg-white/5 backdrop-blur-sm border border-white/10 rounded-2xl p-6">
-						<h2 className="text-2xl font-bold mb-4">Make it yours</h2>
+						<h2 className="text-2xl font-bold mb-4">{t("login_screen.yours_title")}</h2>
 						<ul className="space-y-2 text-white/70 list-disc list-inside leading-relaxed">
-							<li>Drag and drop widgets to rearrange your layout.</li>
-							<li>Refresh any widget on its own with its refresh icon.</li>
-							<li>
-								Open Settings to change theme, clock style, temperature units,
-								stock tickers, and your diary PIN.
-							</li>
-							<li>
-								Add Smart Widgets for any keyword you want to keep an eye on.
-							</li>
-							<li>
-								Switch between English and Korean any time from the top bar.
-							</li>
+							<li>{t("login_screen.yours_1")}</li>
+							<li>{t("login_screen.yours_2")}</li>
+							<li>{t("login_screen.yours_3")}</li>
+							<li>{t("login_screen.yours_4")}</li>
+							<li>{t("login_screen.yours_5")}</li>
 						</ul>
 					</section>
 
@@ -258,31 +197,25 @@ const LoginScreen = () => {
 							<ShieldAlert className="w-6 h-6 flex-shrink-0 text-amber-300 mt-0.5" />
 							<div>
 								<h2 className="text-xl font-bold mb-2">
-									First sign-in: a Google notice you can safely pass
+									{t("login_screen.notice_title")}
 								</h2>
 								<p className="text-white/70 leading-relaxed text-sm">
-									This is a student project that hasn't gone through Google's app
-									verification, so on your first sign-in Google shows a{" "}
-									<span className="font-semibold">
-										&ldquo;Google hasn&rsquo;t verified this app&rdquo;
-									</span>{" "}
-									warning. This is expected.
+									{t("login_screen.notice_p1_pre")}
+									<span className="font-semibold">{t("login_screen.notice_warning")}</span>
+									{t("login_screen.notice_p1_post")}
 								</p>
 								<p className="text-white/70 leading-relaxed text-sm mt-2">
-									To continue, click{" "}
-									<span className="font-semibold">Advanced</span> &rarr;{" "}
-									<span className="font-semibold">
-										Continue to MorningBriefing.AI (unsafe)
-									</span>
-									. It's a standard policy gate for unverified apps, not a sign of
-									any problem with the app or your account.
+									{t("login_screen.notice_p2_pre")}
+									<span className="font-semibold">{t("login_screen.notice_advanced")}</span> &rarr;{" "}
+									<span className="font-semibold">{t("login_screen.notice_continue")}</span>
+									{t("login_screen.notice_p2_post")}
 								</p>
 							</div>
 						</div>
 					</section>
 
 					<footer className="text-center text-white/30 text-xs pt-2">
-						MorningBriefing.AI · Built with React, Vite &amp; Supabase
+						{t("login_screen.footer")}
 					</footer>
 				</div>
 			</div>

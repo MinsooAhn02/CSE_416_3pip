@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { useTheme } from "../../hooks/useTheme";
 import { useFontSize } from "../../hooks/useFontSize";
 import type { BriefingSection, SmartSectionLineOrString } from "../../types";
+import { safeExternalUrl } from "../../utils/url";
 
 // ── Sub-types ────────────────────────────────────────────────────────────────
 
@@ -125,10 +126,10 @@ const BriefingSectionsView = ({
 																			</span>
 																		)}
 																		<a
-																			href={line.url}
+																			href={safeExternalUrl(line.url) || undefined}
 																			target="_blank"
 																			rel="noopener noreferrer"
-																			className={`font-medium underline underline-offset-2 ${isDark ? "text-blue-300 hover:text-blue-200" : "text-blue-700 hover:text-blue-900"}`}
+																			className={`font-medium ${safeExternalUrl(line.url) ? "underline underline-offset-2" : ""} ${isDark ? "text-blue-300 hover:text-blue-200" : "text-blue-700 hover:text-blue-900"}`}
 																			style={modalBodyFontStyle}
 																			onClick={(e: React.MouseEvent) => e.stopPropagation()}
 																		>

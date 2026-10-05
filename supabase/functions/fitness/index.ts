@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { googleErrorSummary } from "../_shared/googleError.ts";
 
 const corsHeaders = {
 	"Access-Control-Allow-Origin": "*",
@@ -12,6 +13,7 @@ const json = (body: unknown, init: ResponseInit = {}) =>
 		...init,
 		headers: { ...corsHeaders, "Content-Type": "application/json", ...(init.headers || {}) },
 	});
+
 
 serve(async (req) => {
 	if (req.method === "OPTIONS")
@@ -67,8 +69,7 @@ serve(async (req) => {
 		);
 
 		if (!res.ok) {
-			const errText = await res.text();
-			const error = new Error(`Google Fit ${res.status}: ${errText}`);
+			const error = new Error(await googleErrorSummary("Google Fit", res, "fitness"));
 			// @ts-ignore propagate upstream status for clearer client errors
 			error.status = res.status;
 			throw error;
