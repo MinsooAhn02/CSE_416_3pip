@@ -54,7 +54,13 @@ serve(async (req) => {
 		});
 
 		if (!res.ok) {
-			console.error(`[groq] Groq ${res.status}:`, (await res.text()).slice(0, 500));
+			// 본문은 사용자 내용을 echo할 수 있어 로그에 남기지 않음 — 상태 코드와 고정 토큰(type/code)만
+			let tag = "";
+			try {
+				const e = (await res.json())?.error;
+				tag = [e?.type, e?.code].filter((v) => typeof v === "string" && /^[A-Za-z_]{1,40}$/.test(v)).join("/");
+			} catch { /* ignore */ }
+			console.error(`[groq] Groq ${res.status}${tag ? ` ${tag}` : ""}`);
 			// 429(한도 초과)는 그대로 전달 — 클라이언트가 일반 오류와 구분하도록
 			if (res.status === 429) {
 				return new Response(JSON.stringify({ error: "Groq 429" }), {

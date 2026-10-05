@@ -65,6 +65,12 @@ export const toCacheRowId = (userId: string, cacheKey: string): string => {
 	return `h:${userId.slice(0, 8)}:${shortHash(raw)}`;
 };
 
+/**
+ * 캘린더·건강 데이터는 개인 정보라 서버(api_cache)에 저장하지 않고 이 기기의 localStorage(mb_cache_*)에만 캐시한다.
+ * 키 목록: calendar_today, calendar_<date>, health_default (모두 u:<uuid>: 접두 포함 64자 이하 → h: 해시 id 불가).
+ */
+const isPrivateKey = (cacheKey: string): boolean => /^(calendar|health)_/.test(cacheKey);
+
 export interface ApiCacheResult {
 	data: unknown;
 	fetchedAt: number;
@@ -82,6 +88,12 @@ export const readApiCache = async (
 	forceRefresh = false,
 ): Promise<ApiCacheResult | null> => {
 	if (forceRefresh) return null;
+	if (isPrivateKey(cacheKey)) {
+		const at = Number(load(`mb_cache_api_${cacheKey}_at`, 0));
+		const data = load<unknown>(`mb_cache_api_${cacheKey}`, null);
+		if (!data || !at || Date.now() - at > CACHE_THRESHOLD_MS) return null;
+		return { data, fetchedAt: at };
+	}
 	if (!supabase) return null;
 	const userId = userIdArg ?? (await getUserId());
 	if (!userId) return null;
@@ -169,6 +181,11 @@ export const writeApiCache = async (
 	userIdArg: string | null | undefined,
 	fetchedAtArg: number | null = null,
 ): Promise<void> => {
+	if (isPrivateKey(cacheKey)) {
+		save(`mb_cache_api_${cacheKey}`, payload);
+		save(`mb_cache_api_${cacheKey}_at`, fetchedAtArg ?? Date.now());
+		return;
+	}
 	if (!supabase) return;
 	const userId = userIdArg ?? (await getUserId());
 	if (!userId) return;

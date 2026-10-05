@@ -19,12 +19,14 @@ import {
 	type DiaryEncryptionConfig,
 } from "../lib/diaryCrypto";
 import { rewriteDiaryWithFeedback } from "../services/aiService";
+import { isEncryptedBlob, openText, sealText, setDiaryKeyState } from "../lib/diaryKeyState";
 import { formatLocalDate, parseDateString } from "../utils/date";
 import {
 	DEFAULT_PIN_LOCK_MODE,
 	getPinLockTimeoutMs,
 	useSettingsStore,
 } from "./useSettingsStore";
+import { useBriefingHistoryStore } from "./useBriefingHistoryStore";
 
 const STORAGE_KEY = "mb_diary_entries";
 const ACTIVE_KEY = "mb_last_access_date";
@@ -325,6 +327,66 @@ const upsertRowsInBatches = async (userId: string, rows: Record<string, unknown>
 	}
 };
 
+const PAGE = 500;
+
+/** 한 테이블의 사용자 행 전체(id + 지정 컬럼)를 페이지 단위로 읽음 */
+const fetchAllRows = async <T extends { id: string }>(table: string, columns: string, userId: string): Promise<T[]> => {
+	if (!supabase) throw new Error("Supabase not available");
+	const all: T[] = [];
+	for (let from = 0; ; from += PAGE) {
+		const { data, error } = await supabase
+			.from(table)
+			.select(`id, ${columns}`)
+			.eq("user_id", userId)
+			.order("id")
+			.range(from, from + PAGE - 1);
+		if (error) throw error;
+		const page = (data ?? []) as unknown as T[];
+		all.push(...page);
+		if (page.length < PAGE) break;
+	}
+	return all;
+};
+
+/** id로 한 행 갱신. UPDATE 정책이 없으면 0행이 조용히 갱신되므로 반환 행 수를 확인해 실패로 처리 */
+const updateRowById = async (table: string, id: string, patch: Record<string, unknown>): Promise<void> => {
+	if (!supabase) throw new Error("Supabase not available");
+	const { data, error } = await supabase.from(table).update(patch).eq("id", id).select("id");
+	if (error) throw error;
+	if (!data || data.length !== 1) throw new Error(`${table}_update_not_applied`);
+};
+
+interface QARow { id: string; question: string; answer: string }
+interface SnapshotRow { id: string; payload: unknown }
+
+/** user_qa·briefing_snapshots 전체 변환. 변환을 전부 끝낸 뒤 쓰기 시작(복호화 실패 시 쓰기 전 중단),
+ *  행 단위로 갱신하므로 중간에 실패해도 각 행은 평문/암호문 어느 쪽이든 읽힘 */
+const migrateQAAndSnapshots = async (userId: string, key: CryptoKey, encrypt: boolean): Promise<void> => {
+	const tx = async (v: string): Promise<string> =>
+		encrypt ? (v && !isEncryptedValue(v) ? encryptText(key, v) : v) : v && isEncryptedValue(v) ? decryptText(key, v) : v;
+
+	const qa = await fetchAllRows<QARow>("user_qa", "question, answer", userId);
+	const qaOut: { id: string; patch: Record<string, unknown> }[] = [];
+	for (const r of qa) {
+		const question = await tx(r.question);
+		const answer = await tx(r.answer);
+		if (question !== r.question || answer !== r.answer) qaOut.push({ id: r.id, patch: { question, answer } });
+	}
+
+	const snaps = await fetchAllRows<SnapshotRow>("briefing_snapshots", "payload", userId);
+	const snapOut: { id: string; patch: Record<string, unknown> }[] = [];
+	for (const r of snaps) {
+		if (encrypt) {
+			if (!isEncryptedBlob(r.payload)) snapOut.push({ id: r.id, patch: { payload: { enc: await encryptText(key, JSON.stringify(r.payload ?? {})) } } });
+		} else if (isEncryptedBlob(r.payload)) {
+			snapOut.push({ id: r.id, patch: { payload: JSON.parse(await decryptText(key, r.payload.enc)) } });
+		}
+	}
+
+	for (const u of qaOut) await updateRowById("user_qa", u.id, u.patch);
+	for (const u of snapOut) await updateRowById("briefing_snapshots", u.id, u.patch);
+};
+
 const writeEncryptionConfig = async (userId: string, config: DiaryEncryptionConfig | null): Promise<void> => {
 	if (!supabase) throw new Error("Supabase not available");
 	await supabase
@@ -361,6 +423,7 @@ const buildInitialPinSessionState = (): PinSessionState => {
 };
 
 const initialPinSessionState = buildInitialPinSessionState();
+setDiaryKeyState(encConfig && !isGuest() ? "locked" : "off", null); // 공유 상태 초기화 (스토어 생성 시점과 동일 규칙)
 
 // 로컬 캐시가 암호문이면 state에는 ""로 (복호화는 hydrate/unlock에서). 되쓰지 않음 — 캐시의 암호문 보존
 const getInitialEntries = (): Record<string, DiaryEntry> =>
@@ -443,6 +506,7 @@ export const useDiaryStore = create<DiaryState>()((set, get) => ({
 		const key = await unlockDiaryKey(passphrase, encConfig); // 틀리면 WrongPassphraseError
 		await saveDeviceKey(user.id, key);
 		diaryKey = key;
+		setDiaryKeyState("unlocked", key);
 		let { entries, diaryAnswers } = {
 			entries: await decryptEntries(load(STORAGE_KEY, {}), key),
 			diaryAnswers: get().diaryAnswers,
@@ -454,6 +518,8 @@ export const useDiaryStore = create<DiaryState>()((set, get) => ({
 		}
 		set({ entries, diaryAnswers, encryptionStatus: "unlocked" });
 		persistEntries(entries);
+		void get().fetchTodayQA(); // 잠겨 있는 동안 비웠던 오늘의 Q&A 복원
+		void useBriefingHistoryStore.getState().hydrateFromDB(); // 기록 미러를 새 암호화 상태에 맞춤
 	},
 
 	enableDiaryEncryption: async (passphrase) => {
@@ -474,6 +540,7 @@ export const useDiaryStore = create<DiaryState>()((set, get) => ({
 			diaryKey = key;
 			encConfig = config;
 			save(ENC_CONFIG_KEY, config);
+			setDiaryKeyState("unlocked", key);
 			set({ encryptionStatus: "unlocked" });
 			// 4) 모든 행 재암호화 + 레거시 diary_text 제거 (이미 암호문인 필드는 그대로)
 			const seal = async (v: string | null) => (v && !isEncryptedValue(v) ? encryptText(key, v) : v);
@@ -494,7 +561,9 @@ export const useDiaryStore = create<DiaryState>()((set, get) => ({
 				});
 			}
 			await upsertRowsInBatches(user.id, out);
+			await migrateQAAndSnapshots(user.id, key, true); // user_qa + briefing_snapshots
 			await persistEntries(get().entries); // 5) 로컬 캐시 암호화 (완료까지 대기 — 평문이 남지 않게)
+			void useBriefingHistoryStore.getState().hydrateFromDB(); // 기록 미러를 새 암호화 상태에 맞춤
 		} finally {
 			migrating = false;
 		}
@@ -523,14 +592,17 @@ export const useDiaryStore = create<DiaryState>()((set, get) => ({
 				});
 			}
 			await upsertRowsInBatches(user.id, out);
+			await migrateQAAndSnapshots(user.id, key, false);
 			// 2) 설정 해제 → 3) 기기 키 삭제, 로컬 평문
 			await writeEncryptionConfig(user.id, null);
 			diaryKey = null;
 			encConfig = null;
 			save(ENC_CONFIG_KEY, null);
 			await clearDeviceKeys();
+			setDiaryKeyState("off", null);
 			set({ encryptionStatus: "off" });
 			await persistEntries(get().entries);
+			void useBriefingHistoryStore.getState().hydrateFromDB(); // 기록 미러를 새 암호화 상태에 맞춤
 		} finally {
 			migrating = false;
 		}
@@ -539,9 +611,11 @@ export const useDiaryStore = create<DiaryState>()((set, get) => ({
 	forgetDiaryKeyOnThisDevice: async () => {
 		if (!encConfig) throw new Error("encryption_off");
 		diaryKey = null;
+		setDiaryKeyState("locked", null);
 		await clearDeviceKeys();
 		const blank = normalizeAll(Object.fromEntries(Object.keys(get().entries).map((d) => [d, {}])));
-		set({ entries: blank, diaryAnswers: {}, encryptionStatus: "locked" });
+		set({ entries: blank, diaryAnswers: {}, todayQA: [], encryptionStatus: "locked" });
+		void useBriefingHistoryStore.getState().hydrateFromDB(); // 기록 미러를 새 암호화 상태에 맞춤
 	},
 
 	pinSet: !!load(PIN_KEY, null),
@@ -921,39 +995,42 @@ export const useDiaryStore = create<DiaryState>()((set, get) => ({
 	/** 질문+답변을 user_qa 테이블에 저장. 실패 시 에러 throw (UI에서 처리) */
 	addAnswer: async (dateStr, question, answer) => {
 		if (!supabase) throw new Error("Supabase not available");
+		if (migrating) throw new Error("diary_busy");
 		const user = await getSessionUser();
 		if (!user) throw new Error("Not authenticated");
 
+		// 암호화 켜짐: 해제 → 암호문 저장, 잠김 → 거부 (평문 저장 금지)
+		const q = await sealText(question);
+		const a = await sealText(answer);
+		if (q === null || a === null) {
+			const e = new Error("diary_locked");
+			handleApiError(e, "diary:locked");
+			throw e;
+		}
 		const { error } = await supabase.from("user_qa").insert({
 			user_id: user.id,
-			question,
-			answer,
+			question: q,
+			answer: a,
 			asked_date: dateStr,
 		});
 		if (error) throw error;
-		// 오늘 날짜이면 로컬 todayQA 상태도 즉시 업데이트
+		// 오늘 날짜이면 로컬 todayQA 상태도 즉시 업데이트 (평문)
 		if (dateStr === todayStr()) {
 			set((s) => ({ todayQA: [...s.todayQA, { question, answer }] }));
 		}
 	},
 
-	/** 오늘의 Q&A 답변을 user_qa 테이블에서 로드 */
+	/** 오늘의 Q&A 답변을 user_qa 테이블에서 로드 (잠김이면 비움) */
 	fetchTodayQA: async () => {
 		if (!supabase) return;
 		const user = await getSessionUser();
 		if (!user) return;
-		const { data } = await supabase
-			.from("user_qa")
-			.select("question, answer")
-			.eq("user_id", user.id)
-			.eq("asked_date", todayStr())
-			.order("created_at", { ascending: true });
-		if (data) set({ todayQA: data as { question: string; answer: string }[] });
+		set({ todayQA: await get().fetchQAForDate(todayStr()) });
 	},
 
-	/** 특정 날짜의 Q&A 쌍을 user_qa 테이블에서 읽기 전용으로 조회 */
+	/** 특정 날짜의 Q&A 쌍을 user_qa 테이블에서 읽기 전용으로 조회. 잠김이면 빈 배열, 암호문은 반환하지 않음 */
 	fetchQAForDate: async (dateStr) => {
-		if (!supabase) return [];
+		if (!supabase || get().encryptionStatus === "locked") return [];
 		const user = await getSessionUser();
 		if (!user) return [];
 		const { data } = await supabase
@@ -962,7 +1039,17 @@ export const useDiaryStore = create<DiaryState>()((set, get) => ({
 			.eq("user_id", user.id)
 			.eq("asked_date", dateStr)
 			.order("created_at", { ascending: true });
-		return (data ?? []) as { question: string; answer: string }[];
+		const out: { question: string; answer: string }[] = [];
+		for (const r of (data ?? []) as { question: string; answer: string }[]) {
+			try {
+				const question = await openText(r.question);
+				const answer = await openText(r.answer);
+				if (question || answer) out.push({ question, answer });
+			} catch (e) {
+				console.warn("QA decrypt failed:", (e as Error)?.message);
+			}
+		}
+		return out;
 	},
 
 	/** 특정 날짜의 답변 가져오기 (레거시 호환) */
@@ -987,7 +1074,9 @@ export const useDiaryStore = create<DiaryState>()((set, get) => ({
 			if (stErr) throw stErr;
 			const rawCfg = (st as { diary_encryption?: unknown } | null)?.diary_encryption ?? null;
 			if (rawCfg !== null && !isValidEncryptionConfig(rawCfg)) {
-				set({ encryptionStatus: "locked" }); // 알 수 없는 설정 — 평문 쓰기 방지를 위해 잠금 유지
+				diaryKey = null;
+				setDiaryKeyState("locked", null);
+				set({ encryptionStatus: "locked", todayQA: [] }); // 알 수 없는 설정 — 평문 쓰기 방지를 위해 잠금 유지
 				return;
 			}
 			const cfg = rawCfg as DiaryEncryptionConfig | null;
@@ -1003,6 +1092,7 @@ export const useDiaryStore = create<DiaryState>()((set, get) => ({
 			encConfig = cfg;
 			save(ENC_CONFIG_KEY, cfg);
 			const status: EncryptionStatus = !cfg ? "off" : diaryKey ? "unlocked" : "locked";
+			setDiaryKeyState(status, diaryKey);
 
 			// 방금 해제된 경우 state는 비어 있으므로 로컬 캐시(암호문)를 복호화해 기반으로 사용
 			const base =
@@ -1020,6 +1110,7 @@ export const useDiaryStore = create<DiaryState>()((set, get) => ({
 				entries,
 				diaryAnswers: rows.length > 0 ? merged.diaryAnswers : get().diaryAnswers,
 				encryptionStatus: status,
+				...(status === "locked" ? { todayQA: [] } : {}),
 			});
 			persistEntries(entries);
 		} catch (e) {
@@ -1057,5 +1148,6 @@ export const useDiaryStore = create<DiaryState>()((set, get) => ({
 onClearUserData(() => {
 	diaryKey = null;
 	encConfig = null;
-	useDiaryStore.setState({ entries: {}, diaryAnswers: {}, encryptionStatus: "off" });
+	setDiaryKeyState("off", null);
+	useDiaryStore.setState({ entries: {}, diaryAnswers: {}, todayQA: [], encryptionStatus: "off" });
 });

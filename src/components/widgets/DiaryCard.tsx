@@ -11,6 +11,8 @@ import { generatePersonalizedQuestion } from "../../services/aiService";
 import { formatLocalDate } from "../../utils/date";
 import { load, save } from "../../utils/storage";
 import { isGuest } from "../../lib/guest";
+import { isEncryptionOn } from "../../lib/diaryKeyState";
+import DiaryUnlock from "../common/DiaryUnlock";
 
 const STOP_WORDS = new Set(["이","그","저","것","수","을","를","이","가","은","는","에","의","도","로","와","과","만","에서","으로","한","있","없","하","이다","아","어","야"]);
 
@@ -38,6 +40,7 @@ const DiaryCard = () => {
 	const { t, i18n } = useTranslation();
 
 	const addAnswer = useDiaryStore((s) => s.addAnswer);
+	const locked = useDiaryStore((s) => s.encryptionStatus === "locked");
 	const persona = useOnboardingStore((s) => s.persona);
 	const weather = useDataStore((s) => s.weather);
 	const fixedInterestIds = useSettingsStore((s) => s.fixedInterestIds) || [];
@@ -99,15 +102,15 @@ const DiaryCard = () => {
 	}, [questionLanguage]);
 
 	const handleSubmit = async () => {
-		if (!answerText.trim() || isSaving || !question) return;
+		if (!answerText.trim() || isSaving || !question || locked) return;
 
 		setIsSaving(true);
 		setSaveError(false);
 		try {
 			const trimmedAnswer = answerText.trim();
 			await addAnswer(todayStr(), question, trimmedAnswer);
-			// 답변에서 키워드 추출 → 관심사 score bump
-			extractKeywords(trimmedAnswer).forEach((kw) => bumpKeyword(kw, "qa", 5));
+			// 답변에서 키워드 추출 → 관심사 score bump (암호화 켜짐이면 키워드가 평문 저장되므로 생략)
+			if (!isEncryptionOn()) extractKeywords(trimmedAnswer).forEach((kw) => bumpKeyword(kw, "qa", 5));
 			setIsSaving(false);
 			setSaved(true);
 			setTimeout(() => {
@@ -150,6 +153,10 @@ const DiaryCard = () => {
 				)}
 			</div>
 
+			{locked ? (
+				<DiaryUnlock className="flex-1 min-h-0 overflow-y-auto" />
+			) : (
+			<>
 			{/* 답변 입력 */}
 			<textarea
 				className={`w-full flex-1 min-h-[3rem] border rounded-xl p-3 resize-none overflow-hidden outline-none focus:ring-2 focus:ring-blue-500/30 transition-all ${inputCls} ${
@@ -198,6 +205,8 @@ const DiaryCard = () => {
 					)}
 				</button>
 			</div>
+			</>
+			)}
 		</div>
 	);
 };

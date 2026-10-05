@@ -92,6 +92,8 @@ archive/course/          old course deliverables — historical, do not treat as
   `provider_token` (1h) is persisted. See docs/security/localStorage-audit.md.
 - Diary text may be end-to-end encrypted (`src/lib/diaryCrypto.ts`, `useDiaryStore.encryptionStatus`). Never read
   `diaries` text columns directly and send them anywhere without `decryptDiaryField`, and never write plaintext while locked.
+  The same applies to `user_qa` and `briefing_snapshots` — use `src/lib/diaryKeyState.ts` (`sealText`/`sealJson`/`openText`/`openJson`).
+  Don't put calendar/health data in the server `api_cache` (`isPrivateKey` in `store/data/apiCache.ts`).
 - Reloads read the 6h `api_cache`; only the page opened by the Google OAuth callback forces a refetch
   (`openedFromOAuthRedirect`). Don't reintroduce unconditional cache clearing in `runFullInit`.
 - Google access tokens last 1h; `ensureProviderToken` refreshes them through `google-refresh` (needs the

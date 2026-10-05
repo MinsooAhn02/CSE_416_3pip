@@ -233,7 +233,8 @@ const DiaryPanel = ({ selectedDate, onClose, compact = false, skipPinCheck = fal
 	const handleGenerateDiary = async (overwrite = false) => {
 		setIsGeneratingDiary(true);
 		try {
-			const snapshots = useBriefingHistoryStore.getState().getSnapshotsForDate(safeDateStr);
+			// 암호화된 기록도 복호화해서 읽음 (잠김이면 null → 스냅샷 없이 생성)
+			const snapshots = (await useBriefingHistoryStore.getState().getSnapshotsForDateAsync(safeDateStr)) ?? [];
 			await generateAndSaveDiaryForDate(safeDateStr, { overwrite, briefingSnapshots: snapshots });
 			setIsEditingDiary(false);
 		} catch (err) {

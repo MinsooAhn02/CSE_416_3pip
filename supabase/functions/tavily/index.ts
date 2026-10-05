@@ -83,7 +83,8 @@ const runTavilySearch = async (params: TavilyQuery, apiKey: string): Promise<unk
 	});
 
 	if (!res.ok) {
-		console.error(`[tavily] Tavily ${res.status}:`, (await res.text()).slice(0, 500));
+		// 본문은 검색어를 echo할 수 있어 로그에 남기지 않음 — 상태 코드만
+		console.error(`[tavily] Tavily ${res.status}`);
 		throw new Error(`Tavily ${res.status}`);
 	}
 	const data = await res.json();

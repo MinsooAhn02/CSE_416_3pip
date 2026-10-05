@@ -717,6 +717,7 @@
     "intro": "Encrypt your diary text in this browser before it is saved, so the server only stores ciphertext.",
     "intro_ai": "AI features (diary generation, rewriting) still send diary text to the AI service while they process it.",
     "intro_pin": "The 4-digit PIN is a separate screen lock and does not encrypt anything.",
+    "intro_personalization": "While encryption is on, keywords are not extracted from your diary or answers for personalization.",
     "passphrase": "Passphrase",
     "passphrase_confirm": "Confirm passphrase",
     "passphrase_hint": "At least {{min}} characters.",

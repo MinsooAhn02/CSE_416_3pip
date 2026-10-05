@@ -1,6 +1,7 @@
 import { isGuest } from "../../lib/guest";
 import { formatLocalDate } from "../../utils/date";
 import { load, save } from "../../utils/storage";
+import { isEncryptedBlob, isEncryptionOn, onDiaryKeyStateChange, openJson, sealJson } from "../../lib/diaryKeyState";
 import type {
 	CalEvent,
 	BriefingResult,
@@ -217,6 +218,12 @@ const hostFromUrl = (url: unknown): string => {
 // 같은 입력이면 60분간 재사용 + 동시 요청 합치기 → 새로고침·첫 로그인 모달/위젯 중복 Groq 호출 제거.
 // Groq 요약이 실패한(로컬 문구로 대체된) 결과는 5분만 캐시 — 한도 초과 중에 새로고침할 때마다 다시 호출하지 않도록.
 const BRIEFING_CACHE_KEY = "mb_briefing_cache";
+// 암호화가 켜지는 순간(켜기·잠금 등) 평문으로 저장돼 있던 브리핑 캐시를 즉시 삭제 — 다음 읽기까지 남지 않게
+onDiaryKeyStateChange(() => {
+	if (!isEncryptionOn()) return;
+	const stored = load<{ result?: unknown } | null>(BRIEFING_CACHE_KEY, null);
+	if (stored && !isEncryptedBlob(stored.result)) save(BRIEFING_CACHE_KEY, null);
+});
 const BRIEFING_CACHE_TTL_MS = 60 * 60 * 1000;
 const BRIEFING_FAILED_TTL_MS = 5 * 60 * 1000;
 type BriefingCacheEntry = { fp: string; at: number; result: BriefingResult; aiOk?: boolean };
@@ -243,12 +250,49 @@ const briefingFingerprint = (tone: string, length: string, context: BriefingCont
 	]);
 };
 
-const readBriefingCache = (fp: string): BriefingResult | null => {
-	const entry = briefingMemCache ?? load<BriefingCacheEntry | null>(BRIEFING_CACHE_KEY, null);
+/** fp 안의 일기·일정 제목 등 평문이 키로 남지 않도록 SHA-256 hex로 */
+const hashFp = async (text: string): Promise<string> => {
+	const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
+	return Array.from(new Uint8Array(buf), (b) => b.toString(16).padStart(2, "0")).join("");
+};
+
+const readBriefingCache = async (fp: string): Promise<BriefingResult | null> => {
+	let entry = briefingMemCache;
+	if (!entry) {
+		const stored = load<(Omit<BriefingCacheEntry, "result"> & { result: unknown }) | null>(BRIEFING_CACHE_KEY, null);
+		if (stored) {
+			// 암호화가 켜진 뒤 남은 평문 캐시는 버리고, 열 수 없는 암호문은 없는 것으로 취급
+			if (isEncryptionOn() && !isEncryptedBlob(stored.result)) {
+				save(BRIEFING_CACHE_KEY, null);
+			} else {
+				try {
+					const result = await openJson<BriefingResult>(stored.result);
+					if (result) entry = { ...stored, result };
+				} catch {
+					// 키가 달라 열 수 없음
+				}
+			}
+		}
+	}
 	const ttl = entry?.aiOk === false ? BRIEFING_FAILED_TTL_MS : BRIEFING_CACHE_TTL_MS;
 	if (!entry || entry.fp !== fp || Date.now() - entry.at > ttl) return null;
 	briefingMemCache = entry;
 	return entry.result;
+};
+
+/** 메모리엔 항상, localStorage엔 게스트가 아니고 (암호화 꺼짐 또는 해제 상태)일 때만 — 잠김이면 디스크 기록 없음 */
+const persistBriefingCache = async (entry: BriefingCacheEntry): Promise<void> => {
+	if (isGuest()) return;
+	try {
+		const result = await sealJson(entry.result);
+		if (!result) {
+			save(BRIEFING_CACHE_KEY, null); // 잠김: 남아 있던 평문 제거
+			return;
+		}
+		save(BRIEFING_CACHE_KEY, { fp: entry.fp, at: entry.at, aiOk: entry.aiOk, result });
+	} catch {
+		save(BRIEFING_CACHE_KEY, null);
+	}
 };
 
 /** force=true: 새로고침 버튼 — 캐시 무시하고 새로 생성 */
@@ -256,18 +300,18 @@ export async function generateDetailedBriefing(
 	{ tone, length, context }: { tone: string; length: string; context: BriefingContext },
 	{ force = false }: { force?: boolean } = {},
 ): Promise<BriefingResult> {
-	const fp = briefingFingerprint(tone, length, context, getLangConfig().lang);
+	const fp = await hashFp(briefingFingerprint(tone, length, context, getLangConfig().lang));
 	if (!force) {
-		const cached = readBriefingCache(fp);
+		const cached = await readBriefingCache(fp);
 		if (cached) return cached;
 		const pending = briefingInFlight.get(fp);
 		if (pending) return pending;
 	}
 	const run = buildDetailedBriefing({ tone, length, context })
-		.then(({ result, aiOk }) => {
+		.then(async ({ result, aiOk }) => {
 			briefingMemCache = { fp, at: Date.now(), result, aiOk };
-			// 게스트(샘플 데이터) 결과는 실제 사용자 localStorage에 남기지 않음
-			if (!isGuest()) save(BRIEFING_CACHE_KEY, briefingMemCache);
+			// 게스트 건너뜀·잠김 시 디스크 기록 없음은 persistBriefingCache가 처리
+			await persistBriefingCache(briefingMemCache);
 			return result;
 		})
 		.finally(() => {

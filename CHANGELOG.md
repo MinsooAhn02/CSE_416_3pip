@@ -7,6 +7,14 @@
 
 ## 2026-10-05
 
+### [Privacy] Encryption covers Q&A and briefing history; less personal data on the server
+- With diary encryption on, daily-question questions/answers (`user_qa`) and briefing history (`briefing_snapshots`, `mb_briefing_history`) are stored encrypted too, and the briefing cache (`mb_briefing_cache`) is encrypted or kept in memory only. Previously the briefing's "yesterday" section (an AI rewrite of the diary) was saved in plaintext. Turning encryption on/off migrates all three tables. While locked, the daily question shows the unlock prompt and the briefing omits yesterday's diary.
+- With encryption on, keywords are no longer extracted from the diary or answers for personalization (they were stored in plaintext and used in news searches).
+- Briefing history is kept for 7 days (older rows are deleted). The briefing cache key is a SHA-256 hash instead of raw text.
+- Calendar and health data are no longer cached in the server-side `api_cache` (device only); existing rows were deleted. The groq/tavily functions no longer log provider error bodies.
+- Database: `authenticated` lost the unused TRUNCATE/TRIGGER/REFERENCES privileges (TRUNCATE bypasses RLS); `user_qa` and `briefing_snapshots` got own-row UPDATE policies (needed for the encryption migration).
+- Privacy policy (`public/privacy-policy.html`) updated: data sent to Groq/Tavily, encryption scope, 7-day history, device-only calendar/health cache.
+
 ### [Refactor] Split the largest files (BACKLOG I4)
 - `src/services/aiService.ts` (3.8k lines) is now a barrel over `src/services/ai/` (client, briefing, dailyQuestion, smartWidgetConfig/Classify/Match, smartWidget, diary); `useDataStore.ts` 2.3k → 1.3k lines with helpers in `src/store/data/`; `EventPanel.tsx` 1.8k → 0.7k lines with `event/EventForm.tsx`, `event/EventDetail.tsx`, `event/eventDescription.ts`, `event/eventFormData.ts`. Code moved verbatim (declaration counts match); no behavior change.
 

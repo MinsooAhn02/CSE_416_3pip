@@ -1,7 +1,7 @@
 import { supabase, getSessionUser } from "../lib/supabase";
 import { callEdge } from "../lib/edge";
 import { formatLocalDate } from "../utils/date";
-import { decryptDiaryField } from "../store/useDiaryStore";
+import { isEncryptionOn } from "../lib/diaryKeyState";
 
 const VALID_CATEGORIES = ["food", "place", "content", "shopping", "lifestyle", "mood", "interest"];
 const SOURCE_WEIGHTS: Record<string, number> = { personal: 2, diary: 1 };
@@ -151,26 +151,29 @@ export async function runPersonalizationBatch(): Promise<ScoreMapEntry[] | undef
     if ((settings as { keyword_interests_updated?: string } | null)?.keyword_interests_updated === todayStr()) return;
 
     const yesterday = yesterdayStr();
+    // 암호화 켜짐(잠김 포함): 키워드를 뽑으면 평문으로 DB(keyword_*)·Tavily에 나가므로 일기/Q&A 추출을 건너뜀
+    const skipTextExtraction = isEncryptionOn();
 
     // 어제 Q&A 답변 (user_qa 테이블)
-    const { data: qaRows } = await supabase
-      .from("user_qa")
-      .select("question, answer")
-      .eq("user_id", user.id)
-      .eq("asked_date", yesterday);
+    const { data: qaRows } = skipTextExtraction
+      ? { data: null }
+      : await supabase
+          .from("user_qa")
+          .select("question, answer")
+          .eq("user_id", user.id)
+          .eq("asked_date", yesterday);
 
     // 어제 일기 텍스트 (diaries 테이블)
-    const { data: diary } = await supabase
-      .from("diaries")
-      .select("ai_generated_diary, edited_diary")
-      .eq("user_id", user.id)
-      .eq("date", yesterday)
-      .maybeSingle();
+    const { data: diary } = skipTextExtraction
+      ? { data: null }
+      : await supabase
+          .from("diaries")
+          .select("ai_generated_diary, edited_diary")
+          .eq("user_id", user.id)
+          .eq("date", yesterday)
+          .maybeSingle();
     const diaryRow = diary as { ai_generated_diary?: string | null; edited_diary?: string | null } | null;
-    // 암호화된 필드는 메모리 키로 복호화, 잠겨 있으면 "" (키워드 추출 건너뜀)
-    const yesterdayDiaryText =
-      (await decryptDiaryField(diaryRow?.edited_diary)) ||
-      (await decryptDiaryField(diaryRow?.ai_generated_diary));
+    const yesterdayDiaryText = diaryRow?.edited_diary || diaryRow?.ai_generated_diary || "";
 
     const newLogRows: {
       user_id: string;

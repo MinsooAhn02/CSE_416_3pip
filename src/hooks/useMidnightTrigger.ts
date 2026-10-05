@@ -24,8 +24,10 @@ export const useMidnightTrigger = (isLoggedIn: boolean) => {
 			return "done";
 		}
 
-		const { getSnapshotsForDate, clearDate } = useBriefingHistoryStore.getState();
-		const snapshots = getSnapshotsForDate(dateStr);
+		const { getSnapshotsForDateAsync, clearDate } = useBriefingHistoryStore.getState();
+		// null = 잠겨서 스냅샷을 열 수 없음 — 있을 수도 있으니 영구 skip이 아니라 재시도
+		const snapshots = await getSnapshotsForDateAsync(dateStr);
+		if (snapshots === null) return "error";
 
 		// 스냅샷 없음은 영구 조건 — 재시도해도 소용없으므로 진행을 막지 않는다
 		if (snapshots.length === 0) {

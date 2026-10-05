@@ -91,6 +91,7 @@ const DiaryEncryptionSettings = () => {
 				>
 					<p className={`text-xs ${muted}`}>{t("diary_encryption.intro_ai")}</p>
 					<p className={`text-xs ${muted}`}>{t("diary_encryption.intro_pin")}</p>
+					<p className={`text-xs ${muted}`}>{t("diary_encryption.intro_personalization")}</p>
 					<input
 						type="password"
 						autoComplete="new-password"
