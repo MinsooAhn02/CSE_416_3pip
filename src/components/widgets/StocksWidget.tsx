@@ -475,7 +475,7 @@ const StocksWidget = () => {
 										{/* Fixed indices section */}
 										<div className="mb-1">
 											<p className="text-[11px] font-semibold opacity-60 uppercase tracking-wider mb-1">
-												Major Indices
+												{t("widgets.stocks.major_indices")}
 											</p>
 											<p className="text-[10px] mb-3 opacity-40 flex items-center gap-1">
 												<GripVertical size={10} />
@@ -583,7 +583,7 @@ const StocksWidget = () => {
 										{/* User stocks section */}
 										<div>
 											<p className="text-[11px] font-semibold opacity-60 uppercase tracking-wider mb-1">
-												My Stocks
+												{t("widgets.stocks.my_stocks")}
 											</p>
 											{/* Ticker input */}
 											<div className="flex-shrink-0 py-2 mb-3">

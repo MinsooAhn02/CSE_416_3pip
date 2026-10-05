@@ -160,7 +160,7 @@ const DiaryListModal = ({ onClose }: DiaryListModalProps) => {
 	/* Format date for display */
 	const formatDate = (dateStr: string) => {
 		const d = new Date(dateStr + "T00:00:00");
-		const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+		const days = t("calendar.days", { returnObjects: true }) as string[];
 		return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")} ${days[d.getDay()]}`;
 	};
 
@@ -224,12 +224,12 @@ const DiaryListModal = ({ onClose }: DiaryListModalProps) => {
 									<BookOpen size={18} className="text-blue-500" />
 								</div>
 								<div>
-									<h2 id="diary-list-title" className="font-bold text-lg">Diary List</h2>
+									<h2 id="diary-list-title" className="font-bold text-lg">{t("diary.diary_list")}</h2>
 									{diaryDates.length > 0 && (
 										<p
 											className={`text-xs ${isDark ? "text-gray-400" : "text-gray-600"}`}
 										>
-											{diaryDates.length} entries found
+											{t("diary.entries_found", { count: diaryDates.length })}
 										</p>
 									)}
 								</div>
@@ -276,7 +276,7 @@ const DiaryListModal = ({ onClose }: DiaryListModalProps) => {
 										<label
 											className={`text-xs font-medium ${isDark ? "opacity-70" : "text-gray-600"}`}
 										>
-											Sort:
+											{t("diary.sort_label")}
 										</label>
 										<div className="flex gap-2">
 											{["recent", "oldest"].map((option) => (
@@ -291,7 +291,7 @@ const DiaryListModal = ({ onClose }: DiaryListModalProps) => {
 															: `${secondaryBgCls} ${hoverCls}`
 													}`}
 												>
-													{option === "recent" ? "Most Recent" : "Oldest"}
+													{option === "recent" ? t("diary.sort_recent") : t("diary.sort_oldest")}
 												</button>
 											))}
 										</div>

@@ -26,7 +26,8 @@ const Clock = () => {
 
 	const h = currentTime.getHours() % 12 || 12;
 	const m = String(currentTime.getMinutes()).padStart(2, "0");
-	const ampm = currentTime.getHours() >= 12 ? "PM" : "AM";
+	const isPm = currentTime.getHours() >= 12;
+	const ampm = isKo ? (isPm ? "오후" : "오전") : isPm ? "PM" : "AM";
 	const dayStr = currentTime.toLocaleDateString(isKo ? "ko-KR" : "en-US", {
 		weekday: "short",
 		month: "short",

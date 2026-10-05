@@ -361,6 +361,8 @@
     "footer": "MorningBriefing.AI · Built with React, Vite & Supabase"
   },
   "nav": {
+    "hide_widgets": "Hide widgets",
+    "show_widgets": "Show widgets",
     "search_placeholder": "Search or ask AI...",
     "theme_toggle": "Toggle Theme",
     "diary_list": "View Diary List",
@@ -409,6 +411,8 @@
     "repeat_on": "On",
     "guests": "Guests",
     "guest_emails_placeholder": "guest1@email.com, guest2@email.com",
+    "location_placeholder": "Location (optional)",
+    "maps_key_hint": "Add a Google Maps key to enable autocomplete in this same field.",
     "send_invitation_emails": "Send invitation emails to guests",
     "add_google_meet_link": "Add Google Meet link",
     "visibility": "Visibility",
@@ -469,6 +473,11 @@
     "mark_incomplete": "Mark as Incomplete"
   },
   "diary": {
+    "entries_found_one": "{{count}} entry found",
+    "entries_found_other": "{{count}} entries found",
+    "sort_label": "Sort:",
+    "sort_recent": "Most Recent",
+    "sort_oldest": "Oldest",
     "title": "Diary",
     "card_title": "Today's Story",
     "question": "What was the happiest moment of your day?",
@@ -513,6 +522,8 @@
       }
     },
     "stocks": {
+      "major_indices": "Major Indices",
+      "my_stocks": "My Stocks",
       "title": "Stocks/Exchange",
       "change": "Change",
       "volume": "Volume",

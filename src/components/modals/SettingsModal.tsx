@@ -921,7 +921,7 @@ const SettingsModal = () => {
 															{t("settings_modal.interests_tab.fixed_badge")}
 														</span>
 														<span className="text-sm truncate">
-															{getFixedInterestLabel(item.id)}
+															{t(`categories.${item.id}`, { defaultValue: getFixedInterestLabel(item.id) })}
 														</span>
 													</div>
 													<span

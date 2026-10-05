@@ -7,6 +7,11 @@
 
 ## 2026-10-05
 
+### [Fix] Korean UI pass (checked screen by screen in the browser)
+- Translated strings that were still English in Korean mode: settings › interests (title, badges, category names now use `categories.*`), diary list (title, count, sort), diary panel title, stock detail headings, event location field placeholder and Maps hint, header clock (오전/오후), widget panel toggle, "Daily Briefing" label, task "new list", login screen title.
+- Korean diary-encryption copy said "암호문" (ciphertext) where it meant the passphrase; now "비밀번호".
+- Guest mode shows Korean sample data when the app language is Korean (same structure as the English set; still no network calls and nothing saved).
+
 ### [Dev] Automated tests and CI
 - Vitest + jsdom: 189 tests in 17 files covering link safety, article filters, dates (Seoul before 09:00), diary crypto and key state, Google error sanitizing, edge client (guest/timeout/HTTP/network), AI briefing cache (TTL, failed-result TTL, hashed key, encryption), calendar store (shared in-flight requests, stale month, refresh-after-write), news language race, private api_cache keys, diary/Q&A/briefing-history encryption migration and locked mode, midnight retry. Key tests were checked by breaking the code and watching them fail.
 - GitHub Actions runs typecheck, tests and build on every push to main and every pull request. The old `scripts/check-*.mjs` self-checks moved into the test suite.

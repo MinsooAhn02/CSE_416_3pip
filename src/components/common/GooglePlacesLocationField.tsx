@@ -32,11 +32,11 @@ interface GooglePlacesLocationFieldProps {
 const GooglePlacesLocationField = ({
 	value,
 	onChange,
-	placeholder = "Location (optional)",
+	placeholder,
 	disabled = false,
 }: GooglePlacesLocationFieldProps) => {
 	const { isDark, inputCls } = useTheme();
-	const { i18n } = useTranslation();
+	const { t, i18n } = useTranslation();
 	const [widgetStatus, setWidgetStatus] = useState(
 		hasGoogleMapsPlacesKey() ? "loading" : "fallback",
 	);
@@ -249,7 +249,7 @@ const GooglePlacesLocationField = ({
 				<div className="relative">
 					<input
 						type="text"
-						placeholder={placeholder}
+						placeholder={placeholder ?? t("events.location_placeholder")}
 						value={value}
 						onChange={(event: React.ChangeEvent<HTMLInputElement>) => {
 							onChange(event.target.value);
@@ -323,7 +323,7 @@ const GooglePlacesLocationField = ({
 					<p
 						className={`text-[11px] ${isDark ? "text-gray-400" : "text-gray-600"}`}
 					>
-						Add a Google Maps key to enable autocomplete in this same field.
+						{t("events.maps_key_hint")}
 					</p>
 				)}
 			</div>

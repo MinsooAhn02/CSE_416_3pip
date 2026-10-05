@@ -168,7 +168,7 @@ const TopNav = () => {
 								: "bg-morning-light-accent border-morning-light-accent text-white"
 							: navBtnCls
 					}`}
-					title={panelOpen ? "Hide widgets" : "Show widgets"}
+					title={panelOpen ? t("nav.hide_widgets") : t("nav.show_widgets")}
 				>
 					<PanelRight size={14} />
 				</button>

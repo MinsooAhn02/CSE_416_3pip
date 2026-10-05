@@ -83,7 +83,7 @@ const DiaryPanel = ({ selectedDate, onClose, compact = false, skipPinCheck = fal
 	const [feedbackText, setFeedbackText] = useState("");
 	const [isRewriting, setIsRewriting] = useState(false);
 	const copy = {
-		diaryTitle: "Diary",
+		diaryTitle: t("diary.title"),
 		previewFallback: t("diary_panel.preview_fallback"),
 		lockDiary: t("diary_panel.lock_diary"),
 		diarySettings: t("diary_panel.diary_settings"),
