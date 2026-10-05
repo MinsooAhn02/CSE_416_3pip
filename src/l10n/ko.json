@@ -482,6 +482,7 @@
       "water": "물",
       "cups": "컵",
       "google_fit_notice": "Google Fit 연결 시 실제 데이터로 대체됩니다",
+      "no_fit_data": "오늘 Google Fit 기록이 아직 없습니다. Google Fit(또는 연동된 앱)에 기록되면 여기에 표시됩니다.",
       "loading": "건강 데이터를 불러오는 중..."
     },
     "smart": {

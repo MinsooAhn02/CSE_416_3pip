@@ -63,3 +63,51 @@ export const cleanSnippet = (content: unknown): string => {
 	if (words.length >= 8 && capsWords.length / words.length > 0.3) return "";
 	return text;
 };
+
+/**
+ * 위키 결과 관련성: 제목이 키워드와 같거나 "키워드 + 공백/콜론"으로 시작해야 통과.
+ * "(film)" 같은 괄호 구분어 문서와 단어 속에 키워드가 섞인 문서(WarGames)는 제외.
+ * 키워드 자체에 구분어 단어가 있으면("Games film") 그 구분어는 허용. 위키가 아닌 결과는 항상 통과.
+ * ponytail: 접두어 기준 — "Computer keyboard"처럼 키워드가 뒤에 오는 문서는 의도적으로 제외
+ */
+export const isRelevantWikiResult = (
+	item: { url?: string; title?: string } | null | undefined,
+	keyword: string,
+): boolean => {
+	if (!/wikipedia\.org/i.test(String(item?.url ?? ""))) return true;
+	const kw = keyword.trim().toLowerCase();
+	if (!kw) return true;
+	const title = String(item?.title ?? "").replace(/\s[-–|]\s(Wikipedia|위키백과).*$/i, "").trim().toLowerCase();
+	const paren = title.match(/^(.*?)\s*\(([^)]+)\)$/);
+	if (paren) {
+		const kwWords = kw.split(/[\s()]+/);
+		return kw.startsWith(paren[1]) && paren[2].split(/\s+/).some((w) => kwWords.includes(w));
+	}
+	return title === kw || title.startsWith(`${kw} `) || title.startsWith(`${kw}:`);
+};
+
+const normalizeUrlKey = (url: string): string => {
+	try {
+		const u = new URL(url);
+		const v = u.searchParams.get("v"); // 유튜브는 쿼리(v)가 영상 ID
+		return `${u.hostname.toLowerCase().replace(/^www\./, "")}${u.pathname.replace(/\/+$/, "")}${v ? `?v=${v}` : ""}`;
+	} catch {
+		return url.trim().toLowerCase();
+	}
+};
+
+/** 섹션 간 중복 URL 제거: 표시 순서상 먼저 나온 섹션에만 남김 (url 없는 항목은 유지) */
+export const dedupeItemsAcrossSections = <T extends { items?: { url?: string }[] }>(sections: T[]): T[] => {
+	const seen = new Set<string>();
+	return sections.map((s) => {
+		if (!Array.isArray(s.items)) return s;
+		const items = s.items.filter((it) => {
+			if (!it?.url) return true;
+			const key = normalizeUrlKey(it.url);
+			if (seen.has(key)) return false;
+			seen.add(key);
+			return true;
+		});
+		return { ...s, items };
+	});
+};

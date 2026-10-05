@@ -487,6 +487,7 @@
       "water": "Water",
       "cups": "cups",
       "google_fit_notice": "⚠️ Will show real data when connected to Google Fit",
+      "no_fit_data": "No Google Fit records for today yet. Activity recorded in Google Fit (or an app that syncs to it) will show up here.",
       "loading": "Loading health data..."
     },
     "smart": {

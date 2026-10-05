@@ -7,6 +7,9 @@
 
 ## 2026-10-05
 
+### [Fix] Smart widget relevance, health widget empty state
+- Smart widgets: an article appears in only one section (the first in display order); "Key info" drops Wikipedia pages for a different sense of the keyword ("Games (film)", "WarGames" for "Games").
+- Health: when Google Fit has no records for today (everything 0), the widget says so instead of showing a 0/10,000 dashboard.
 ### [Fix] Fewer calls on page load, single Edge Function client, DB cleanup (BACKLOG B3, R6, R7, A9)
 - Google Tasks/Calendar: concurrent fetches share one request, so a page load calls `tasks` 2× and `events` 1× (was 6× and 2× in dev).
 - AI briefing: a briefing whose Groq summary failed is cached for 5 minutes, so reloads during a rate limit don't call Groq again; the weather temperature is no longer part of the cache key (it changed on every weather refresh). A normal reload makes 0 Groq calls.

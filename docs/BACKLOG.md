@@ -8,13 +8,13 @@ IDs (R*, A*, B*) come from the 2026-10-04 reviews and are referenced from commit
 
 | # | Issue | Approach | Where |
 |---|---|---|---|
-| R2 | Server-side Google token refresh is **active** (secrets set 2026-10-05; verified: encrypted row stored, refresh returns a new access token, calendar call succeeds with it). Remaining: each existing user clicks "Reconnect Google" once; deploy the web app so users get the new client; observe a real >1h session. | — | `supabase/functions/google-refresh`, `useAuthStore.ts` |
+| R2 | Server-side Google token refresh is **active** and verified, including a real session >1h (2026-10-05: `google-refresh` renewed the token on load, calendar loaded). Remaining: each existing user clicks "Reconnect Google" once; deploy the web app so users get the new client. | — | `supabase/functions/google-refresh`, `useAuthStore.ts` |
 
 ## Needs a manual (infra) step
 
 | Item | What's left |
 |---|---|
-| `smart-widget` Edge Function | Source removed from the repo (no caller). If still deployed: `npx supabase functions delete smart-widget`. |
+| Unused deployed Edge Functions | `smart-widget`, `gemini`, `kakao-places`, `calendar` are still deployed but have no source in the repo and no caller. `gemini` and `kakao-places` accept anonymous calls (they only fail today because their API keys are unset); `calendar` has no login check. Delete: `npx supabase functions delete <name>` for each. |
 | Deploy after changes | Web: `npm run build && npx wrangler deploy`. Extension: `npm run build:extension` and redistribute the zip (not on the Web Store, no auto-update). |
 
 ## Other open issues / tech debt
@@ -23,7 +23,6 @@ IDs (R*, A*, B*) come from the 2026-10-04 reviews and are referenced from commit
 |---|---|---|
 | R8 | `npm audit`: 5 high left, all `braces` (stack overflow on deeply nested glob patterns) via Tailwind 3's content scanner. Not exploitable here: the patterns come from our own `tailwind.config`, and it runs only at build/dev time, never in the shipped bundle. Decision 2026-10-05: no Tailwind 4 migration for this; revisit if Tailwind 3 stops getting fixes. | `package-lock.json` |
 | B4 | 4.8 MB of course PDFs/xlsx tracked under `archive/course/` — keep or untrack (history keeps them either way). | `archive/course/` |
-| R13 | Health widget shows zeros for this account: Google Fit returns 200 with no data points (likely no Fit data on the account / Fit being phased out). The UTC "today" bug is fixed. | `supabase/functions/fitness` |
 
 ### GitHub issues
 

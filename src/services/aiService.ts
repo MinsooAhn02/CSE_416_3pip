@@ -6,7 +6,7 @@ import { callEdge } from "../lib/edge";
 import { isGuest } from "../lib/guest";
 import { load, save } from "../utils/storage";
 import { formatLocalDate } from "../utils/date";
-import { isLowQualityResult, cleanSnippet } from "../utils/articleQuality";
+import { isLowQualityResult, cleanSnippet, isRelevantWikiResult, dedupeItemsAcrossSections } from "../utils/articleQuality";
 import type {
 	WeatherData,
 	StockItem,
@@ -2760,7 +2760,7 @@ const getSmartResultRank = (result: SmartResult, section: SmartSectionPlan, isKo
 const formatSmartItems = (results: SmartResult[], isKo: boolean, section: SmartSectionPlan) => {
 	const ranked = dedupeByUrl(
 		rankSmartResultsForLanguage(
-			results,
+			results.filter((r) => isRelevantWikiResult(r, section.keyword ?? "")),
 			isKo,
 			section.allowMixed,
 			section.keyword,
@@ -3253,6 +3253,8 @@ export async function generateSmartWidgetData(keyword: string, context: SmartWid
 	const sections = isKo
 		? await ensureKoreanSmartText(synthesizedSections as SmartSectionFull[])
 		: synthesizedSections;
+	// 같은 URL은 표시 순서상 첫 섹션에만 (모든 경로가 이 지점을 지남)
+	const dedupedSections = dedupeItemsAcrossSections(sections as SmartSectionFull[]);
 
 	const now = new Date();
 	const lastUpdated = isKo
@@ -3269,7 +3271,7 @@ export async function generateSmartWidgetData(keyword: string, context: SmartWid
 			(SMART_CATEGORY_CONFIGS.general.label as Record<string, string>)[lang],
 		lastUpdated,
 		lastUpdatedAt,
-		sections: sections as unknown as SmartSection[],
+		sections: dedupedSections as unknown as SmartSection[],
 	};
 }
 

@@ -24,6 +24,8 @@ const HealthWidget = () => {
 	const fetchHealth = useDataStore((s) => s.fetchHealth);
 	const getLastUpdatedMinutes = useDataStore((s) => s.getLastUpdatedMinutes);
 	const isRealData = apiStatus === "ok";
+	// Google Fit은 기록이 없어도 200 + 전부 0을 돌려줌 (기록이 있으면 기초대사 칼로리가 0일 수 없음) → 0 대시보드 대신 안내
+	const noFitData = isRealData && !!healthData && !healthData.steps && !healthData.calories && !healthData.heartRate && !healthData.sleep;
 	const fitEnabled = useOnboardingStore((s) => s.perms.fit);
 	const savePerm = useOnboardingStore((s) => s.savePerm);
 	const reconnectGoogle = useAuthStore((s) => s.reconnectGoogle);
@@ -103,6 +105,8 @@ const HealthWidget = () => {
 		>
 			{loading ? (
 				<p className="text-sm opacity-50">{t("widgets.health.loading")}</p>
+			) : noFitData ? (
+				<p className={muted} style={bodyStyle}>{t("widgets.health.no_fit_data")}</p>
 			) : healthData ? (
 				<div className="space-y-3">
 					<div className="flex justify-between items-center">
