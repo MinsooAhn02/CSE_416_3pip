@@ -7,6 +7,9 @@
 
 ## 2026-10-05
 
+### [Fix] Settings sync failed after sign-in
+- Seven settings the app saves and restores (`last_briefing_shown`, `priority_order`, `stock_symbols`, `pin_lock_mode`, `temp_unit`, `is_12hour`, `show_first_login_briefing`) had no `user_settings` column, so syncing them failed ("이 기기에는 저장됐지만 계정 동기화에 실패했습니다" right after sign-in). Added the columns (migration `20261005120200`); a test now checks that every synced field exists in the migrations.
+
 ### [Fix] Korean UI pass (checked screen by screen in the browser)
 - Translated strings that were still English in Korean mode: settings › interests (title, badges, category names now use `categories.*`), diary list (title, count, sort), diary panel title, stock detail headings, event location field placeholder and Maps hint, header clock (오전/오후), widget panel toggle, "Daily Briefing" label, task "new list", login screen title.
 - Korean diary-encryption copy said "암호문" (ciphertext) where it meant the passphrase; now "비밀번호".
